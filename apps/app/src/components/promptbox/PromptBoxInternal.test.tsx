@@ -3300,6 +3300,57 @@ describe("PromptBoxInternal compact layout", () => {
     ).toBe(true);
   });
 
+  it("shows the live voice draft after the existing text and inserts the final transcript there", async () => {
+    const onChange = vi.fn();
+    const promptBoxRef = createRef<PromptBoxHandle>();
+    const voice = {
+      state: "idle" as const,
+      isSupported: true,
+      stream: null,
+      start: vi.fn(),
+      stop: vi.fn(),
+      cancel: vi.fn(),
+    };
+    const props = createPromptBoxProps({
+      value: "Keep this prompt",
+      onChange,
+      promptBoxRef,
+    });
+    const view = render(<PromptBoxInternal {...props} voice={voice} />);
+    await waitFor(() => expect(promptBoxRef.current).not.toBeNull());
+    const editor = getPromptEditorElement();
+
+    view.rerender(
+      <PromptBoxInternal
+        {...props}
+        voice={{ ...voice, state: "recording", draftTranscript: "and more" }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(editor.textContent).toBe("Keep this prompt and more"),
+    );
+    expect(
+      editor.querySelector("[data-promptbox-voice-draft]")?.textContent,
+    ).toBe(" and more");
+    expect(
+      onChange.mock.calls.every(
+        ([nextValue]) => nextValue === "Keep this prompt",
+      ),
+    ).toBe(true);
+
+    act(() => promptBoxRef.current?.insertTextAtCursor("and more words"));
+
+    expect(onChange).toHaveBeenLastCalledWith(
+      "Keep this prompt and more words",
+      [],
+    );
+    expect(editor.querySelector("[data-promptbox-voice-draft]")).toBeNull();
+
+    view.rerender(<PromptBoxInternal {...props} voice={voice} />);
+    expect(editor.textContent).toBe("Keep this prompt and more words");
+  });
+
   it.each(["recording", "transcribing"] as const)(
     "keeps the visible draft keyboard-read-only and standard controls inert while %s",
     async (state) => {

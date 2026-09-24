@@ -177,13 +177,17 @@ export async function transcribeVoiceInput(
   file: File,
   prompt?: string,
   signal?: AbortSignal,
+  options?: { draft?: boolean },
 ): Promise<SystemVoiceTranscriptionResponse> {
   const trimmedPrompt = prompt?.trim();
+  const fields: Record<string, string> = {};
+  if (trimmedPrompt) fields.prompt = trimmedPrompt;
+  if (options?.draft) fields.draft = "true";
   return postMultipart<SystemVoiceTranscriptionResponse>(
     apiClient.system["voice-transcription"].$url(),
     file,
     signal,
-    trimmedPrompt ? { prompt: trimmedPrompt } : undefined,
+    Object.keys(fields).length > 0 ? fields : undefined,
   );
 }
 

@@ -20,6 +20,7 @@ const voiceInput = {
   isSupported: true,
   unsupportedReason: null,
   stream: null,
+  draftTranscript: "",
   start: vi.fn(),
   stop: vi.fn(),
   cancel: vi.fn(),

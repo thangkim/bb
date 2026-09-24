@@ -640,6 +640,7 @@ export function registerSystemRoutes(
           typeof formData.get("prompt") === "string"
             ? String(formData.get("prompt"))
             : undefined,
+        draft: formData.get("draft") === "true",
         signal: context.req.raw.signal,
       }),
     });

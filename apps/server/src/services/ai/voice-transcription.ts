@@ -5,10 +5,13 @@ import { isAiTaskAvailable, runAiTask } from "./ai-tasks.js";
 interface TranscribeVoiceInputArgs {
   file: File;
   prompt?: string;
+  draft?: boolean;
   signal: AbortSignal;
 }
 
 const VOICE_TRANSCRIPTION_MAX_BYTES = 25 * 1024 * 1024;
+const VOICE_TRANSCRIPTION_DRAFT_TIMEOUT_MS = 4_000;
+const VOICE_TRANSCRIPTION_RETRY_DELAY_MS = 700;
 
 export function resolveVoiceTranscriptionEnabled(
   deps: LoggedWorkSessionDeps,
@@ -19,6 +22,21 @@ export function resolveVoiceTranscriptionEnabled(
 function trimPrompt(prompt: string | undefined): string | null {
   const trimmed = prompt?.trim() ?? "";
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function waitBeforeRetry(delayMs: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    function onAbort(): void {
+      clearTimeout(timer);
+      resolve();
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 export async function transcribeVoiceInput(
@@ -33,18 +51,35 @@ export async function transcribeVoiceInput(
   }
 
   const hint = trimPrompt(args.prompt);
-  const outcome = await runAiTask(deps, {
-    task: "voice",
-    label: "Voice transcription",
-    signal: args.signal,
-    call: (service, signal) => {
-      if (service.transcribe === null) {
-        throw new Error("This service does not transcribe audio");
-      }
-      return service.transcribe(args.file, { signal, hint });
-    },
-    accept: (raw) => (typeof raw === "string" ? raw.trim() : null),
-  });
+  const isDraft = args.draft === true;
+  const run = () =>
+    runAiTask(deps, {
+      task: "voice",
+      label: isDraft ? "Voice transcription draft" : "Voice transcription",
+      logContext: isDraft ? { draft: true } : undefined,
+      timeoutMs: isDraft ? VOICE_TRANSCRIPTION_DRAFT_TIMEOUT_MS : undefined,
+      signal: args.signal,
+      call: (service, signal) => {
+        if (service.transcribe === null) {
+          throw new Error("This service does not transcribe audio");
+        }
+        return service.transcribe(args.file, { signal, hint });
+      },
+      accept: (raw) => (typeof raw === "string" ? raw.trim() : null),
+    });
+
+  let outcome = await run();
+  if (
+    !outcome.ok &&
+    outcome.reason === "failed" &&
+    !isDraft &&
+    !args.signal.aborted
+  ) {
+    await waitBeforeRetry(VOICE_TRANSCRIPTION_RETRY_DELAY_MS, args.signal);
+    if (!args.signal.aborted) {
+      outcome = await run();
+    }
+  }
   if (outcome.ok) {
     return outcome.value;
   }

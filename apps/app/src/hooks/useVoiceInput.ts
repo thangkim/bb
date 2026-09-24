@@ -17,18 +17,29 @@ import {
 
 type VoiceInputState = "idle" | "recording" | "transcribing" | "error";
 
+interface TranscribeArgs {
+  file: File;
+  promptContext?: string;
+  signal?: AbortSignal;
+}
+
 interface UseVoiceInputOptions {
   onTranscript: (transcript: string) => void;
-  onTranscribe: (args: {
-    file: File;
-    promptContext?: string;
-    signal?: AbortSignal;
-  }) => Promise<string>;
+  onTranscribe: (args: TranscribeArgs) => Promise<string>;
+  onDraftTranscribe?: (args: TranscribeArgs) => Promise<string>;
   getPromptContext?: () => string | undefined;
 }
 
 const MIN_RECORDING_DURATION_MS = 1_000;
 const CHUNK_TIMESLICE_MS = 250;
+
+const DRAFT_INTERVAL_MIN_MS = 3_000;
+const DRAFT_INTERVAL_MAX_MS = 8_000;
+const DRAFT_INTERVAL_GROWTH = 1.4;
+const DRAFT_MIN_AUDIO_MS = 3_000;
+const DRAFT_MIN_NEW_AUDIO_MS = 2_500;
+const DRAFT_MAX_REQUESTS = 12;
+const DRAFT_MAX_RECORDING_MS = 180_000;
 
 const HTML_DOCUMENT_PATTERN = /<!doctype html|<html[\s>]/i;
 
@@ -132,6 +143,14 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
   const promptContextRef = useRef<string | undefined>(undefined);
   const shouldTranscribeRef = useRef(true);
   const transcriptionAbortRef = useRef<AbortController | null>(null);
+  const draftTimeoutRef = useRef<number | null>(null);
+  const draftAbortRef = useRef<AbortController | null>(null);
+  const draftIntervalMsRef = useRef(DRAFT_INTERVAL_MIN_MS);
+  const draftRequestCountRef = useRef(0);
+  const draftStoppedRef = useRef(true);
+  const draftInFlightRef = useRef<Promise<void> | null>(null);
+  const draftChunkCountRef = useRef(0);
+  const draftTranscriptRef = useRef("");
   const wakeLockSentinelRef = useRef<WakeLockSentinel | null>(null);
   const wakeLockRequestRef = useRef<Promise<void> | null>(null);
   const shouldHoldWakeLockRef = useRef(false);
@@ -141,11 +160,32 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
   const [unsupportedReason, setUnsupportedReason] =
     useState<VoiceUnsupportedReason | null>("unsupported-browser");
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [draftTranscript, setDraftTranscriptState] = useState("");
+
+  const setDraftTranscript = useCallback((text: string) => {
+    draftTranscriptRef.current = text;
+    setDraftTranscriptState(text);
+  }, []);
+
+  const haltDraftLoop = useCallback(() => {
+    draftStoppedRef.current = true;
+    if (draftTimeoutRef.current !== null) {
+      window.clearTimeout(draftTimeoutRef.current);
+      draftTimeoutRef.current = null;
+    }
+  }, []);
+
+  const stopDraftLoop = useCallback(() => {
+    haltDraftLoop();
+    draftAbortRef.current?.abort();
+    draftAbortRef.current = null;
+  }, [haltDraftLoop]);
 
   const showError = useCallback((message: string) => {
     setState("error");
+    setDraftTranscript("");
     appToast.error("Voice input failed", { description: message });
-  }, []);
+  }, [setDraftTranscript]);
 
   const stopMediaStream = useCallback(() => {
     const stream = streamRef.current;
@@ -234,6 +274,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
       startedAtMsRef.current = null;
       promptContextRef.current = undefined;
       shouldTranscribeRef.current = true;
+      stopDraftLoop();
       releaseRecordingWakeLock();
       if (transcriptionAbortRef.current) {
         transcriptionAbortRef.current.abort();
@@ -241,7 +282,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
       }
       stopMediaStream();
     };
-  }, [releaseRecordingWakeLock, stopMediaStream]);
+  }, [releaseRecordingWakeLock, stopDraftLoop, stopMediaStream]);
 
   useEffect(() => {
     return subscribeToDocumentVisibility(() => {
@@ -271,6 +312,11 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
       promptContextRef.current = options.getPromptContext?.();
       shouldTranscribeRef.current = true;
       shouldHoldWakeLockRef.current = true;
+      draftRequestCountRef.current = 0;
+      draftIntervalMsRef.current = DRAFT_INTERVAL_MIN_MS;
+      draftStoppedRef.current = false;
+      draftChunkCountRef.current = 0;
+      setDraftTranscript("");
       requestRecordingWakeLock();
 
       const preferredMimeType = resolvePreferredAudioMimeType();
@@ -294,13 +340,16 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
       };
 
       recorder.onstop = async () => {
+        haltDraftLoop();
         releaseRecordingWakeLock();
         stopMediaStream();
 
         if (!shouldTranscribeRef.current) {
+          stopDraftLoop();
           shouldTranscribeRef.current = true;
           chunksRef.current = [];
           promptContextRef.current = undefined;
+          setDraftTranscript("");
           setState("idle");
           return;
         }
@@ -310,6 +359,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
         const durationMs = Date.now() - startedAtMs;
 
         if (durationMs < MIN_RECORDING_DURATION_MS) {
+          stopDraftLoop();
           showError("Recording too short (minimum 1 second)");
           chunksRef.current = [];
           promptContextRef.current = undefined;
@@ -319,6 +369,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
         const chunks = chunksRef.current;
         chunksRef.current = [];
         if (chunks.length === 0) {
+          stopDraftLoop();
           showError("No audio was captured");
           promptContextRef.current = undefined;
           return;
@@ -334,6 +385,8 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
         setState("transcribing");
         const abortController = new AbortController();
         transcriptionAbortRef.current = abortController;
+        await draftInFlightRef.current;
+        if (abortController.signal.aborted) return;
         try {
           const transcript = await options.onTranscribe({
             file: audioFile,
@@ -345,27 +398,126 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
             throw new Error("Voice transcription returned an empty result.");
           }
           options.onTranscript(normalized);
+          setDraftTranscript("");
           setState("idle");
         } catch (error) {
           if (error instanceof DOMException && error.name === "AbortError") {
+            setDraftTranscript("");
             setState("idle");
             return;
           }
-          setState("error");
-          appToast.error("Voice input failed", {
+          const fallbackTranscript = draftTranscriptRef.current;
+          setDraftTranscript("");
+          const toastOptions = {
             description: resolveRecordingErrorMessage(error),
             duration: Infinity,
             action: {
               label: "Download recording",
               onClick: () => downloadRecording(audioFile),
             },
-          });
+          };
+          if (fallbackTranscript.length > 0) {
+            options.onTranscript(fallbackTranscript);
+            setState("idle");
+            appToast.warning(
+              "Voice input used the live preview",
+              toastOptions,
+            );
+            return;
+          }
+          setState("error");
+          appToast.error("Voice input failed", toastOptions);
         } finally {
           if (transcriptionAbortRef.current === abortController) {
             transcriptionAbortRef.current = null;
           }
         }
       };
+
+      const draftTranscribe = options.onDraftTranscribe;
+      if (draftTranscribe) {
+        const scheduleDraft = (delayMs: number): void => {
+          if (draftStoppedRef.current) return;
+          draftTimeoutRef.current = window.setTimeout(() => {
+            draftTimeoutRef.current = null;
+            void requestDraft();
+          }, delayMs);
+        };
+
+        const requestDraft = async (): Promise<void> => {
+          if (draftStoppedRef.current) return;
+          const recordingStartedAtMs = startedAtMsRef.current;
+          if (recordingStartedAtMs === null) return;
+
+          const elapsedMs = Date.now() - recordingStartedAtMs;
+          if (
+            elapsedMs > DRAFT_MAX_RECORDING_MS ||
+            draftRequestCountRef.current >= DRAFT_MAX_REQUESTS
+          ) {
+            stopDraftLoop();
+            return;
+          }
+
+          const chunks = [...chunksRef.current];
+          const newAudioMs =
+            (chunks.length - draftChunkCountRef.current) * CHUNK_TIMESLICE_MS;
+          if (
+            elapsedMs < DRAFT_MIN_AUDIO_MS ||
+            newAudioMs < DRAFT_MIN_NEW_AUDIO_MS
+          ) {
+            scheduleDraft(draftIntervalMsRef.current);
+            return;
+          }
+          draftChunkCountRef.current = chunks.length;
+
+          const draftMimeType =
+            recorder.mimeType || preferredMimeType || "audio/webm";
+          const draftFile = createRecordingFile(
+            new Blob(chunks, { type: draftMimeType }),
+            draftMimeType,
+          );
+          const abortController = new AbortController();
+          draftAbortRef.current = abortController;
+          draftRequestCountRef.current += 1;
+
+          const draftRequest = draftTranscribe({
+            file: draftFile,
+            promptContext: promptContextRef.current,
+            signal: abortController.signal,
+          }).then(
+            (text) => {
+              if (abortController.signal.aborted) return true;
+              const normalized = normalizeTranscript(text);
+              if (normalized.length > 0) {
+                setDraftTranscript(normalized);
+              }
+              return true;
+            },
+            () => false,
+          );
+          const settled = draftRequest.then(() => undefined);
+          draftInFlightRef.current = settled;
+          const succeeded = await draftRequest;
+          if (draftInFlightRef.current === settled) {
+            draftInFlightRef.current = null;
+          }
+          if (draftAbortRef.current === abortController) {
+            draftAbortRef.current = null;
+          }
+          if (!succeeded) {
+            stopDraftLoop();
+            return;
+          }
+
+          draftIntervalMsRef.current = Math.min(
+            DRAFT_INTERVAL_MAX_MS,
+            Math.round(draftIntervalMsRef.current * DRAFT_INTERVAL_GROWTH),
+          );
+          scheduleDraft(draftIntervalMsRef.current);
+        };
+
+        scheduleDraft(DRAFT_INTERVAL_MIN_MS);
+      }
 
       recorder.start(CHUNK_TIMESLICE_MS);
     } catch (error) {
@@ -376,6 +528,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
       promptContextRef.current = undefined;
       shouldTranscribeRef.current = true;
       transcriptionAbortRef.current = null;
+      stopDraftLoop();
       releaseRecordingWakeLock();
       showError(
         resolveRecordingErrorMessage(
@@ -391,8 +544,11 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
     preferredAudioInputDeviceId,
     releaseRecordingWakeLock,
     requestRecordingWakeLock,
+    haltDraftLoop,
+    setDraftTranscript,
     showError,
     state,
+    stopDraftLoop,
     stopMediaStream,
   ]);
 
@@ -433,15 +589,18 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
         abortController.abort();
         transcriptionAbortRef.current = null;
       }
+      stopDraftLoop();
+      setDraftTranscript("");
       setState("idle");
     }
-  }, [showError, state]);
+  }, [setDraftTranscript, showError, state, stopDraftLoop]);
 
   return {
     state,
     isSupported,
     unsupportedReason,
     stream,
+    draftTranscript,
     isRecording: state === "recording",
     isProcessing: state === "transcribing",
     isListening: state === "recording" || state === "transcribing",

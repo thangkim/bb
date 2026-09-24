@@ -102,6 +102,15 @@ import {
   type PromptDecorationSource,
   type PromptDraftObserver,
 } from "./editor/prompt-decoration-extension";
+import {
+  clearPromptVoiceDraft,
+  getPromptVoiceDraftRange,
+  promptVoiceDraftSpacing,
+  resolvePromptVoiceDraftRange,
+  setPromptVoiceDraftText,
+  startPromptVoiceDraft,
+  type PromptVoiceDraftRange,
+} from "./editor/prompt-voice-draft-extension";
 import type { ComposerTextEffectSource } from "@/lib/composer-text-effects";
 import { promptEditorExtensions } from "./editor/prompt-editor-extensions";
 import {
@@ -338,7 +347,10 @@ function PromptSubmitButton({
       )}
     >
       {isBusy ? (
-        <Icon name="Loading" className="size-4 animate-spin motion-reduce:animate-none" />
+        <Icon
+          name="Loading"
+          className="size-4 animate-spin motion-reduce:animate-none"
+        />
       ) : (
         <>
           <Icon name={icon ?? "CornerDownLeft"} className="size-4" />
@@ -441,6 +453,7 @@ export interface PromptVoiceConfig {
   isSupported: boolean;
   unsupportedReason?: VoiceUnsupportedReason | null;
   stream: MediaStream | null;
+  draftTranscript?: string;
   start: () => void | Promise<void>;
   stop: () => void;
   cancel: () => void;
@@ -1357,6 +1370,10 @@ export function PromptBoxInternal({
   const isVoiceRecording = voice?.state === "recording";
   const isVoiceProcessing = voice?.state === "transcribing";
   const showVoiceActionGroup = isVoiceRecording || isVoiceProcessing;
+  const voiceTranscript = showVoiceActionGroup
+    ? (voice?.draftTranscript ?? "")
+    : "";
+  const hasPlacedCursorRef = useRef(false);
   const voiceActionState = isVoiceRecording
     ? "recording"
     : isVoiceProcessing
@@ -1749,6 +1766,7 @@ export function PromptBoxInternal({
             return suppressPromptEditorAnchorActivation(event);
           },
           focus: () => {
+            hasPlacedCursorRef.current = true;
             onCommandEditorFocusRef.current?.();
             return false;
           },
@@ -1935,6 +1953,24 @@ export function PromptBoxInternal({
   useEffect(() => {
     editorRef.current = editor;
   }, [editor]);
+
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || !showVoiceActionGroup) return;
+    startPromptVoiceDraft(
+      editor,
+      resolvePromptVoiceDraftRange(editor, hasPlacedCursorRef.current),
+    );
+    return () => clearPromptVoiceDraft(editor);
+  }, [editor, showVoiceActionGroup]);
+
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    setPromptVoiceDraftText(editor, voiceTranscript);
+    if (voiceTranscript.length === 0) return;
+    editor.view.dom
+      .querySelector<HTMLElement>("[data-promptbox-voice-draft]")
+      ?.scrollIntoView?.({ block: "nearest" });
+  }, [editor, voiceTranscript]);
 
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
@@ -2480,8 +2516,8 @@ export function PromptBoxInternal({
     scheduleRevealEditorSelection();
   }, [isPointerCoarse, scheduleRevealEditorSelection]);
 
-  const insertTextAtCursor = useCallback(
-    (rawText: string) => {
+  const insertTextInRange = useCallback(
+    (rawText: string, range: PromptVoiceDraftRange | null) => {
       const normalizedText = rawText.replace(/\s+/g, " ").trim();
       if (normalizedText.length === 0) return;
 
@@ -2496,29 +2532,35 @@ export function PromptBoxInternal({
         return;
       }
 
-      const selection = currentEditor.state.selection;
-      const before = currentEditor.state.doc.textBetween(
-        0,
-        selection.from,
-        "\n",
-        "\n",
+      const target = range ?? {
+        from: currentEditor.state.selection.from,
+        to: currentEditor.state.selection.to,
+      };
+      const { leading, trailing } = promptVoiceDraftSpacing(
+        currentEditor.state.doc,
+        target,
       );
-      const after = currentEditor.state.doc.textBetween(
-        selection.to,
-        currentEditor.state.doc.content.size,
-        "\n",
-        "\n",
-      );
-      const needsLeadingWhitespace = before.length > 0 && !/\s$/.test(before);
-      const needsTrailingWhitespace = after.length > 0 && !/^\s/.test(after);
-      const insertedText = `${needsLeadingWhitespace ? " " : ""}${normalizedText}${needsTrailingWhitespace ? " " : ""}`;
+      const insertedText = `${leading}${normalizedText}${trailing}`;
 
       const insertion = currentEditor.chain();
       if (!isPointerCoarse) insertion.focus();
-      insertion.insertContent(insertedText).run();
+      insertion.insertContentAt(target, insertedText).run();
       if (!isPointerCoarse) scheduleRevealEditorSelection();
     },
     [isPointerCoarse, scheduleRevealEditorSelection],
+  );
+
+  const insertTextAtCursor = useCallback(
+    (text: string) => {
+      const currentEditor = editorRef.current;
+      const range =
+        currentEditor && !currentEditor.isDestroyed
+          ? getPromptVoiceDraftRange(currentEditor)
+          : null;
+      if (currentEditor && range) clearPromptVoiceDraft(currentEditor);
+      insertTextInRange(text, range);
+    },
+    [insertTextInRange],
   );
 
   const focusAfterPromptAction = useCallback(

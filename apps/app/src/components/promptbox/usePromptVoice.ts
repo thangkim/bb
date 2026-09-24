@@ -3,16 +3,34 @@ import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { transcribeVoiceInput } from "@/lib/api";
 import type { PromptBoxHandle, PromptVoiceConfig } from "./PromptBoxInternal";
 
+interface VoiceTranscriptionRequest {
+  file: File;
+  promptContext?: string;
+  signal?: AbortSignal;
+}
+
 async function requestVoiceTranscription({
   file,
   promptContext,
   signal,
-}: {
-  file: File;
-  promptContext?: string;
-  signal?: AbortSignal;
-}): Promise<string> {
+}: VoiceTranscriptionRequest): Promise<string> {
   const transcription = await transcribeVoiceInput(file, promptContext, signal);
+  return transcription.text;
+}
+
+async function requestVoiceDraft({
+  file,
+  promptContext,
+  signal,
+}: VoiceTranscriptionRequest): Promise<string> {
+  const transcription = await transcribeVoiceInput(
+    file,
+    promptContext,
+    signal,
+    {
+      draft: true,
+    },
+  );
   return transcription.text;
 }
 
@@ -50,6 +68,7 @@ export function usePromptVoice(
   const voiceInput = useVoiceInput({
     onTranscript,
     onTranscribe: transcribeAfterCompletionTransition,
+    onDraftTranscribe: requestVoiceDraft,
     getPromptContext,
   });
 
@@ -58,6 +77,7 @@ export function usePromptVoice(
       state: voiceInput.state,
       isSupported: voiceInput.isSupported,
       stream: voiceInput.stream,
+      draftTranscript: voiceInput.draftTranscript,
       start: voiceInput.start,
       stop: voiceInput.stop,
       cancel: voiceInput.cancel,
@@ -66,6 +86,7 @@ export function usePromptVoice(
       voiceInput.state,
       voiceInput.isSupported,
       voiceInput.stream,
+      voiceInput.draftTranscript,
       voiceInput.start,
       voiceInput.stop,
       voiceInput.cancel,
