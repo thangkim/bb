@@ -12,8 +12,9 @@ import { usePersistentOverlayFocus } from "@bb/shared-ui/responsive-overlay";
 import { usePortalScopeProps } from "@bb/shared-ui/lib/portal-scope";
 import { useBrowserDimmingOverlay } from "@/hooks/useBrowserDimmingModal";
 import { Icon } from "@bb/shared-ui/icon";
+import { copyToClipboardWithToast } from "@/lib/clipboard";
 
-type ImageLightboxKeyAction = "close" | "next" | "previous";
+type ImageLightboxKeyAction = "close" | "copy" | "next" | "previous";
 
 const IMAGE_TRANSPARENCY_CHECKER_BASE =
   "color-mix(in oklch, var(--ink) 5%, var(--canvas))";
@@ -29,7 +30,7 @@ export const IMAGE_TRANSPARENCY_CHECKER_STYLE: CSSProperties = {
 interface ImageLightboxKeyActionInput {
   event: Pick<
     KeyboardEvent,
-    "altKey" | "ctrlKey" | "defaultPrevented" | "key" | "metaKey"
+    "altKey" | "ctrlKey" | "defaultPrevented" | "key" | "metaKey" | "shiftKey"
   >;
   hasNavigation: boolean;
 }
@@ -59,6 +60,16 @@ export function getImageLightboxKeyAction({
   hasNavigation,
 }: ImageLightboxKeyActionInput): ImageLightboxKeyAction | null {
   if (
+    !event.defaultPrevented &&
+    (event.metaKey || event.ctrlKey) &&
+    !event.altKey &&
+    !event.shiftKey &&
+    event.key.toLowerCase() === "c"
+  ) {
+    return "copy";
+  }
+
+  if (
     event.defaultPrevented ||
     event.altKey ||
     event.ctrlKey ||
@@ -84,6 +95,11 @@ export function getImageLightboxKeyAction({
   }
 
   return null;
+}
+
+function hasTextSelection(): boolean {
+  const selection = window.getSelection();
+  return selection !== null && !selection.isCollapsed;
 }
 
 export function getWrappedImageIndex({
@@ -146,6 +162,18 @@ export function ImageLightbox({
       }
 
       switch (action) {
+        case "copy":
+          if (!imageSrc || hasTextSelection()) {
+            return;
+          }
+          event.preventDefault();
+          void copyToClipboardWithToast("", {
+            imageUrl: imageSrc,
+            successMessage: "Image copied",
+            errorMessage: "Failed to copy image",
+          });
+          onClose();
+          return;
         case "close":
           event.preventDefault();
           onClose();
@@ -171,6 +199,7 @@ export function ImageLightbox({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     hasNavigation,
+    imageSrc,
     isVisible,
     onClose,
     onNext,

@@ -8,7 +8,7 @@ import {
   defaultRootComposeProjectIdAtom,
   useSetRootComposeProjectId,
 } from "@/lib/root-compose-selection";
-import { findPane } from "@/lib/split-layout";
+import { findPane, type ComposeSeed } from "@/lib/split-layout";
 import { maximizedPaneIdAtom, splitLayoutAtom } from "@/lib/split-layout/atoms";
 import {
   composeSeedForPaneContent,
@@ -21,6 +21,9 @@ import {
 
 export interface OpenNewThreadPaneOptions {
   projectId?: string | undefined;
+  target?: ComposeSeed | undefined;
+  sectionId?: string | undefined;
+  focusPrompt?: boolean | undefined;
   onNavigate?: (() => void) | undefined;
 }
 
@@ -38,7 +41,13 @@ export function useOpenNewThreadPane(): (
     (options?: OpenNewThreadPaneOptions) => {
       options?.onNavigate?.();
       const route = getRootComposeRoutePath();
-      const navigateOptions = { state: { focusPrompt: true } };
+      const target = options?.target;
+      const baseState = {
+        ...(options?.focusPrompt === false ? {} : { focusPrompt: true }),
+        ...(options?.sectionId === undefined
+          ? {}
+          : { sectionId: options.sectionId }),
+      };
       const routeContent = paneContentForPathname(pathname);
       const stored = store.get(splitLayoutAtom);
       const layout =
@@ -46,28 +55,39 @@ export function useOpenNewThreadPane(): (
           ? reconcileLayoutForContent(null, routeContent)
           : stored;
       if (isCompactViewport || layout === null) {
-        if (options?.projectId !== undefined) {
-          setRootComposeProjectId(options.projectId);
+        const projectId = target?.projectId ?? options?.projectId;
+        if (projectId !== undefined) {
+          setRootComposeProjectId(projectId);
         }
-        void navigate(route, navigateOptions);
+        void navigate(route, {
+          state: {
+            ...baseState,
+            ...(target?.environmentId === undefined
+              ? {}
+              : { reuseEnvironmentId: target.environmentId }),
+          },
+        });
         return;
       }
       const focused =
         routeContent === null
           ? null
           : findPane(layout.root, layout.focusedPaneId);
-      const seed = (focused === null
-        ? null
-        : composeSeedForPaneContent(focused.content, queryClient)) ?? {
-        projectId:
-          options?.projectId ?? store.get(defaultRootComposeProjectIdAtom),
-      };
-      const next = openNewThreadBesideFocusedPane(layout, seed);
+      const seed = target ??
+        (focused === null
+          ? null
+          : composeSeedForPaneContent(focused.content, queryClient)) ?? {
+          projectId:
+            options?.projectId ?? store.get(defaultRootComposeProjectIdAtom),
+        };
+      const next = openNewThreadBesideFocusedPane(layout, seed, {
+        reuseFocusedComposer: target === undefined,
+      });
       if (next !== stored) store.set(splitLayoutAtom, next);
       if (store.get(maximizedPaneIdAtom) !== null) {
         store.set(maximizedPaneIdAtom, next.focusedPaneId);
       }
-      void navigate(route, navigateOptions);
+      void navigate(route, { state: baseState });
     },
     [
       isCompactViewport,

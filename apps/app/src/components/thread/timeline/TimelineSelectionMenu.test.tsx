@@ -187,4 +187,62 @@ describe("TimelineSelectionMenu", () => {
       screen.getByRole("textbox", { name: "Chat composer" }),
     );
   });
+
+  it("adds the selection to chat when A is pressed and shows the hint", () => {
+    const onAddToChat = vi.fn();
+    const onDismiss = vi.fn();
+    render(
+      <TimelineSelectionMenu
+        selection={makeSelection()}
+        onAddToChat={onAddToChat}
+        onDismiss={onDismiss}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Add to chat" });
+    expect(button.querySelector("kbd")?.textContent).toBe("A");
+    expect(button.getAttribute("aria-keyshortcuts")).toBe("A");
+
+    fireEvent.keyDown(document.body, { key: "a", metaKey: true });
+    fireEvent.keyDown(document.body, { key: "b" });
+    expect(onAddToChat).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(document.body, { key: "A" });
+    expect(onAddToChat).toHaveBeenCalledTimes(1);
+    expect(onAddToChat).toHaveBeenCalledWith("selected text");
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves A to editable targets and hides the hint while typing", () => {
+    const onAddToChat = vi.fn();
+    render(<textarea aria-label="Terminal input" />);
+    const input = screen.getByRole("textbox", { name: "Terminal input" });
+    input.focus();
+    render(
+      <TimelineSelectionMenu
+        selection={makeSelection()}
+        onAddToChat={onAddToChat}
+        onDismiss={vi.fn()}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Add to chat" });
+    expect(button.querySelector("kbd")).toBeNull();
+    fireEvent.keyDown(input, { key: "a" });
+    expect(onAddToChat).not.toHaveBeenCalled();
+  });
+
+  it("does not trigger A without an add-to-chat handler", () => {
+    const onDismiss = vi.fn();
+    render(
+      <TimelineSelectionMenu
+        selection={makeSelection()}
+        pluginActions={[]}
+        onDismiss={onDismiss}
+      />,
+    );
+
+    fireEvent.keyDown(document.body, { key: "a" });
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
 });

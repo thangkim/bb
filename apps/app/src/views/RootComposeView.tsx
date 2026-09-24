@@ -753,6 +753,7 @@ function RootComposeSurface({
     searchInitialDraft,
   ]);
   useEffect(() => {
+    if (!isFocusedPane) return;
     if (stateInitialPrompt !== null && stateInitialDraft === undefined) return;
     const sectionTarget = readRootComposeSectionTargetFromLocationState(
       location.state,
@@ -790,6 +791,7 @@ function RootComposeSurface({
       state: null,
     });
   }, [
+    isFocusedPane,
     location.search,
     location.state,
     navigate,

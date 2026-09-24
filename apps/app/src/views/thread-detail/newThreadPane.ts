@@ -54,9 +54,12 @@ function isComposerForSeed(pane: PaneNode, seed: ComposeSeed): boolean {
 export function openNewThreadBesideFocusedPane(
   layout: SplitLayout,
   seed: ComposeSeed,
+  { reuseFocusedComposer }: { reuseFocusedComposer: boolean },
 ): SplitLayout {
   const focused = findPane(layout.root, layout.focusedPaneId);
-  if (focused?.content.kind === "new-thread") return layout;
+  if (reuseFocusedComposer && focused?.content.kind === "new-thread") {
+    return layout;
+  }
   const existing = listPanes(layout.root).find((pane) =>
     isComposerForSeed(pane, seed),
   );

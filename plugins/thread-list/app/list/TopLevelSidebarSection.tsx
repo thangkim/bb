@@ -26,7 +26,6 @@ import type { ConsumeDragClickSuppression } from "../ui/use-drag-click-suppressi
 import {
   SIDEBAR_STANDARD_ROW_PADDING_CLASS,
   SIDEBAR_CONTROL_STATE_CLASS,
-  SIDEBAR_GROUP_TEXT_CLASS,
 } from "../rows/sidebarRowClasses.js";
 import {
   SectionDropTargetOverlay,
@@ -160,6 +159,16 @@ export function TopLevelSidebarSection({
     },
     [collapseControl],
   );
+  const isHeaderToggleEnabled = Boolean(collapseControl) && !labelEditor;
+  const handleHeaderClick = useCallback<MouseEventHandler<HTMLDivElement>>(
+    (event) => {
+      if (!collapseControl || labelEditor || event.detail > 1) {
+        return;
+      }
+      collapseControl.onToggleCollapsed();
+    },
+    [collapseControl, labelEditor],
+  );
   const stopCollapseControlPointerDown = useCallback<
     PointerEventHandler<HTMLButtonElement>
   >((event) => {
@@ -194,14 +203,15 @@ export function TopLevelSidebarSection({
         className={cn(
           SIDEBAR_HOVER_ACTIONS_ROW_CLASS,
           CHROME_SECTION_LABEL_CLASS,
-          SIDEBAR_GROUP_TEXT_CLASS,
           SIDEBAR_STANDARD_ROW_PADDING_CLASS,
           "rounded-md pr-0 transition-colors",
           !stickyHeader && "relative top-auto",
           dragBindings && !dragBindings.disabled && "select-none",
+          isHeaderToggleEnabled && "cursor-pointer select-none",
         )}
         {...dragBindings?.attributes}
         {...(dragBindings?.listeners ?? {})}
+        onClick={isHeaderToggleEnabled ? handleHeaderClick : undefined}
       >
         <span className="relative z-10 flex min-w-0 flex-1 items-center gap-1 text-left">
           {labelEditor ?? (

@@ -10,6 +10,7 @@ import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Icon, type IconName } from "@bb/shared-ui/icon";
 import { preventOverlayTriggerSelection } from "@bb/shared-ui/overlay-trigger";
 import { usePortalScopeProps } from "@/lib/portal-scope";
+import { isEditableKeyboardTarget } from "@/lib/app-keybindings";
 import { PluginIcon, pluginIconName } from "@/components/plugin/PluginIcon";
 import type { MessageProseSelection } from "./SelectableMessageProse.js";
 import type { ThreadTimelinePluginMessageAction } from "./types.js";
@@ -24,7 +25,34 @@ interface SelectionAction {
   plugin?: { pluginId: string | null; icon: string | null };
   key?: string;
   label: string;
+  shortcutKey?: string;
   onSelect: (selection: MessageProseSelection) => void;
+}
+
+const ADD_TO_CHAT_SHORTCUT_KEY = "a";
+
+function runSelectionAction(
+  onSelect: SelectionAction["onSelect"],
+  selection: MessageProseSelection,
+  onDismiss: () => void,
+) {
+  flushSync(() => {
+    onSelect(selection);
+    window.getSelection()?.removeAllRanges();
+    onDismiss();
+  });
+}
+
+function isBareShortcutKeyEvent(event: KeyboardEvent, key: string): boolean {
+  return (
+    event.key.toLowerCase() === key &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey &&
+    !event.repeat &&
+    !event.isComposing &&
+    !isEditableKeyboardTarget(event.target)
+  );
 }
 
 export interface TimelineSelectionMenuProps {
@@ -38,19 +66,16 @@ function ActionButton({
   action,
   onDismiss,
   selection,
+  showShortcut,
 }: {
   action: SelectionAction;
   onDismiss: () => void;
   selection: MessageProseSelection;
+  showShortcut: boolean;
 }) {
   const ignoreNextClickRef = useRef(false);
-  const activate = () => {
-    flushSync(() => {
-      action.onSelect(selection);
-      window.getSelection()?.removeAllRanges();
-      onDismiss();
-    });
-  };
+  const activate = () => runSelectionAction(action.onSelect, selection, onDismiss);
+  const shortcutKey = showShortcut ? action.shortcutKey : undefined;
   const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
     if (event.pointerType === "mouse") return;
     event.preventDefault();
@@ -64,6 +89,7 @@ function ActionButton({
     <button
       type="button"
       className={SELECTION_ACTION_BUTTON_CLASS}
+      aria-keyshortcuts={shortcutKey?.toUpperCase()}
       onMouseDown={(event: MouseEvent) => preventOverlayTriggerSelection(event)}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
@@ -100,6 +126,14 @@ function ActionButton({
         />
       )}
       {action.label}
+      {shortcutKey ? (
+        <kbd
+          aria-hidden="true"
+          className="ml-1 font-sans text-xs text-subtle-foreground opacity-70"
+        >
+          {shortcutKey.toUpperCase()}
+        </kbd>
+      ) : null}
     </button>
   );
 }
@@ -144,6 +178,36 @@ export function TimelineSelectionMenu({
   const virtualAnchorRef = useRef(virtualAnchor);
   virtualAnchorRef.current = virtualAnchor;
 
+  const hasAddToChat = onAddToChat !== undefined;
+  const shortcutEnabled =
+    open &&
+    hasAddToChat &&
+    typeof document !== "undefined" &&
+    !isEditableKeyboardTarget(document.activeElement);
+  const shortcutStateRef = useRef({ selection, onAddToChat, onDismiss });
+  shortcutStateRef.current = { selection, onAddToChat, onDismiss };
+
+  useEffect(() => {
+    if (!shortcutEnabled) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isBareShortcutKeyEvent(event, ADD_TO_CHAT_SHORTCUT_KEY)) return;
+      const current = shortcutStateRef.current;
+      if (current.selection === null || current.onAddToChat === undefined) {
+        return;
+      }
+      const addToChat = current.onAddToChat;
+      event.preventDefault();
+      event.stopPropagation();
+      runSelectionAction(
+        (currentSelection) => addToChat(currentSelection.text),
+        current.selection,
+        current.onDismiss,
+      );
+    };
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [shortcutEnabled]);
+
   if (!selection) return null;
 
   const actions: SelectionAction[] = [
@@ -152,6 +216,7 @@ export function TimelineSelectionMenu({
           {
             icon: "MessageSquarePlus" as const,
             label: "Add to chat",
+            shortcutKey: ADD_TO_CHAT_SHORTCUT_KEY,
             onSelect: (currentSelection: MessageProseSelection) =>
               onAddToChat(currentSelection.text),
           },
@@ -199,6 +264,7 @@ export function TimelineSelectionMenu({
                 action={action}
                 onDismiss={onDismiss}
                 selection={selection}
+                showShortcut={shortcutEnabled}
               />
             </div>
           ))}

@@ -1431,8 +1431,11 @@ export interface PluginSidebarThreadActions {
    */
   open(threadId: string, options?: { split?: boolean }): void;
   /**
-   * Go to the new-thread screen. Passing `projectId` also makes that project
-   * the composer's selection, so the thread is created where you asked.
+   * Open the new-thread composer. On wide screens it opens in a pane to the
+   * right of the focused pane, as bb's own New thread button does; compact
+   * screens navigate to the new-thread screen. Passing `projectId` also makes
+   * that project the composer's selection, so the thread is created where
+   * you asked.
    * `sectionId` files the new thread under that section, and
    * `environmentId` reuses that environment (the "New thread in
    * environment" affordance), both exactly as bb's own list does.

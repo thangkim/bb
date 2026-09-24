@@ -10,6 +10,7 @@ interface TestKeyboardEvent {
   defaultPrevented: boolean;
   key: string;
   metaKey: boolean;
+  shiftKey: boolean;
 }
 
 function createKeyboardEvent(
@@ -22,6 +23,7 @@ function createKeyboardEvent(
     defaultPrevented: false,
     key,
     metaKey: false,
+    shiftKey: false,
     ...overrides,
   };
 }
@@ -62,5 +64,26 @@ describe("ImageLightbox", () => {
         hasNavigation: false,
       }),
     ).toBe("close");
+  });
+
+  it("maps Cmd+C and Ctrl+C to copy, but not other modified C presses", () => {
+    for (const modifier of [{ metaKey: true }, { ctrlKey: true }]) {
+      expect(
+        getImageLightboxKeyAction({
+          event: createKeyboardEvent("c", modifier),
+          hasNavigation: false,
+        }),
+      ).toBe("copy");
+    }
+    for (const event of [
+      createKeyboardEvent("c"),
+      createKeyboardEvent("c", { metaKey: true, shiftKey: true }),
+      createKeyboardEvent("c", { metaKey: true, altKey: true }),
+      createKeyboardEvent("c", { metaKey: true, defaultPrevented: true }),
+    ]) {
+      expect(
+        getImageLightboxKeyAction({ event, hasNavigation: false }),
+      ).toBeNull();
+    }
   });
 });

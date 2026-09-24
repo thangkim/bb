@@ -2,8 +2,14 @@
 
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, it } from "vitest";
-import { ImageLightbox } from "./image-lightbox";
+import { afterEach, expect, it, vi } from "vitest";
+
+const { copyToClipboardWithToast } = vi.hoisted(() => ({
+  copyToClipboardWithToast: vi.fn(async () => true),
+}));
+vi.mock("@/lib/clipboard", () => ({ copyToClipboardWithToast }));
+
+const { ImageLightbox } = await import("./image-lightbox");
 
 function Preview() {
   const [open, setOpen] = useState(false);
@@ -26,7 +32,10 @@ function Preview() {
   );
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  copyToClipboardWithToast.mockClear();
+});
 
 it("dismisses from the image, backdrop, or close control without hiding the app root", () => {
   const { container } = render(<Preview />);
@@ -63,6 +72,24 @@ it("keeps navigation open and restores the trigger after keyboard dismissal", ()
     screen.getByRole("button", { name: "Previous image" }),
   );
   fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+});
+
+it("copies the open image with Cmd+C and closes the preview", () => {
+  render(<Preview />);
+  const trigger = screen.getByRole("button", { name: "Open image" });
+  trigger.focus();
+  fireEvent.click(trigger);
+
+  fireEvent.keyDown(window, { key: "c", metaKey: true });
+
+  expect(copyToClipboardWithToast).toHaveBeenCalledTimes(1);
+  expect(copyToClipboardWithToast).toHaveBeenCalledWith("", {
+    imageUrl: "/image-0.png",
+    successMessage: "Image copied",
+    errorMessage: "Failed to copy image",
+  });
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(document.activeElement).toBe(trigger);
 });

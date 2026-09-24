@@ -235,6 +235,51 @@ describe("TopLevelSidebarSection", () => {
     ).not.toBe(0);
   });
 
+  it("toggles collapse from a click anywhere on the header, once per click", () => {
+    const onToggleCollapsed = vi.fn();
+    renderTree(
+      <TopLevelSidebarSection
+        label="product-team"
+        actions={<button type="button">New thread</button>}
+        actionsAlwaysVisible
+        collapseControl={{ isCollapsed: false, onToggleCollapsed }}
+      >
+        <div>Project thread</div>
+      </TopLevelSidebarSection>,
+    );
+
+    fireEvent.click(screen.getByTitle("product-team"));
+    expect(onToggleCollapsed).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Collapse product-team section" }),
+    );
+    expect(onToggleCollapsed).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "New thread" }));
+    fireEvent.click(screen.getByTitle("product-team"), { detail: 2 });
+    expect(onToggleCollapsed).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not toggle collapse from header clicks while renaming", () => {
+    const onToggleCollapsed = vi.fn();
+    const { container } = renderTree(
+      <TopLevelSidebarSection
+        label="product-team"
+        labelEditor={<input aria-label="Rename project" />}
+        collapseControl={{ isCollapsed: false, onToggleCollapsed }}
+      >
+        <div>Project thread</div>
+      </TopLevelSidebarSection>,
+    );
+
+    fireEvent.click(screen.getByLabelText("Rename project"));
+    const header = container.querySelector('[data-sidebar-sticky-tier="label"]');
+    if (!header) throw new Error("missing header");
+    fireEvent.click(header);
+    expect(onToggleCollapsed).not.toHaveBeenCalled();
+  });
+
   it("keeps collapsed activity inside the trailing controls slot", () => {
     renderTree(
       <TopLevelSidebarSection

@@ -217,7 +217,7 @@ experimental_useSidebarThreadActions(): PluginSidebarThreadActions;
 interface PluginSidebarThreadActions {
   /** Navigate to a thread. `split: true` opens it in the side pane. */
   open(threadId: string, options?: { split?: boolean }): void;
-  /** Go to the new-thread screen, optionally scoped to a project. */
+  /** Open the new-thread composer (beside the focused pane on wide screens), optionally scoped to a project. */
   openNewThread(options?: { projectId?: string; focusPrompt?: boolean }): void;
 
   setPinned(threadId: string, pinned: boolean): Promise<void>;

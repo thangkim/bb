@@ -25,7 +25,7 @@ import { SidebarThreadShortcutKeysContext } from "@/components/sidebar/sidebarTh
 
 const actions = vi.hoisted(() => ({
   navigate: vi.fn(),
-  setRootComposeProjectId: vi.fn(),
+  openNewThreadPane: vi.fn(),
 }));
 
 const mutations = vi.hoisted(() => ({
@@ -103,8 +103,8 @@ vi.mock("@bb/shared-ui/hooks/use-compact-viewport", () => ({
   useIsCompactViewport: () => false,
 }));
 
-vi.mock("./root-compose-selection", () => ({
-  useSetRootComposeProjectId: () => actions.setRootComposeProjectId,
+vi.mock("@/hooks/useOpenNewThreadPane", () => ({
+  useOpenNewThreadPane: () => actions.openNewThreadPane,
 }));
 
 const environmentProviders = vi.hoisted(() => ({
@@ -350,7 +350,7 @@ describe("useSidebarThreadActions", () => {
     },
   );
 
-  it("opens a project composer without a legacy route transition", () => {
+  it("opens a project composer pane for the requested project", () => {
     state.data = payload([]);
     const { result } = renderHook(() => useSidebarThreadActions());
 
@@ -361,26 +361,23 @@ describe("useSidebarThreadActions", () => {
       });
     });
 
-    expect(actions.setRootComposeProjectId).toHaveBeenCalledWith("proj_target");
-    expect(actions.navigate).toHaveBeenCalledWith("/", {
-      state: { focusPrompt: true },
+    expect(actions.openNewThreadPane).toHaveBeenCalledWith({
+      target: { projectId: "proj_target" },
+      focusPrompt: true,
     });
   });
 
-  it("opens a section without changing the selected project", () => {
+  it("opens a section without choosing a project", () => {
     state.data = payload([]);
     const { result } = renderHook(() => useSidebarThreadActions());
 
     act(() => {
-      result.current.openNewThread({
-        sectionId: "sec_later",
-        focusPrompt: true,
-      });
+      result.current.openNewThread({ sectionId: "sec_later" });
     });
 
-    expect(actions.setRootComposeProjectId).not.toHaveBeenCalled();
-    expect(actions.navigate).toHaveBeenCalledWith("/", {
-      state: { focusPrompt: true, sectionId: "sec_later" },
+    expect(actions.openNewThreadPane).toHaveBeenCalledWith({
+      sectionId: "sec_later",
+      focusPrompt: false,
     });
   });
 
@@ -395,18 +392,10 @@ describe("useSidebarThreadActions", () => {
       });
     });
 
-    expect(actions.navigate).toHaveBeenCalledWith("/", {
-      state: { reuseEnvironmentId: "env_1" },
+    expect(actions.openNewThreadPane).toHaveBeenCalledWith({
+      target: { projectId: "proj_app", environmentId: "env_1" },
+      focusPrompt: false,
     });
-  });
-
-  it("navigates with no router state when no option is set", () => {
-    state.data = payload([]);
-    const { result } = renderHook(() => useSidebarThreadActions());
-    act(() => {
-      result.current.openNewThread();
-    });
-    expect(actions.navigate).toHaveBeenCalledWith("/", undefined);
   });
 
   it("re-expands a collapsed conversation when opening its thread", () => {

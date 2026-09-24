@@ -181,6 +181,50 @@ describe("useOpenNewThreadPane", () => {
     });
   });
 
+  it("opens the requested project beside the focused thread, filed under its section", () => {
+    const { store, open } = renderOpener({
+      layout: threadLayout("thr_watching"),
+    });
+
+    open({ target: { projectId: "proj_other" }, sectionId: "sec_later" });
+
+    const layout = store.get(splitLayoutAtom)!;
+    expect(countPanes(layout.root)).toBe(2);
+    expect(focusedContent(store)).toEqual({
+      kind: "new-thread",
+      composeId: expect.any(String),
+      seed: { projectId: "proj_other" },
+    });
+    expect(mocks.navigate).toHaveBeenCalledWith(getRootComposeRoutePath(), {
+      state: { focusPrompt: true, sectionId: "sec_later" },
+    });
+  });
+
+  it("splits beside a composer for another project when a target is requested", () => {
+    const composerLayout: SplitLayout = {
+      root: {
+        type: "pane",
+        paneId: "pane_1",
+        content: { kind: "new-thread", composeId: DEFAULT_COMPOSE_ID },
+      },
+      focusedPaneId: "pane_1",
+    };
+    const { store, open } = renderOpener({
+      layout: composerLayout,
+      path: getRootComposeRoutePath(),
+    });
+
+    open({ target: { projectId: "proj_other", environmentId: "env_1" } });
+
+    const layout = store.get(splitLayoutAtom)!;
+    expect(countPanes(layout.root)).toBe(2);
+    expect(layout.focusedPaneId).not.toBe("pane_1");
+    expect(focusedContent(store)).toMatchObject({
+      kind: "new-thread",
+      seed: { projectId: "proj_other", environmentId: "env_1" },
+    });
+  });
+
   it("replaces the focused pane once the pane cap is reached", () => {
     let layout = threadLayout("thr_0");
     for (let index = 1; index < MAX_PANES; index += 1) {
@@ -241,6 +285,23 @@ describe("useOpenNewThreadPane", () => {
     expect(store.get(defaultRootComposeProjectIdAtom)).toBe("proj_open");
     expect(mocks.navigate).toHaveBeenCalledWith(getRootComposeRoutePath(), {
       state: { focusPrompt: true },
+    });
+  });
+
+  it("carries the target environment through route state on a compact viewport", () => {
+    mocks.isCompactViewport = true;
+    const { store, open } = renderOpener({
+      layout: threadLayout("thr_watching"),
+    });
+
+    open({
+      target: { projectId: "proj_other", environmentId: "env_1" },
+      focusPrompt: false,
+    });
+
+    expect(store.get(defaultRootComposeProjectIdAtom)).toBe("proj_other");
+    expect(mocks.navigate).toHaveBeenCalledWith(getRootComposeRoutePath(), {
+      state: { reuseEnvironmentId: "env_1" },
     });
   });
 });
