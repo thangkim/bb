@@ -118,6 +118,7 @@ export async function preparePluginRuntime(args: {
   targetDir: string;
   bbVersion: string;
   toolchain: PluginBuildToolchain;
+  sourceLocationBase: readonly string[] | null;
 }): Promise<void> {
   const buildRoot = await mkdtemp(
     path.join(path.dirname(args.sourceRoot), ".bundled-stage-"),
@@ -145,7 +146,10 @@ export async function preparePluginRuntime(args: {
       hostProvidedZod: true,
     });
     if (manifest.bb.app !== undefined)
-      await buildPluginApp(buildRoot, args.bbVersion, args.toolchain);
+      await buildPluginApp(buildRoot, args.bbVersion, args.toolchain, {
+        minify: true,
+        sourceLocationBase: args.sourceLocationBase,
+      });
     if (manifest.bb.host !== undefined)
       await buildPluginHost(buildRoot, args.bbVersion, args.toolchain);
     await runStageAssets(buildRoot);

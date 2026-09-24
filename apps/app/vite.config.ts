@@ -7,11 +7,14 @@ import { bundleStats } from "./vite-bundle-stats.js";
 import { fontPreload } from "./vite-font-preload.js";
 import { sharedUiEnvSeam } from "./vite-shared-ui-seam.js";
 import { cachedReactCompiler } from "./vite-react-compiler.js";
+import { sourceLocations } from "./vite-source-locations.js";
 
 const appDir = dirname(fileURLToPath(import.meta.url));
+const stampSourceLocations = process.env.BB_SOURCE_LOCATIONS === "1";
 
 export const sharedViteConfig = {
   plugins: [
+    ...(stampSourceLocations ? [sourceLocations("build")] : []),
     sharedUiEnvSeam(),
     react(),
     cachedReactCompiler(),
@@ -26,6 +29,7 @@ export const sharedViteConfig = {
       filePath.includes("/workspace-open-target-icons/") ? false : undefined,
     rolldownOptions: {
       output: {
+        keepNames: stampSourceLocations,
         advancedChunks: {
           groups: [
             {

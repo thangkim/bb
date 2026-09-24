@@ -43,6 +43,7 @@ import {
   buildPluginApp,
   buildPluginHost,
   createPluginDevLoop,
+  sourceLocationBase,
 } from "@bb/plugin-build";
 import { getPluginBuildToolchain } from "./build-toolchain.js";
 import {
@@ -104,7 +105,10 @@ import {
   recoverInterruptedGitPluginPromotion,
 } from "./install-sources.js";
 import { readPluginManifest, type PluginManifest } from "./manifest.js";
-import { listBundledPluginRegistrations } from "./builtin-registry.js";
+import {
+  listBundledPluginRegistrations,
+  sourceCheckoutRoot,
+} from "./builtin-registry.js";
 import {
   type BbPluginApi,
   type PluginAgentConfigurationContext,
@@ -1369,6 +1373,13 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
                   bundled.rootDir,
                   deps.appVersion,
                   await getPluginBuildToolchain(deps),
+                  {
+                    minify: true,
+                    sourceLocationBase: sourceLocationBase(
+                      bundled.rootDir,
+                      sourceCheckoutRoot(),
+                    ),
+                  },
                 );
                 setDevBuildProblem(row.id, "frontend", null);
                 notifyPluginsChanged();

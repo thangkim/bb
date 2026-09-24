@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import { loadViteDevConfig } from "@bb/config/vite-dev";
 import { sharedViteConfig } from "./vite.config.js";
+import { sourceLocations } from "./vite-source-locations.js";
 
 const viteDevConfig = loadViteDevConfig();
 const devWebSocketBrowserHostPortDefine = JSON.stringify(
@@ -9,6 +10,7 @@ const devWebSocketBrowserHostPortDefine = JSON.stringify(
 
 export default defineConfig({
   ...sharedViteConfig,
+  plugins: [sourceLocations("serve"), ...sharedViteConfig.plugins],
   css: {
     transformer: "lightningcss",
   },

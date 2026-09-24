@@ -7,12 +7,13 @@ interface AnnotationPageState {
   count: number;
 }
 
-interface AnnotationController {
+export interface AnnotationController {
   activate(): AnnotationPageState;
   deactivate(): AnnotationPageState;
   state(): AnnotationPageState;
   setTheme(theme: Record<string, string>): void;
   clear(): AnnotationPageState;
+  dispose(): void;
 }
 
 interface PinnedAnnotation {
@@ -43,7 +44,7 @@ export const THEME_TOKENS = [
   "radius",
 ] as const;
 
-function installAgentAnnotations(
+export function installAgentAnnotations(
   bb: PageBridge | null,
   theme: Record<string, string>,
 ): AnnotationPageState {
@@ -57,6 +58,7 @@ function installAgentAnnotations(
   }
 
   const attributePrefix = "data-bb-annotation-";
+  const sourceAttribute = "data-bb-src";
   const attributeKeys = [
     "id",
     "class",
@@ -221,6 +223,24 @@ function installAgentAnnotations(
     return segments.join(" > ").slice(0, 2000);
   }
 
+  function sourcesFor(element: Element): string[] {
+    const sources: string[] = [];
+    const files = new Set<string>();
+    let current: Element | null = element;
+    while (current !== null && sources.length < 6) {
+      const source = current.getAttribute(sourceAttribute);
+      if (source !== null && source.length > 0) {
+        const file = source.replace(/:\d+:\d+$/, "");
+        if (!files.has(file)) {
+          files.add(file);
+          sources.push(source.slice(0, 1000));
+        }
+      }
+      current = current.parentElement;
+    }
+    return sources;
+  }
+
   function describe(element: Element) {
     const rect = element.getBoundingClientRect();
     const computed = getComputedStyle(element);
@@ -255,6 +275,7 @@ function installAgentAnnotations(
         height: Math.round(rect.height),
       },
       styles,
+      sources: sourcesFor(element),
     };
   }
 
@@ -275,7 +296,8 @@ function installAgentAnnotations(
     const rect = element.getBoundingClientRect();
     place(hoverBox, rect);
     hoverBox.style.display = "block";
-    hoverLabel.textContent = `${elementName(element)}  ${Math.round(rect.width)}×${Math.round(rect.height)}`;
+    const source = sourcesFor(element)[0]?.split("/").pop();
+    hoverLabel.textContent = `${elementName(element)}  ${Math.round(rect.width)}×${Math.round(rect.height)}${source === undefined ? "" : `  ${source}`}`;
     hoverLabel.style.display = "block";
     hoverLabel.style.left = `${Math.max(4, Math.min(rect.left, innerWidth - 324))}px`;
     hoverLabel.style.top = `${rect.top > 26 ? rect.top - 24 : rect.bottom + 4}px`;
@@ -543,6 +565,16 @@ function installAgentAnnotations(
     post({ type: "state", ...state() });
   }
 
+  function keepEditorFocus(event: FocusEvent): void {
+    const entering =
+      event.type === "focusin"
+        ? event.target === host
+        : event.relatedTarget === host;
+    if (entering) {
+      event.stopImmediatePropagation();
+    }
+  }
+
   function activate(): AnnotationPageState {
     if (!host.isConnected) {
       document.documentElement.append(host);
@@ -592,19 +624,31 @@ function installAgentAnnotations(
     return state();
   }
 
+  function dispose(): void {
+    deactivate();
+    clear();
+    window.removeEventListener("focusin", keepEditorFocus, true);
+    window.removeEventListener("focusout", keepEditorFocus, true);
+    host.remove();
+    Reflect.deleteProperty(globalThis, "__bbAgentAnnotations");
+  }
+
+  window.addEventListener("focusin", keepEditorFocus, true);
+  window.addEventListener("focusout", keepEditorFocus, true);
   const controller: AnnotationController = {
     activate,
     deactivate,
     state,
     setTheme,
     clear,
+    dispose,
   };
   Reflect.set(globalThis, "__bbAgentAnnotations", controller);
   setTheme(theme);
   return state();
 }
 
-function probeReactComponents(annotationId: string) {
+export function probeReactComponents(annotationId: string) {
   const element = document.querySelector(
     `[data-bb-annotation-${annotationId}]`,
   );
@@ -619,8 +663,14 @@ function probeReactComponents(annotationId: string) {
   if (fiberKey === undefined) {
     return { components: [] };
   }
+  const wrapperName =
+    /^(?:Primitive\.|Slot(?:Clone)?$|Slottable$|Presence$|Portal$|Popper(?:Anchor)?$|Collection(?:Slot|ItemSlot)?$|DismissableLayer$|FocusScope$|RovingFocusGroup(?:Impl)?$|Anonymous$|ForwardRef$|Memo$|(?:forwardRef|memo|ForwardRef|Memo)\(|(?:Rendered)?Routes?$|Outlet$|Suspense$)|\.Slot(?:Clone)?$|(?:Provider|Context|Consumer)$/;
+  const minifiedName = /^(?:_.*|[$\w]{1,2}|[a-z$][$\w]*)$/;
   const components: Array<{ name: string; source: string | null }> = [];
-  let fiber = Reflect.get(element, fiberKey);
+  const start = Reflect.get(element, fiberKey);
+  const followOwners =
+    start !== null && typeof start === "object" && Boolean(start._debugOwner);
+  let fiber = followOwners ? start._debugOwner : start;
   let visited = 0;
   while (fiber && components.length < 12 && visited < 500) {
     visited += 1;
@@ -635,10 +685,25 @@ function probeReactComponents(annotationId: string) {
       candidate === null
         ? null
         : (type.displayName ?? candidate.displayName ?? candidate.name);
-    if (typeof name === "string" && name.length > 0) {
-      components.push({ name: name.slice(0, 200), source: sourceOf(fiber) });
+    if (
+      typeof name === "string" &&
+      name.length > 0 &&
+      !wrapperName.test(name) &&
+      !minifiedName.test(name) &&
+      components.at(-1)?.name !== name
+    ) {
+      const definedAt = [type, candidate]
+        .map((value) => value?.__bbSource)
+        .find((value) => typeof value === "string");
+      components.push({
+        name: name.slice(0, 200),
+        source:
+          typeof definedAt === "string"
+            ? definedAt.slice(0, 1000)
+            : sourceOf(fiber),
+      });
     }
-    fiber = fiber.return;
+    fiber = followOwners ? fiber._debugOwner : fiber.return;
   }
   return { components };
 

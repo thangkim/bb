@@ -18,6 +18,7 @@ interface PluginArtifactMeta {
     bbVersion: string;
     pluginSdkVersion: string;
   };
+  sourceLocations: boolean;
 }
 
 interface PluginArtifactMetaParseResult {
@@ -185,7 +186,11 @@ function parsePluginArtifactMeta(raw: string): PluginArtifactMetaParseResult {
   const hasAuthoritativeField = authoritativeKeys.some((key) => key in meta);
   if (!hasAuthoritativeField) {
     return {
-      meta: { sdkMajor: meta.sdkMajor, sdkVersion: meta.sdkVersion },
+      meta: {
+        sdkMajor: meta.sdkMajor,
+        sdkVersion: meta.sdkVersion,
+        sourceLocations: false,
+      },
       error: null,
     };
   }
@@ -241,6 +246,7 @@ function parsePluginArtifactMeta(raw: string): PluginArtifactMetaParseResult {
         bbVersion: builtWith.bbVersion,
         pluginSdkVersion: builtWith.pluginSdkVersion,
       },
+      sourceLocations: meta.sourceLocations === true,
     },
     error: null,
   };

@@ -5,6 +5,7 @@ import {
   annotationRecordSchema,
   annotationUpdateSchema,
   formatAnnotationContext,
+  storedAnnotationRecordSchema,
 } from "./annotations.js";
 
 const STORAGE_PREFIX = "annotation:";
@@ -23,7 +24,7 @@ export const agentAnnotationsRpcContract = defineRpcContract({
 export default async function plugin(bb: BbPluginApi) {
   bb.rpc.register(agentAnnotationsRpcContract, {
     async update({ id, comment }) {
-      const record = annotationRecordSchema.parse(
+      const record = storedAnnotationRecordSchema.parse(
         await bb.storage.kv.get(`${STORAGE_PREFIX}${id}`),
       );
       await bb.storage.kv.set(`${STORAGE_PREFIX}${id}`, { ...record, comment });
@@ -40,7 +41,7 @@ export default async function plugin(bb: BbPluginApi) {
     label: "Browser annotations",
     search: () => [],
     async resolve(id) {
-      const parsed = annotationRecordSchema.safeParse(
+      const parsed = storedAnnotationRecordSchema.safeParse(
         await bb.storage.kv.get(`${STORAGE_PREFIX}${id}`),
       );
       if (!parsed.success) {

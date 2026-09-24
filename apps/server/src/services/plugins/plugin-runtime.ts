@@ -33,6 +33,7 @@ import {
   buildPluginApp,
   buildPluginHost,
   isIgnoredPluginDevPath,
+  sourceLocationBase,
 } from "@bb/plugin-build";
 import { PluginHostArtifactRegistry } from "./plugin-host-artifact-registry.js";
 import { getPluginBuildToolchain } from "./build-toolchain.js";
@@ -59,7 +60,7 @@ import { parsePluginSource } from "./install-sources.js";
 import { readPluginManifest, type PluginManifest } from "./manifest.js";
 import { buildPluginProviderRegistration } from "../providers/plugin-provider-registration.js";
 import type { ProviderInstallRank } from "../providers/provider-registry.js";
-import { BUNDLED_PLUGINS } from "./builtin-registry.js";
+import { BUNDLED_PLUGINS, sourceCheckoutRoot } from "./builtin-registry.js";
 import { readPluginSettingsValuesSync } from "./plugin-settings.js";
 import {
   nextCronRunAt,
@@ -1103,19 +1104,37 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
       })
     ) {
       const meta = await readPluginAppBundleMeta(row.rootDir);
+      const sourceLocationRoot =
+        deps.watchBuiltinPluginSources === true ? sourceCheckoutRoot() : null;
       const sdkChanged = meta?.sdkVersion !== PLUGIN_SDK_VERSION;
+      const sourceBase =
+        sourceLocationRoot === null
+          ? null
+          : sourceLocationBase(row.rootDir, sourceLocationRoot);
+      const wantsSourceLocations = sourceBase !== null;
+      const stampingChanged =
+        !sdkChanged &&
+        meta !== null &&
+        meta.sourceLocations !== wantsSourceLocations;
       const sourceChanged =
-        !sdkChanged && (await isMutableAppBundleStale(row.rootDir));
-      if (sdkChanged || sourceChanged) {
+        !sdkChanged &&
+        !stampingChanged &&
+        (await isMutableAppBundleStale(row.rootDir));
+      if (sdkChanged || stampingChanged || sourceChanged) {
         const reason = sdkChanged
           ? `built with SDK ${meta?.sdkVersion ?? "unknown"}, running SDK is ${PLUGIN_SDK_VERSION}`
-          : "plugin source is newer than dist/app.js";
+          : stampingChanged
+            ? wantsSourceLocations
+              ? "dev bundle needs source locations"
+              : "bundle carries dev source locations"
+            : "plugin source is newer than dist/app.js";
         logger.info(`plugin ${row.id}: rebuilding frontend bundle (${reason})`);
         try {
           await buildPluginApp(
             row.rootDir,
             deps.appVersion,
             await getPluginBuildToolchain(deps),
+            { minify: true, sourceLocationBase: sourceBase },
           );
           setDevBuildProblem(row.id, "frontend", null);
         } catch (error) {

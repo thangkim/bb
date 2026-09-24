@@ -18,6 +18,9 @@
   },
   "include": [
     "annotations.ts",
+    "annotation-session.ts",
+    "app-target.ts",
+    "app-target.test.tsx",
     "annotations.test.ts",
     "page-script.ts",
     "page-script.test.ts",

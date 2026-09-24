@@ -1,184 +1,70 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS } from "@/components/ui/chrome-style-tokens";
 import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import {
   definePluginApp,
-  useComposer,
-  useRpc,
   type ExperimentalPluginBrowserPage,
   type ExperimentalPluginBrowserToolbarActionProps,
-  type JsonValue,
 } from "@get-bb/plugin-sdk/app";
+import { reactProbeSchema } from "./annotations.js";
 import {
-  ANNOTATION_MENTION_PROVIDER_ID,
-  annotationMentionLabel,
-  pageMessageSchema,
-  pageStateSchema,
-  reactProbeSchema,
-  type PageAnnotation,
-  type PageState,
-  type ReactComponent,
-} from "./annotations.js";
+  useAnnotationSession,
+  type AnnotationTarget,
+} from "./annotation-session.js";
 import {
-  THEME_TOKENS,
+  appAnnotationTarget,
+  onAppAnnotationToggle,
+  requestAppAnnotationToggle,
+} from "./app-target.js";
+import {
   buildActivateExpression,
   buildControllerExpression,
   buildReactProbeExpression,
 } from "./page-script.js";
-import type { agentAnnotationsRpcContract } from "./server.js";
 
-const INACTIVE_STATE: PageState = { active: false, count: 0 };
+export const APP_ANNOTATION_COMMAND_ID = "annotate-app";
 
-function readTheme(): Record<string, string> {
-  const computed = getComputedStyle(document.documentElement);
-  const theme: Record<string, string> = {};
-  for (const token of THEME_TOKENS) {
-    const value = computed.getPropertyValue(`--${token}`).trim();
-    if (value.length > 0) {
-      theme[`--bb-${token}`] = value;
-    }
-  }
-  return theme;
-}
-
-function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
-
-async function readReactComponents(
+function browserPageTarget(
   page: ExperimentalPluginBrowserPage,
-  annotationId: string,
-): Promise<ReactComponent[]> {
-  try {
-    const parsed = reactProbeSchema.safeParse(
-      await page.evaluate(buildReactProbeExpression(annotationId), {
-        world: "main",
-      }),
-    );
-    return parsed.success && parsed.data !== null ? parsed.data.components : [];
-  } catch {
-    return [];
-  }
+): AnnotationTarget {
+  return {
+    surface: "browser",
+    activate: (theme) => page.evaluate(buildActivateExpression(theme)),
+    control: (method) => page.evaluate(buildControllerExpression(method)),
+    onMessage: (listener) => page.onMessage(listener),
+    async readComponents(annotationId) {
+      try {
+        const parsed = reactProbeSchema.safeParse(
+          await page.evaluate(buildReactProbeExpression(annotationId), {
+            world: "main",
+          }),
+        );
+        return parsed.success && parsed.data !== null
+          ? parsed.data.components
+          : [];
+      } catch {
+        return [];
+      }
+    },
+    release() {
+      page
+        .evaluate(buildControllerExpression("deactivate"))
+        .catch(() => undefined);
+    },
+  };
 }
 
 export function AnnotateAction({
   url,
   experimental_page: page,
 }: ExperimentalPluginBrowserToolbarActionProps) {
-  const composer = useComposer();
-  const rpc = useRpc<typeof agentAnnotationsRpcContract>();
-  const composerRef = useRef(composer);
-  const pendingSaves = useRef(Promise.resolve());
-  composerRef.current = composer;
-  const [state, setState] = useState<PageState>(INACTIVE_STATE);
-  const [error, setError] = useState<string | null>(null);
-
-  const applyState = useCallback((value: JsonValue) => {
-    const parsed = pageStateSchema.safeParse(value);
-    setState(parsed.success ? parsed.data : INACTIVE_STATE);
-  }, []);
-
-  const addToPrompt = useCallback(
-    async (annotation: PageAnnotation) => {
-      if (page === null) {
-        return;
-      }
-      const components = await readReactComponents(page, annotation.id);
-      const saved = await rpc.call("save", { ...annotation, components });
-      composerRef.current.insertMention({
-        provider: ANNOTATION_MENTION_PROVIDER_ID,
-        id: saved.id,
-        label: annotationMentionLabel(annotation),
-      });
-    },
-    [page, rpc],
-  );
-
-  useEffect(() => {
-    if (page === null) {
-      return;
-    }
-    return page.onMessage((data) => {
-      const parsed = pageMessageSchema.safeParse(data);
-      if (!parsed.success) {
-        return;
-      }
-      if (parsed.data.type === "state") {
-        setState({ active: parsed.data.active, count: parsed.data.count });
-        return;
-      }
-      const message = parsed.data;
-      pendingSaves.current = pendingSaves.current
-        .then(async () => {
-          if (message.type === "annotation-delete") {
-            composerRef.current.experimental_removeMention({
-              provider: ANNOTATION_MENTION_PROVIDER_ID,
-              id: message.id,
-            });
-          } else if (message.type === "annotation-update") {
-            await rpc.call("update", {
-              id: message.id,
-              comment: message.comment,
-            });
-          } else {
-            await addToPrompt(message.annotation);
-          }
-          setError(null);
-        })
-        .catch((cause: unknown) => {
-          setError(errorMessage(cause));
-        });
-    });
-  }, [addToPrompt, page, rpc]);
-
-  useEffect(() => {
-    if (page === null) {
-      return;
-    }
-    page
-      .evaluate(buildControllerExpression("state"))
-      .then(applyState, () => setState(INACTIVE_STATE));
-  }, [applyState, page, url]);
-
-  useEffect(
-    () => () => {
-      page
-        ?.evaluate(buildControllerExpression("deactivate"))
-        .catch(() => undefined);
-    },
+  const target = useMemo(
+    () => (page === null ? null : browserPageTarget(page)),
     [page],
   );
-
-  useEffect(
-    () =>
-      composer.experimental_onSubmitted(() => {
-        pendingSaves.current = pendingSaves.current
-          .then(async () => {
-            if (page !== null)
-              applyState(
-                await page.evaluate(buildControllerExpression("clear")),
-              );
-          })
-          .catch((cause: unknown) => setError(errorMessage(cause)));
-      }),
-    // oxlint-disable-next-line react/exhaustive-deps
-    [composer.experimental_onSubmitted, page, applyState],
-  );
-
-  const toggle = useCallback(() => {
-    if (page === null) {
-      return;
-    }
-    setError(null);
-    const expression = state.active
-      ? buildControllerExpression("deactivate")
-      : buildActivateExpression(readTheme());
-    page.evaluate(expression).then(applyState, (cause: unknown) => {
-      setError(errorMessage(cause));
-    });
-  }, [applyState, page, state.active]);
+  const { state, error, toggle } = useAnnotationSession(target, url);
 
   const label =
     page === null
@@ -216,10 +102,52 @@ export function AnnotateAction({
   );
 }
 
+export function AppAnnotationsOverlay() {
+  const { state, error, toggle, clear, scope } = useAnnotationSession(
+    appAnnotationTarget,
+    "",
+  );
+  const scopeKey = JSON.stringify(scope);
+  const previousScopeKey = useRef(scopeKey);
+
+  useEffect(() => onAppAnnotationToggle(toggle), [toggle]);
+
+  useEffect(() => {
+    if (previousScopeKey.current === scopeKey) return;
+    previousScopeKey.current = scopeKey;
+    clear().catch(() => undefined);
+  }, [clear, scopeKey]);
+
+  if (!state.active && error === null) {
+    return null;
+  }
+  return (
+    <div
+      role="status"
+      className={cn(
+        "pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-full border border-border bg-popover px-3 py-1.5 text-xs text-popover-foreground shadow-md",
+        error !== null && "text-destructive",
+      )}
+    >
+      {error ?? "Annotating bb: click an element to comment. Esc to stop."}
+    </div>
+  );
+}
+
 export default definePluginApp((app) => {
   app.slots.experimental_browserToolbarAction({
     id: "annotate",
     title: "Agent annotations",
     component: AnnotateAction,
+  });
+  app.slots.experimental_appOverlay({
+    id: "app-annotations",
+    component: AppAnnotationsOverlay,
+  });
+  app.commands.register({
+    id: APP_ANNOTATION_COMMAND_ID,
+    title: "Annotate bb interface",
+    defaultShortcut: { key: "b", alt: true, shift: true },
+    run: requestAppAnnotationToggle,
   });
 });

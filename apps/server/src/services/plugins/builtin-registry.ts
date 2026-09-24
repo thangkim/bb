@@ -245,6 +245,10 @@ export const BUNDLED_PLUGINS: readonly BundledPluginDefinition[] = [
 
 const builtinPluginsModuleDir = path.dirname(fileURLToPath(import.meta.url));
 
+export function sourceCheckoutRoot(): string {
+  return path.resolve(builtinPluginsModuleDir, "../../../../..");
+}
+
 export function builtinPluginSource(name: string): string {
   return `builtin:${name}`;
 }

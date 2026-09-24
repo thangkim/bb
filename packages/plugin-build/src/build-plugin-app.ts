@@ -20,6 +20,11 @@ import { RUNTIME_EXPORT_MANIFEST } from "./generated/runtime-export-manifest.gen
 import { type PluginBuildToolchain } from "./toolchain.js";
 import { createPluginArtifactMeta } from "./plugin-artifact-meta.js";
 import {
+  SOURCE_LOCATION_JSX_IMPORT_SOURCE,
+  SOURCE_LOCATION_NAMESPACE,
+  sourceLocationPlugin,
+} from "./source-locations.js";
+import {
   isRecord,
   readPluginPackageJsonFile,
   resolveManifestEntryFile,
@@ -382,6 +387,7 @@ async function bundledInputPaths(
       if (
         input.startsWith(`${SHIM_NAMESPACE}:`) ||
         input.startsWith(`${ZOD_LOCALE_STUB_NAMESPACE}:`) ||
+        input.startsWith(`${SOURCE_LOCATION_NAMESPACE}:`) ||
         input.startsWith("(")
       ) {
         return;
@@ -400,13 +406,14 @@ interface PluginAppBuildResult {
 
 interface PluginAppBuildOptions {
   minify: boolean;
+  sourceLocationBase: readonly string[] | null;
 }
 
 export async function buildPluginApp(
   rootDir: string,
   bbVersion: string,
   toolchain: PluginBuildToolchain,
-  options: PluginAppBuildOptions = { minify: true },
+  options: PluginAppBuildOptions = { minify: true, sourceLocationBase: null },
 ): Promise<PluginAppBuildResult> {
   const { appEntry, packageName, pluginVersion } =
     await readPluginAppConfig(rootDir);
@@ -417,6 +424,7 @@ export async function buildPluginApp(
   const jsPath = join(distDir, "app.js");
   const cssPath = join(distDir, "app.css");
   const metaPath = join(distDir, "app.meta.json");
+  const sourceBase = options.sourceLocationBase;
 
   const stageDir = await mkdtemp(join(distDir, ".stage-"));
   try {
@@ -437,15 +445,23 @@ export async function buildPluginApp(
       platform: "browser",
       target: "es2022",
       minify: options.minify,
+      keepNames: sourceBase !== null,
       legalComments: "none",
       jsx: "automatic",
-      jsxDev: false,
+      jsxDev: sourceBase !== null,
+      ...(sourceBase === null
+        ? {}
+        : { jsxImportSource: SOURCE_LOCATION_JSX_IMPORT_SOURCE }),
       define: {
         "process.env.NODE_ENV": '"production"',
         __BB_PLUGIN_ID__: JSON.stringify(pluginId),
       },
       logLevel: "error",
-      plugins: [zodLocaleStubPlugin(), runtimeShimPlugin()],
+      plugins: [
+        zodLocaleStubPlugin(),
+        ...(sourceBase === null ? [] : [sourceLocationPlugin(sourceBase)]),
+        runtimeShimPlugin(),
+      ],
     });
 
     let authoredCss = "";
@@ -482,7 +498,14 @@ export async function buildPluginApp(
     await writeFile(
       stagedMetaPath,
       JSON.stringify(
-        createPluginArtifactMeta({ packageName, pluginVersion, bbVersion }),
+        {
+          ...createPluginArtifactMeta({
+            packageName,
+            pluginVersion,
+            bbVersion,
+          }),
+          ...(sourceBase === null ? {} : { sourceLocations: true }),
+        },
         null,
         2,
       ) + "\n",

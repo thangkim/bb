@@ -18,6 +18,11 @@ import {
   RUNTIME_SLOT_BY_SPECIFIER,
 } from "./build-plugin-app.js";
 import { RUNTIME_EXPORT_MANIFEST } from "./generated/runtime-export-manifest.generated.js";
+import {
+  componentDefinitions,
+  sourceLocationBase,
+  sourceLocationRuntimeSource,
+} from "./source-locations.js";
 import { resolvePluginBuildToolchain } from "./toolchain.js";
 
 function testToolchain() {
@@ -359,6 +364,7 @@ describe("plugin app runtime shim", () => {
 
     const readable = await buildPluginApp(dir, "0.9.0-test", toolchain, {
       minify: false,
+      sourceLocationBase: null,
     });
     const readableJs = await readFile(readable.jsPath, "utf8");
     const readableCss = await readFile(readable.cssPath, "utf8");
@@ -367,6 +373,190 @@ describe("plugin app runtime shim", () => {
     expect(readableCss).toContain(".bb71-authored {");
     expect(readableJs.length).toBeGreaterThan(minifiedJs.length);
     expect(readableCss.length).toBeGreaterThan(minifiedCss.length);
+  });
+
+  it("stamps host elements with repository-relative source locations and keeps component names", async () => {
+    const checkout = await mkdtemp(join(tmpdir(), "bb-plugin-sources-"));
+    tempDirs.push(checkout);
+    const dir = join(checkout, "plugins", "fixture");
+    await mkdir(join(checkout, "packages", "ui", "src"), { recursive: true });
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "package.json"),
+      JSON.stringify({
+        name: "bb-plugin-sources-fixture",
+        version: "0.0.0",
+        bb: {
+          name: "Sources fixture",
+          description: "Verifies source-location stamping.",
+          branding: { icon: "Zap" },
+          server: "./server.ts",
+          app: "./app.tsx",
+        },
+      }),
+    );
+    await writeFile(
+      join(dir, "server.ts"),
+      "export default function plugin() {}\n",
+    );
+    await writeFile(
+      join(checkout, "packages", "ui", "src", "card.tsx"),
+      'export function SharedCard() {\n  return <section data-bb-src="kept">card</section>;\n}\n',
+    );
+    await writeFile(
+      join(dir, "app.tsx"),
+      [
+        'import { SharedCard } from "../../packages/ui/src/card";',
+        "export { SharedCard };",
+        "export function SectionHeader() {",
+        '  return <div className="row">',
+        '    <button type="button">collapse</button>',
+        "    <SharedCard />",
+        "  </div>;",
+        "}",
+        "export function SpreadKey(props: object) {",
+        '  return <em {...props} key="k" />;',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const toolchain = await testToolchain();
+
+    const stamped = await buildPluginApp(dir, "0.9.0-test", toolchain, {
+      minify: true,
+      sourceLocationBase: sourceLocationBase(dir, checkout),
+    });
+    const created: Array<{ type: unknown; props: Record<string, unknown> }> =
+      [];
+    const element = (type: unknown, props: Record<string, unknown>) => {
+      created.push({ type, props });
+      return { type, props };
+    };
+    Reflect.set(globalThis, "__bbPluginRuntime", {
+      jsxRuntime: { jsx: element, jsxs: element, Fragment: Symbol("Fragment") },
+      react: {
+        createElement: (type: unknown, props: Record<string, unknown>) =>
+          element(type, props),
+      },
+    });
+    try {
+      const module: Record<string, unknown> = await import(
+        pathToFileURL(stamped.jsPath).href
+      );
+      const { SectionHeader, SharedCard, SpreadKey } = module;
+      if (
+        typeof SectionHeader !== "function" ||
+        typeof SharedCard !== "function" ||
+        typeof SpreadKey !== "function"
+      ) {
+        throw new Error("Expected component exports");
+      }
+      expect(SectionHeader.name).toBe("SectionHeader");
+      expect(Reflect.get(SectionHeader, "__bbSource")).toBe(
+        "plugins/fixture/app.tsx:3:8",
+      );
+      expect(Reflect.get(SharedCard, "__bbSource")).toBe(
+        "packages/ui/src/card.tsx:1:8",
+      );
+      SectionHeader();
+      SharedCard();
+      SpreadKey({ title: "t" });
+    } finally {
+      Reflect.deleteProperty(globalThis, "__bbPluginRuntime");
+    }
+    const sourceOf = (type: unknown) =>
+      created.find((entry) => entry.type === type)?.props["data-bb-src"];
+    expect(sourceOf("div")).toBe("plugins/fixture/app.tsx:4:10");
+    expect(sourceOf("button")).toBe("plugins/fixture/app.tsx:5:5");
+    expect(sourceOf("section")).toBe("kept");
+    expect(created.find((entry) => entry.type === "em")?.props).toMatchObject({
+      title: "t",
+    });
+    const component = created.find((entry) => typeof entry.type === "function");
+    expect(component?.props).not.toHaveProperty("data-bb-src");
+    expect(JSON.parse(await readFile(stamped.metaPath, "utf8"))).toHaveProperty(
+      "sourceLocations",
+      true,
+    );
+
+    const plain = await buildPluginApp(dir, "0.9.0-test", toolchain);
+    expect(await readFile(plain.jsPath, "utf8")).not.toContain(
+      "plugins/fixture",
+    );
+    expect(
+      JSON.parse(await readFile(plain.metaPath, "utf8")),
+    ).not.toHaveProperty("sourceLocations");
+  });
+
+  it("finds top-level component declarations with their line and column", () => {
+    const code = [
+      'import * as React from "react";',
+      "export function Picker<T>(props: T) {",
+      "  function Nested() {}",
+      "}",
+      "export const Button = React.forwardRef<HTMLButtonElement, object>((props, ref) => null);",
+      "const Row = memo(() => null);",
+      "export const Arrow: React.FC = () => null;",
+      "export default function Page() {}",
+      "const Single = props => null;",
+      "const Theme = createContext(null);",
+      "const LIMIT = 4;",
+      "function formatLabel() {}",
+      "const text = `",
+      "export function NotReal() {}`;",
+    ].join("\n");
+
+    expect(componentDefinitions(code)).toEqual([
+      { name: "Picker", line: 2, column: 8 },
+      { name: "Button", line: 5, column: 14 },
+      { name: "Row", line: 6, column: 7 },
+      { name: "Arrow", line: 7, column: 14 },
+      { name: "Page", line: 8, column: 16 },
+      { name: "Single", line: 9, column: 7 },
+      { name: "NotReal", line: 14, column: 8 },
+    ]);
+  });
+
+  it("stamps shared workspace sources relative to the checkout and skips files outside it", async () => {
+    const checkout = await mkdtemp(join(tmpdir(), "bb-plugin-sources-"));
+    tempDirs.push(checkout);
+    const runtime = sourceLocationRuntimeSource(["plugins", "fixture"]);
+    const created: Array<Record<string, unknown>> = [];
+    const runtimePath = join(checkout, "runtime.mjs");
+    await writeFile(
+      runtimePath,
+      runtime.replace(
+        'import { Fragment, jsx, jsxs } from "react/jsx-runtime";',
+        "const Fragment = Symbol(); const jsx = (type, props) => (globalThis.__bbCreated.push(props), props); const jsxs = jsx;",
+      ),
+    );
+    Reflect.set(globalThis, "__bbCreated", created);
+    try {
+      const { jsxDEV } = await import(pathToFileURL(runtimePath).href);
+      const at = (fileName: string) =>
+        jsxDEV("span", {}, undefined, false, {
+          fileName,
+          lineNumber: 2,
+          columnNumber: 3,
+        });
+      expect(at("../../packages/ui/src/card.tsx")).toHaveProperty(
+        "data-bb-src",
+        "packages/ui/src/card.tsx:2:3",
+      );
+      expect(at("../../../elsewhere/x.tsx")).not.toHaveProperty("data-bb-src");
+      expect(at("node_modules/lib/x.jsx")).not.toHaveProperty("data-bb-src");
+      expect(at("./app/list/Row.tsx")).toHaveProperty(
+        "data-bb-src",
+        "plugins/fixture/app/list/Row.tsx:2:3",
+      );
+    } finally {
+      Reflect.deleteProperty(globalThis, "__bbCreated");
+    }
+    await mkdir(join(checkout, "plugins", "a"), { recursive: true });
+    expect(
+      sourceLocationBase(join(checkout, "plugins", "a"), checkout),
+    ).toEqual(["plugins", "a"]);
+    expect(sourceLocationBase(tmpdir(), checkout)).toBeNull();
   });
 
   it("scans bundled Tailwind content from a symlinked workspace dependency by filesystem identity", async () => {

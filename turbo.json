@@ -60,6 +60,7 @@
         "NODE_ENV",
         "BABEL_*",
         "ENABLE_REACT_COMPILER_TIMINGS",
+        "BB_SOURCE_LOCATIONS",
         "VITE_*"
       ],
       "dependsOn": ["topo"],
@@ -153,6 +154,7 @@
     },
     "prepare:bundled": {
       "dependsOn": ["topo", "^build"],
+      "env": ["BB_SOURCE_LOCATIONS"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "!dist/**",

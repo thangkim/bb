@@ -14,7 +14,7 @@
     "clean": "rimraf dist bundle-stats.json",
     "storybook": "ladle serve",
     "storybook:build": "ladle build",
-    "lint": "oxlint src vite.config.ts vite.dev.config.ts vite-bundle-stats.ts vite-font-preload.ts vite-forkable-plugin-paths.ts vite-shared-ui-seam.ts vite-react-compiler.ts",
+    "lint": "oxlint src vite.config.ts vite.dev.config.ts vite-bundle-stats.ts vite-font-preload.ts vite-forkable-plugin-paths.ts vite-shared-ui-seam.ts vite-react-compiler.ts vite-source-locations.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "test": "node scripts/generate-pwa-icons.mjs --check && vitest run --config vitest.config.ts"
   },
@@ -116,6 +116,7 @@
     "babel-plugin-react-compiler": "^1.0.0",
     "cacache": "^20.0.4",
     "lightningcss": "^1.32.0",
+    "magic-string": "^0.30.21",
     "mdast-util-to-hast": "^13.2.1",
     "oniguruma-to-es": "^4.3.4",
     "sharp": "^0.34.5",

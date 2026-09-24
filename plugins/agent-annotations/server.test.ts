@@ -19,8 +19,10 @@ const record: AnnotationRecord = {
     attributes: { id: "pay" },
     rect: { x: 40, y: 300, width: 120, height: 36 },
     styles: {},
+    sources: [],
   },
   components: [{ name: "SubmitButton", source: "src/SubmitButton.tsx:12" }],
+  surface: "browser",
 };
 
 async function setup() {
@@ -34,7 +36,7 @@ async function setup() {
   if (provider === undefined) {
     throw new Error("Expected the annotation mention provider.");
   }
-  return { harness, provider };
+  return { bb, harness, provider };
 }
 
 describe("agent annotations server", () => {
@@ -57,6 +59,23 @@ describe("agent annotations server", () => {
     await expect(provider.resolve("missing")).rejects.toThrow(
       "This browser annotation is no longer available",
     );
+  });
+
+  it("still resolves records saved before surfaces and sources existed", async () => {
+    const { bb, harness, provider } = await setup();
+    const { surface: _surface, ...legacy } = record;
+    const { sources: _sources, ...legacyElement } = record.element;
+    await bb.storage.kv.set(`annotation:${record.id}`, {
+      ...legacy,
+      element: legacyElement,
+    });
+
+    await harness.callRpc("update", { id: record.id, comment: "Updated" });
+    const resolved = await provider.resolve(record.id);
+
+    expect(resolved.context).toContain("# Browser annotation 1");
+    expect(resolved.context).toContain("Updated");
+    expect(resolved.context).not.toContain("- Source");
   });
 
   it("rejects updates to missing annotations and blank edits", async () => {

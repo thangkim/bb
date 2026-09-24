@@ -21,11 +21,13 @@ const record: AnnotationRecord = {
     attributes: { id: "pay", "aria-label": "Pay now" },
     rect: { x: 40, y: 300, width: 120, height: 36 },
     styles: { "background-color": "rgb(0, 0, 0)" },
+    sources: [],
   },
   components: [
     { name: "SubmitButton", source: "src/SubmitButton.tsx:12" },
     { name: "CheckoutCard", source: null },
   ],
+  surface: "browser",
 };
 
 describe("annotation formatting", () => {
@@ -58,6 +60,52 @@ describe("annotation formatting", () => {
         "- background-color: rgb(0, 0, 0)",
       ].join("\n"),
     );
+  });
+
+  it("frames bb app annotations and lists repository source locations", () => {
+    const context = formatAnnotationContext({
+      ...record,
+      surface: "app",
+      url: "http://localhost:5173/projects/proj_1/threads/thr_1",
+      element: {
+        ...record.element,
+        sources: [
+          "packages/shared-ui/src/components/ui/button.tsx:52:5",
+          "apps/app/src/components/promptbox/PromptBoxInternal.tsx:412:7",
+        ],
+      },
+      components: [{ name: "PromptBoxInternal", source: null }],
+    });
+
+    expect(context).toContain("# bb app annotation 2");
+    expect(context).toContain(
+      "The user selected an element in bb's own interface at http://localhost:5173/projects/proj_1/threads/thr_1 and commented on it.",
+    );
+    expect(context).toContain(
+      "- Source, innermost first: `packages/shared-ui/src/components/ui/button.tsx:52:5` › `apps/app/src/components/promptbox/PromptBoxInternal.tsx:412:7`",
+    );
+    expect(context).toContain(
+      "Source paths are relative to the repository root.",
+    );
+    expect(context).toContain(
+      "- React components, innermost first: PromptBoxInternal",
+    );
+    expect(context).not.toContain("no source stamps");
+
+    const unstamped = formatAnnotationContext({
+      ...record,
+      surface: "app",
+      element: { ...record.element, sources: [] },
+      components: [],
+    });
+    expect(unstamped).toContain("this bb build has no source stamps");
+    expect(
+      formatAnnotationContext({
+        ...record,
+        surface: "browser",
+        components: [],
+      }),
+    ).not.toContain("no source stamps");
   });
 
   it("rejects records with blank comments", () => {

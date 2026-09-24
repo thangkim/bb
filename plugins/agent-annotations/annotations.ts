@@ -20,6 +20,7 @@ const pageElementSchema = z
     attributes: z.record(z.string(), z.string().max(400)),
     rect: rectSchema,
     styles: z.record(z.string(), z.string().max(400)),
+    sources: z.array(z.string().max(1000)).max(6),
   })
   .strict();
 
@@ -83,10 +84,25 @@ export const reactProbeSchema = z
   .strict()
   .nullable();
 
+export const annotationSurfaceSchema = z.enum(["browser", "app"]);
+export type AnnotationSurface = z.infer<typeof annotationSurfaceSchema>;
+
 export const annotationRecordSchema = pageAnnotationSchema
-  .extend({ components: z.array(reactComponentSchema).max(12) })
+  .extend({
+    components: z.array(reactComponentSchema).max(12),
+    surface: annotationSurfaceSchema,
+  })
   .strict();
 export type AnnotationRecord = z.infer<typeof annotationRecordSchema>;
+
+export const storedAnnotationRecordSchema = annotationRecordSchema
+  .extend({
+    surface: annotationSurfaceSchema.default("browser"),
+    element: pageElementSchema
+      .extend({ sources: pageElementSchema.shape.sources.default([]) })
+      .strict(),
+  })
+  .strict();
 
 export function annotationMentionLabel(annotation: PageAnnotation): string {
   return `${annotation.number}. ${annotation.element.name}`;
@@ -102,9 +118,13 @@ export function formatAnnotationContext(record: AnnotationRecord): string {
   const page =
     record.title.length > 0 ? `"${record.title}" (${record.url})` : record.url;
   const lines = [
-    `# Browser annotation ${record.number}`,
+    record.surface === "app"
+      ? `# bb app annotation ${record.number}`
+      : `# Browser annotation ${record.number}`,
     "",
-    `The user selected an element on ${page} and commented on it.`,
+    record.surface === "app"
+      ? `The user selected an element in bb's own interface at ${record.url} and commented on it.`
+      : `The user selected an element on ${page} and commented on it.`,
     "",
     "## Comment",
     "",
@@ -115,6 +135,15 @@ export function formatAnnotationContext(record: AnnotationRecord): string {
     `- Element: \`${record.element.name}\``,
     `- Selector: \`${record.element.selector}\``,
   ];
+  if (record.element.sources.length > 0) {
+    lines.push(
+      `- Source, innermost first: ${record.element.sources.map((source) => `\`${source}\``).join(" › ")}`,
+    );
+  } else if (record.surface === "app") {
+    lines.push(
+      "- Source: not recorded; this bb build has no source stamps. Search for the class list, text, or component names below.",
+    );
+  }
   if (record.components.length > 0) {
     lines.push(
       `- React components, innermost first: ${record.components.map(formatComponent).join(" › ")}`,
@@ -133,6 +162,12 @@ export function formatAnnotationContext(record: AnnotationRecord): string {
   lines.push(
     `- Box: x=${rect.x}, y=${rect.y}, ${rect.width}×${rect.height}px in a ${record.viewport.width}×${record.viewport.height}px viewport`,
   );
+  if (record.element.sources.length > 0) {
+    lines.push(
+      "",
+      "Source paths are relative to the repository root. Each line and column points at the JSX tag that rendered the element or one of its ancestors.",
+    );
+  }
   const styleEntries = Object.entries(styles);
   if (styleEntries.length > 0) {
     lines.push(

@@ -29,6 +29,7 @@ const pageAnnotation = {
     attributes: { id: "pay" },
     rect: { x: 40, y: 300, width: 120, height: 36 },
     styles: {},
+    sources: [],
   },
 };
 
@@ -133,6 +134,7 @@ describe("AnnotateAction", () => {
           components: [
             { name: "SubmitButton", source: "src/SubmitButton.tsx:12" },
           ],
+          surface: "browser",
         },
       },
     ]);

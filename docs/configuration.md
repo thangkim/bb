@@ -1498,6 +1498,17 @@ port with a trusted network boundary such as Tailscale and a host firewall.
 `pnpm start` loads `.env`, `.env.local`, `.env.production`, and
 `.env.production.local`.
 
+`pnpm start:worktree` and `pnpm desktop:worktree` build with
+`BB_SOURCE_LOCATIONS=1`. That build-time switch stamps every lowercase JSX
+element in the app and the builtin plugin UIs with
+`data-bb-src="<repo-relative path>:<line>:<column>"`, records where each
+top-level component is defined, and keeps component names through
+minification, so Agent Annotations can report the source. `pnpm start`,
+`pnpm desktop`, and release builds leave it unset. Turbo includes the switch in
+the app and `prepare:bundled` cache keys, so stamped and unstamped outputs never
+share a cache entry. `pnpm dev` stamps the app through the Vite dev server and
+builtin plugin bundles through the server without this switch.
+
 Production startup from source uses the same launcher policy as the packaged
 app while reading build outputs directly from `apps/app`, `apps/server`, and
 `apps/host-daemon`. `pnpm start:host-daemon` continues to run the packaged

@@ -69,6 +69,7 @@ describe("desktop launch environment", () => {
       BB_DESKTOP_USER_DATA_DIR: join(config.dataDir, "desktop"),
       BB_HOST_DAEMON_PORT: String(config.ports.hostDaemonPort),
       BB_SERVER_PORT: String(config.ports.serverPort),
+      BB_SOURCE_LOCATIONS: "1",
       BB_TELEMETRY: "false",
       NODE_ENV: "production",
       OPENAI_API_KEY: "test-key",
@@ -127,6 +128,7 @@ describe("desktop launch environment", () => {
     expect(env.BB_SERVER_PORT).toBeUndefined();
     expect(env.BB_HOST_DAEMON_PORT).toBeUndefined();
     expect(env.BB_DESKTOP_USER_DATA_DIR).toBeUndefined();
+    expect(env.BB_SOURCE_LOCATIONS).toBeUndefined();
     expect(env).toMatchObject({
       BB_DESKTOP_OPEN_DEVTOOLS: "0",
       NODE_ENV: "production",

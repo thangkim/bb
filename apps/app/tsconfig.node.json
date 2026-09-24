@@ -14,6 +14,7 @@
     "vite-font-preload.ts",
     "vite-forkable-plugin-paths.ts",
     "vite-shared-ui-seam.ts",
-    "vite-react-compiler.ts"
+    "vite-react-compiler.ts",
+    "vite-source-locations.ts"
   ]
 }

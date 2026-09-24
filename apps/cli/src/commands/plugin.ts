@@ -1509,7 +1509,7 @@ export function registerPluginCommands(
               rootDir,
               resolveBbCliVersion(),
               await cliBuildToolchain(),
-              { minify: false },
+              { minify: false, sourceLocationBase: null },
             );
           },
           buildHost: async () => {

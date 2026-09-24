@@ -105,6 +105,7 @@ export function toDesktopLaunchProcessEnv(args: {
     args.baseEnv,
     args.config,
   );
+  env.BB_SOURCE_LOCATIONS = "1";
   env.BB_TELEMETRY = "false";
   env.NODE_ENV = "production";
   return env;
@@ -120,7 +121,9 @@ function formatConfig(
     return `${prefix} Packaged desktop app with its installed data directory and ports`;
   }
   if (desktopUserDataDir === undefined) {
-    throw new Error("[desktop:worktree] Electron user data directory is missing");
+    throw new Error(
+      "[desktop:worktree] Electron user data directory is missing",
+    );
   }
   return [
     `${prefix} Instance ${config.instanceId}`,
