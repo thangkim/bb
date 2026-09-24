@@ -45,6 +45,7 @@ import {
   useThreadDetailBootstrap,
   useThreadPendingInteractions,
 } from "@/hooks/queries/thread-queries";
+import { useOpenNewThreadPane } from "@/hooks/useOpenNewThreadPane";
 import { useRouteState } from "@/hooks/useRouteState";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { cn } from "@bb/shared-ui/lib/utils";
@@ -116,7 +117,6 @@ import { splitLayoutAtom } from "@/lib/split-layout/atoms";
 import { findPaneByThread } from "@/lib/split-layout";
 import { applyThreadOpenToLayout } from "@/views/thread-detail/splitThreadNavigation";
 import { useAppSettingsRouteMemory } from "@/hooks/useAppSettingsRouteMemory";
-import { useSetRootComposeProjectId } from "@/lib/root-compose-selection";
 import { BackToAppCommandHandler } from "./BackToAppCommandHandler";
 
 const SIDEBAR_WIDTH_KEY = "bb.sidebar.width";
@@ -419,7 +419,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const navigate = useNavigate();
   const { appRoutePath, settingsRoutePath, toolsBackRoutePath } =
     useAppSettingsRouteMemory();
-  const setRootComposeProjectId = useSetRootComposeProjectId();
+  const openNewThreadPane = useOpenNewThreadPane();
   useEffect(
     () =>
       wsManager.onThreadOpen((signal) => {
@@ -445,12 +445,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     [isCompactViewport, navigate, store],
   );
   useAppCommandHandler("thread.new", () => {
-    if (projectId !== undefined) {
-      setRootComposeProjectId(projectId);
-    }
-    void navigate(getRootComposeRoutePath(), {
-      state: { focusPrompt: true },
-    });
+    openNewThreadPane({ projectId });
     return true;
   });
   useAppCommandHandler("settings.open", () => {

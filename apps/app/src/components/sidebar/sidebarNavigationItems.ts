@@ -13,7 +13,7 @@ import {
   getSkillsRoutePath,
   isToolsRoutePath,
 } from "@/lib/route-paths";
-import type { PaneContent } from "@/lib/split-layout";
+import { DEFAULT_COMPOSE_ID, type PaneContent } from "@/lib/split-layout";
 import {
   BUILT_IN_SIDEBAR_NAVIGATION_KEYS,
   DEFAULT_BUILT_IN_SIDEBAR_NAVIGATION_ORDER,
@@ -42,7 +42,10 @@ export interface SidebarNavigationRow {
   panelEntry: PluginNavPanelChromeEntry | null;
 }
 
-const NEW_THREAD_CONTENT = { kind: "new-thread" } as const;
+const NEW_THREAD_CONTENT = {
+  kind: "new-thread",
+  composeId: DEFAULT_COMPOSE_ID,
+} as const;
 
 function hostRow(
   key: string,

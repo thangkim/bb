@@ -12,6 +12,7 @@ import {
 } from "@/components/sidebar/SidebarNavigationModel";
 import { usePaneContentSplitIndicator } from "@/components/sidebar/paneContentSplitIndicator";
 import { usePaneContentSplitDrag } from "@/components/sidebar/usePaneContentSplitDrag";
+import { DEFAULT_COMPOSE_ID } from "@/lib/split-layout";
 
 const NOOP_ACTIONS: ExperimentalSidebarNavigationActions = {
   activate() {},
@@ -78,7 +79,10 @@ export function useSidebarNavigation(): ExperimentalSidebarNavigationState {
   );
 }
 
-const PLACEHOLDER_CONTENT = { kind: "new-thread" } as const;
+const PLACEHOLDER_CONTENT = {
+  kind: "new-thread",
+  composeId: DEFAULT_COMPOSE_ID,
+} as const;
 
 export function useSidebarNavigationSplit(
   itemId: string,

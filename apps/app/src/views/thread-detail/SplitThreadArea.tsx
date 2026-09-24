@@ -2,6 +2,7 @@ import { cn } from "@bb/shared-ui/lib/utils";
 import {
   PANE_DIRECTION_APP_COMMAND_IDS,
   PANE_FOCUS_APP_COMMAND_IDS,
+  PANE_SPLIT_APP_COMMAND_IDS,
 } from "@bb/domain";
 import { useAtom, useAtomValue, useStore } from "jotai";
 import {
@@ -25,7 +26,8 @@ import {
   getThreadRoutePath,
   type ThreadRoutePathArgs,
 } from "@/lib/route-paths";
-import { useIsMutating } from "@tanstack/react-query";
+import { useIsMutating, useQueryClient } from "@tanstack/react-query";
+import { appToast } from "@/components/ui/app-toast";
 import { BbHttpError } from "@/lib/sdk";
 import { useThread } from "@/hooks/queries/thread-queries";
 import { useSplitWorkspaceActive } from "@/hooks/useSplitWorkspaceActive";
@@ -39,11 +41,13 @@ import {
   countPanes,
   findPane,
   listPanes,
+  MAX_PANES,
   movePane,
   removePane,
   replacePaneContent,
   resizeSplit,
   setFocus,
+  splitPane,
   swapPanes,
 } from "@/lib/split-layout";
 import {
@@ -104,6 +108,7 @@ import {
   reconcileLayoutForContent,
   threadPaneContent,
 } from "./splitThreadNavigation";
+import { composeSeedForPaneContent, nextComposeId } from "./newThreadPane";
 import { ThreadDetailWorkerPoolProvider } from "./ThreadDetailWorkerPoolProvider";
 import {
   getBbDesktopInfo,
@@ -272,6 +277,7 @@ export function SplitThreadArea(props: SplitThreadAreaProps = {}) {
 }
 
 function SplitThreadAreaContent({ routeContent }: SplitThreadAreaProps) {
+  const queryClient = useQueryClient();
   const { projectId, threadId } = useRouteState();
   const splitWorkspaceActive = useSplitWorkspaceActive();
   const navigate = useImmediateRouteNavigate();
@@ -586,6 +592,36 @@ function SplitThreadAreaContent({ routeContent }: SplitThreadAreaProps) {
     [navigate, setMaximizedPaneId, store],
   );
 
+  const splitToNewThread = useCallback(
+    (side: SplitSide) => {
+      const current = store.get(splitLayoutAtom);
+      if (current === null) return false;
+      if (countPanes(current.root) >= MAX_PANES) {
+        appToast.message(`Can't split — ${MAX_PANES} panes is the maximum.`);
+        return true;
+      }
+      const focused = findPane(current.root, current.focusedPaneId);
+      const seed =
+        focused === null
+          ? null
+          : composeSeedForPaneContent(focused.content, queryClient);
+      const content: PaneContent = {
+        kind: "new-thread",
+        composeId: nextComposeId(),
+        ...(seed === null ? {} : { seed }),
+      };
+      const next = splitPane(current, current.focusedPaneId, side, content);
+      if (next === current) return true;
+      store.set(splitLayoutAtom, next);
+      if (store.get(maximizedPaneIdAtom) !== null) {
+        setMaximizedPaneId(next.focusedPaneId);
+      }
+      navigate(paneContentRoute(content), { state: { focusPrompt: true } });
+      return true;
+    },
+    [navigate, queryClient, setMaximizedPaneId, store],
+  );
+
   if (!splitWorkspaceActive || layout === null || currentContent === null) {
     return currentContent ? (
       <StandalonePaneContent
@@ -603,6 +639,7 @@ function SplitThreadAreaContent({ routeContent }: SplitThreadAreaProps) {
       layout={layout}
       maximizedPaneId={effectiveMaximizedPaneId}
       panes={panes}
+      splitToNewThread={splitToNewThread}
       toggleMaximizePane={toggleMaximizePane}
     />
   );
@@ -675,8 +712,16 @@ interface SplitPaneCommandHandlersProps {
   layout: SplitLayout;
   maximizedPaneId: string | null;
   panes: readonly PaneNode[];
+  splitToNewThread: (side: SplitSide) => boolean;
   toggleMaximizePane: (paneId: string) => void;
 }
+
+const PANE_SPLIT_COMMAND_SIDES: readonly SplitSide[] = [
+  "left",
+  "right",
+  "top",
+  "bottom",
+];
 
 function SplitPaneCommandHandlers({
   closePane,
@@ -685,9 +730,15 @@ function SplitPaneCommandHandlers({
   layout,
   maximizedPaneId,
   panes,
+  splitToNewThread,
   toggleMaximizePane,
 }: SplitPaneCommandHandlersProps) {
   useAppCommandContext("splitActive", isSplitActive);
+  useAppCommandContext("splitAvailable", true);
+  useIndexedAppCommandHandlers(PANE_SPLIT_APP_COMMAND_IDS, (index) => {
+    const side = PANE_SPLIT_COMMAND_SIDES[index];
+    return side === undefined ? false : splitToNewThread(side);
+  });
   const directionalTargets = useMemo(
     () =>
       (["left", "right", "top", "bottom"] as const).map((direction) =>
@@ -944,9 +995,14 @@ const WorkspacePaneContent = memo(function WorkspacePaneContent({
           },
     [paneId, secondaryPanelRegistry],
   );
+  const composeId = content.kind === "new-thread" ? content.composeId : null;
+  const composeSeed =
+    content.kind === "new-thread" ? (content.seed ?? null) : null;
   const value = useMemo<PaneContextValue>(
     () => ({
       paneId,
+      composeId,
+      composeSeed,
       isFocused,
       isSplitPane,
       secondaryPanelHost,
@@ -963,6 +1019,8 @@ const WorkspacePaneContent = memo(function WorkspacePaneContent({
     }),
     [
       beginPaneDrag,
+      composeId,
+      composeSeed,
       isBoundedPane,
       isFocused,
       isSplitPane,
@@ -1511,7 +1569,13 @@ function PaneStaleWatcher({ threadId, onStale }: PaneStaleWatcherProps) {
     ) {
       onStaleRef.current();
     }
-  }, [isConfirmedArchived, isDeleted, isGone, isUnarchived, unarchivesInFlight]);
+  }, [
+    isConfirmedArchived,
+    isDeleted,
+    isGone,
+    isUnarchived,
+    unarchivesInFlight,
+  ]);
 
   return null;
 }

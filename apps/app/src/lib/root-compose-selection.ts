@@ -1,7 +1,9 @@
 import { atom, useAtom, useSetAtom } from "jotai";
-import { atomWithStorage } from "jotai/utils";
+import { atomFamily, atomWithStorage } from "jotai/utils";
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import type { ForkThreadCreateSeed } from "@bb/client-core";
+import { DEFAULT_COMPOSE_ID } from "./split-layout";
+import { useOptionalPaneContext } from "@/views/thread-detail/PaneContext";
 import { createTabScopedStorage } from "./browser-storage";
 
 const ROOT_COMPOSE_PROJECT_ID_STORAGE_KEY = "bb.root-compose.project-id";
@@ -21,35 +23,51 @@ const rootComposeProjectIdStorage = createTabScopedStorage<string>(
   { persistInitialValue: true },
 );
 
-const rootComposeProjectIdAtom = atomWithStorage<string>(
+export const defaultRootComposeProjectIdAtom = atomWithStorage<string>(
   ROOT_COMPOSE_PROJECT_ID_STORAGE_KEY,
   PERSONAL_PROJECT_ID,
   rootComposeProjectIdStorage,
   { getOnInit: true },
 );
 
-const rootComposeReuseEnvironmentAtom = atom<string | null>(null);
+const rootComposeProjectIdAtomFamily = atomFamily((composeId: string) =>
+  composeId === DEFAULT_COMPOSE_ID
+    ? defaultRootComposeProjectIdAtom
+    : atom<string>(PERSONAL_PROJECT_ID),
+);
 
-const rootComposeSectionIdAtom = atom<string | null>(null);
+const rootComposeReuseEnvironmentAtomFamily = atomFamily((_composeId: string) =>
+  atom<string | null>(null),
+);
 
-const rootComposeForkSeedAtom = atom<ForkThreadCreateSeed | null>(null);
+const rootComposeSectionIdAtomFamily = atomFamily((_composeId: string) =>
+  atom<string | null>(null),
+);
+
+const rootComposeForkSeedAtomFamily = atomFamily((_composeId: string) =>
+  atom<ForkThreadCreateSeed | null>(null),
+);
+
+export function useComposeScopeId(): string {
+  return useOptionalPaneContext()?.composeId ?? DEFAULT_COMPOSE_ID;
+}
 
 export function useRootComposeProjectId() {
-  return useAtom(rootComposeProjectIdAtom);
+  return useAtom(rootComposeProjectIdAtomFamily(useComposeScopeId()));
 }
 
 export function useSetRootComposeProjectId() {
-  return useSetAtom(rootComposeProjectIdAtom);
+  return useSetAtom(rootComposeProjectIdAtomFamily(useComposeScopeId()));
 }
 
 export function useRootComposeReuseEnvironment() {
-  return useAtom(rootComposeReuseEnvironmentAtom);
+  return useAtom(rootComposeReuseEnvironmentAtomFamily(useComposeScopeId()));
 }
 
 export function useRootComposeSectionId() {
-  return useAtom(rootComposeSectionIdAtom);
+  return useAtom(rootComposeSectionIdAtomFamily(useComposeScopeId()));
 }
 
 export function useRootComposeForkSeed() {
-  return useAtom(rootComposeForkSeedAtom);
+  return useAtom(rootComposeForkSeedAtomFamily(useComposeScopeId()));
 }

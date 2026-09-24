@@ -11,14 +11,17 @@ import {
   PLUGIN_DETAIL_ROUTE_PATH,
   PLUGIN_PANEL_ROUTE_PATH,
 } from "@/lib/route-paths";
-import type { PaneContent } from "@/lib/split-layout";
+import { DEFAULT_COMPOSE_ID, type PaneContent } from "@/lib/split-layout";
 import { useRouteState } from "@/hooks/useRouteState";
 import { LegacyProjectComposeRedirect } from "./RootComposeView";
 import { SplitThreadArea } from "./thread-detail/SplitThreadArea";
 
 disableGlobalCursorStyles();
 
-const ROOT_COMPOSE_CONTENT = { kind: "new-thread" } as const;
+const ROOT_COMPOSE_CONTENT = {
+  kind: "new-thread",
+  composeId: DEFAULT_COMPOSE_ID,
+} as const;
 
 const PluginsView = lazy(() =>
   import("./ToolsView").then((m) => ({ default: m.PluginsView })),

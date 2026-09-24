@@ -1,5 +1,5 @@
 import { useInitialPromptDraft } from "@/components/promptbox/mentions/initial-prompt-draft";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -183,6 +183,7 @@ import {
   useAppCommandShortcut,
 } from "@/components/commands/AppCommandProvider";
 import { useOptionalPaneContext } from "./thread-detail/PaneContext";
+import type { ComposeSeed } from "@/lib/split-layout";
 import {
   PluginDetailPanelContext,
   usePluginDetailPanelState,
@@ -830,10 +831,30 @@ function RootComposeSurface({
     "focusPrompt" in location.state &&
     location.state.focusPrompt === true;
   useEffect(() => {
-    if (!shouldFocusPrompt || isPointerCoarse) return;
+    if (!shouldFocusPrompt || isPointerCoarse || !isFocusedPane) return;
     const handle = window.requestAnimationFrame(focusPromptBox);
     return () => window.cancelAnimationFrame(handle);
-  }, [focusPromptBox, isPointerCoarse, location.key, shouldFocusPrompt]);
+  }, [
+    focusPromptBox,
+    isFocusedPane,
+    isPointerCoarse,
+    location.key,
+    shouldFocusPrompt,
+  ]);
+
+  const paneComposeSeed = paneContext?.composeSeed ?? null;
+  const appliedComposeSeedRef = useRef<ComposeSeed | null>(null);
+  useEffect(() => {
+    if (paneComposeSeed === null) return;
+    if (appliedComposeSeedRef.current === paneComposeSeed) return;
+    appliedComposeSeedRef.current = paneComposeSeed;
+    setRootComposeProjectId(paneComposeSeed.projectId);
+    if (paneComposeSeed.environmentId !== undefined) {
+      seedEnvironmentSelectionValue(
+        encodeReuseValue(paneComposeSeed.environmentId),
+      );
+    }
+  }, [paneComposeSeed, seedEnvironmentSelectionValue, setRootComposeProjectId]);
 
   const mobileRecentThreads = useMemo(
     () => buildMobileRecentThreads({ sidebarNavigation }),

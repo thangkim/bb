@@ -479,6 +479,10 @@ describe("app keybindings", () => {
             shift: binding.shortcut.shift,
           })),
       ).toEqual([
+        { command: "pane.split.up", shift: false },
+        { command: "pane.split.left", shift: false },
+        { command: "pane.split.down", shift: false },
+        { command: "pane.split.right", shift: false },
         { command: "modelPicker.cycleModel", shift: false },
         { command: "modelPicker.cycleModelBackward", shift: true },
         { command: "modelPicker.cycleProvider", shift: false },
@@ -521,6 +525,25 @@ describe("app keybindings", () => {
           shift: true,
           when: {
             all: ["mainSurface", "splitActive", "macPlatform"],
+            none: ["modalOpen"],
+          },
+        })),
+        ...(
+          [
+            ["pane.split.up", "w"],
+            ["pane.split.left", "a"],
+            ["pane.split.down", "s"],
+            ["pane.split.right", "d"],
+          ] as const
+        ).map(([command, key]) => ({
+          command,
+          key,
+          desktopOnly: false,
+          mod: false,
+          control: false,
+          shift: false,
+          when: {
+            all: ["mainSurface", "splitAvailable"],
             none: ["modalOpen"],
           },
         })),

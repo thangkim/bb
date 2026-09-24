@@ -42,6 +42,7 @@ const CONTEXT: AppCommandContext = {
   questionOpen: false,
   promptAvailable: false,
   splitActive: false,
+  splitAvailable: false,
   webSurface: false,
   macPlatform: false,
 };

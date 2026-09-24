@@ -19,11 +19,12 @@ export interface OpenPaneContentInSplitArgs {
   store: SplitLayoutStore;
   navigate: (
     route: string,
-    options?: { replace?: boolean },
+    options?: { replace?: boolean; state?: unknown },
   ) => void | Promise<void>;
   content: PaneContent;
   route: string;
   enabled: boolean;
+  state?: unknown;
 }
 
 export function openPaneContentInSplit({
@@ -32,10 +33,11 @@ export function openPaneContentInSplit({
   content,
   route,
   enabled,
+  state,
 }: OpenPaneContentInSplitArgs): void {
   const layout = store.get(splitLayoutAtom);
   if (!enabled || layout === null) {
-    void navigate(route);
+    void navigate(route, state === undefined ? undefined : { state });
     return;
   }
   const existing = findPaneByContent(layout.root, content);
@@ -46,7 +48,14 @@ export function openPaneContentInSplit({
         ? replacePaneContent(layout, layout.focusedPaneId, content)
         : splitPane(layout, layout.focusedPaneId, "right", content);
   if (next !== layout) store.set(splitLayoutAtom, next);
-  void navigate(route, existing !== null ? { replace: true } : undefined);
+  const navigateOptions = {
+    ...(existing !== null ? { replace: true } : {}),
+    ...(state === undefined ? {} : { state }),
+  };
+  void navigate(
+    route,
+    Object.keys(navigateOptions).length === 0 ? undefined : navigateOptions,
+  );
 }
 
 export function holdsPluginDetailPane(

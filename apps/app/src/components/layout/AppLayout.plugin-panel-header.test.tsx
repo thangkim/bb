@@ -12,6 +12,8 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppLayout } from "./AppLayout";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createAppQueryClient } from "@/lib/query-client";
 import { APP_OVERLAY_LAYER } from "@/components/ui/app-overlay-layers";
 import {
   COMPACT_SHELF_HIDDEN_FIXED_CHROME_CLASS,
@@ -179,6 +181,14 @@ vi.mock("@/hooks/queries/thread-queries", () => ({
   getLatestPendingInteraction: () => null,
 }));
 
+function withQueryClient({ children }: { children: ReactNode }) {
+  return (
+    <QueryClientProvider client={createAppQueryClient()}>
+      {children}
+    </QueryClientProvider>
+  );
+}
+
 function renderPluginPanelRoute(): void {
   render(
     <MemoryRouter initialEntries={["/plugins/helm-wiki/wiki"]}>
@@ -186,6 +196,7 @@ function renderPluginPanelRoute(): void {
         <div>Plugin panel body</div>
       </AppLayout>
     </MemoryRouter>,
+    { wrapper: withQueryClient },
   );
 }
 

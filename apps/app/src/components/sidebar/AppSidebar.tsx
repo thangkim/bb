@@ -22,7 +22,7 @@ import { SidebarPluginAttentionGlyph } from "./SidebarPluginAttentionGlyph";
 import { SidebarUpdatesBadge } from "./SidebarUpdatesBadge";
 import { SidebarResizeHandle, SidebarTopReserveRow } from "./SidebarChrome";
 import { SIDEBAR_FOOTER_ACTION_CLASS } from "./sidebarRowClasses";
-import { getRootComposeRoutePath, getThreadRoutePath } from "@/lib/route-paths";
+import { getThreadRoutePath } from "@/lib/route-paths";
 import { openUrlInExternalBrowser } from "@/lib/url-open-routing";
 import {
   EMPTY_SIDEBAR_THREAD_SHORTCUT_KEYS,
@@ -39,6 +39,7 @@ import {
   useIsAppCommandModifierHeld,
   useIndexedAppCommandHandlers,
 } from "@/components/commands/AppCommandProvider";
+import { useOpenNewThreadPane } from "@/hooks/useOpenNewThreadPane";
 import { useRouteState } from "@/hooks/useRouteState";
 import {
   resolveCustomizeFocusReturnTarget,
@@ -63,8 +64,10 @@ export function AppSidebar({
   mobileHosted,
 }: AppSidebarProps) {
   const threadListReplacement = useThreadListReplacement();
-  const { threadId: activeThreadId } = useRouteState();
+  const { projectId: activeProjectId, threadId: activeThreadId } =
+    useRouteState();
   const navigate = useNavigate();
+  const openNewThreadPane = useOpenNewThreadPane();
   const closeOnMobile = useCloseMobileSidebar();
   const { isCompactViewport, openMobile } = useSidebar();
   const [isNavigationCustomizing, setNavigationCustomizing] = useState(false);
@@ -84,11 +87,8 @@ export function AppSidebar({
   const pluginSidebarFooter = usePluginSidebarFooterDisclosure();
 
   const handleNewChat = useCallback(() => {
-    closeOnMobile();
-    void navigate(getRootComposeRoutePath(), {
-      state: { focusPrompt: true },
-    });
-  }, [closeOnMobile, navigate]);
+    openNewThreadPane({ projectId: activeProjectId, onNavigate: closeOnMobile });
+  }, [activeProjectId, closeOnMobile, openNewThreadPane]);
 
   const showThreadShortcuts = useCallback(() => {
     const targets = getSidebarThreadShortcutTargets(sidebarRef.current);

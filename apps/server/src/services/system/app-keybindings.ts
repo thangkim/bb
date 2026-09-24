@@ -149,6 +149,11 @@ const splitWithoutModal = {
   none: ["modalOpen"],
 } as const;
 
+const splitAvailableWithoutModal = {
+  all: ["mainSurface", "splitAvailable"],
+  none: ["modalOpen"],
+} as const;
+
 export const DEFAULT_APP_KEYBINDINGS: AppDefaultKeybindings = [
   binding("palette.open", "p", { mod: true, shift: true }, mainWithoutModal),
   binding("thread.new", "o", { mod: true, shift: true }, mainWithoutModal),
@@ -213,6 +218,16 @@ export const DEFAULT_APP_KEYBINDINGS: AppDefaultKeybindings = [
       { mod: true, shift: true },
       splitWithoutModal,
     ),
+  ),
+  ...(
+    [
+      ["pane.split.up", "w"],
+      ["pane.split.left", "a"],
+      ["pane.split.down", "s"],
+      ["pane.split.right", "d"],
+    ] as const
+  ).map(([command, key]) =>
+    binding(command, key, { alt: true }, splitAvailableWithoutModal),
   ),
   unassignedBinding("pane.focus.previous", splitWithoutModal),
   unassignedBinding("pane.focus.next", splitWithoutModal),

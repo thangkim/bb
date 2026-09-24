@@ -259,9 +259,8 @@ describe("SidebarNavigationRegion", () => {
     fireEvent.click(screen.getByRole("button", { name: "New thread" }), {
       metaKey: true,
     });
-    expect(mocks.openInSplit).toHaveBeenCalledWith(
-      expect.objectContaining({ content: { kind: "new-thread" } }),
-    );
+    expect(mocks.onNewChat).toHaveBeenCalledOnce();
+    expect(mocks.openInSplit).not.toHaveBeenCalled();
   });
 
   it("shows skeleton rows at the provider's remembered height while plugins load", () => {

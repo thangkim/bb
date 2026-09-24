@@ -4,7 +4,7 @@ import {
   serializeSplitLayout,
   SPLIT_LAYOUT_SCHEMA_VERSION,
 } from "./persistence";
-import type { SplitLayout } from "./types";
+import { DEFAULT_COMPOSE_ID, type SplitLayout } from "./types";
 
 function layoutWithPaneCount(count: number): SplitLayout {
   return {
@@ -75,7 +75,7 @@ describe("split layout persistence", () => {
           {
             type: "pane",
             paneId: "pane-1",
-            content: { kind: "new-thread" },
+            content: { kind: "new-thread", composeId: "default" },
           },
           {
             type: "pane",
@@ -131,5 +131,65 @@ describe("split layout persistence", () => {
     expect(
       deserializeSplitLayout(serializeSplitLayout(layoutWithPaneCount(9))),
     ).toBeNull();
+  });
+
+  it("reads a version 1 layout, whose empty panes predate compose ids", () => {
+    const restored = deserializeSplitLayout(
+      JSON.stringify({
+        version: 1,
+        layout: {
+          root: {
+            type: "split",
+            dir: "row",
+            sizes: [0.5, 0.5],
+            children: [
+              {
+                type: "pane",
+                paneId: "pane-1",
+                content: { kind: "new-thread" },
+              },
+              {
+                type: "pane",
+                paneId: "pane-2",
+                content: {
+                  kind: "thread",
+                  projectId: "proj-1",
+                  threadId: "thr-1",
+                },
+              },
+            ],
+          },
+          focusedPaneId: "pane-1",
+        },
+      }),
+    );
+
+    const root = restored?.root;
+    if (root?.type !== "split") throw new Error("Expected a split");
+    const empty = root.children[0];
+    if (empty?.type !== "pane") throw new Error("Expected a pane");
+    expect(empty.content).toEqual({
+      kind: "new-thread",
+      composeId: DEFAULT_COMPOSE_ID,
+    });
+  });
+
+  it("round-trips a seeded empty pane", () => {
+    const seeded: SplitLayout = {
+      root: {
+        type: "pane",
+        paneId: "pane-1",
+        content: {
+          kind: "new-thread",
+          composeId: "compose-7",
+          seed: { projectId: "proj-1", environmentId: "env-1" },
+        },
+      },
+      focusedPaneId: "pane-1",
+    };
+
+    expect(deserializeSplitLayout(serializeSplitLayout(seeded))).toEqual(
+      seeded,
+    );
   });
 });

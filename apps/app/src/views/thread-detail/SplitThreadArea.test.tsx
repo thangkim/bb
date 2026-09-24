@@ -26,9 +26,12 @@ import {
 } from "@/lib/split-layout/atoms";
 import { wsManager } from "@/lib/ws";
 import {
+  countPanes,
   listPanes,
+  MAX_PANES,
   movePane,
   serializeSplitLayout,
+  splitPane,
   SPLIT_LAYOUT_STORAGE_KEY,
 } from "@/lib/split-layout";
 import type { LayoutNode, PaneContent, SplitLayout } from "@/lib/split-layout";
@@ -429,6 +432,13 @@ function twoPaneLayout(
   };
 }
 
+function singleThreadLayout(): SplitLayout {
+  return {
+    root: { type: "pane", paneId: "pane-1", content: threadContent("thr-a") },
+    focusedPaneId: "pane-1",
+  };
+}
+
 function fourPaneThreadLayout(): SplitLayout {
   const row = (
     first: [string, string],
@@ -488,7 +498,10 @@ const pluginGuideContent: PaneContent = {
   subPath: "",
 };
 
-const newThreadContent: PaneContent = { kind: "new-thread" };
+const newThreadContent: PaneContent = {
+  kind: "new-thread",
+  composeId: "default",
+};
 
 function pluginContent(panelPath: string): PaneContent {
   return {
@@ -2426,6 +2439,99 @@ describe("SplitThreadArea", () => {
     );
     expect(store.get(splitLayoutAtom)?.focusedPaneId).toBe("pane-2");
     expect(threadStore.get("thr-c")?.archivedAt).toBe(123);
+  });
+
+  it.each([
+    ["pane.split.left", "left"],
+    ["pane.split.right", "right"],
+    ["pane.split.up", "top"],
+    ["pane.split.down", "bottom"],
+  ] as const)(
+    "%s opens an empty thread on the named side of the focused pane",
+    async (command, side) => {
+      const store = renderSplitArea({
+        path: threadPath("thr-a"),
+        layout: singleThreadLayout(),
+      });
+      await screen.findByTestId("pane-thr-a");
+
+      act(() => {
+        expect(commandHandlers.get(command)?.()).toBe(true);
+      });
+
+      const layout = store.get(splitLayoutAtom);
+      const root = layout?.root;
+      if (root?.type !== "split") throw new Error("Expected a split");
+      expect(root.dir).toBe(
+        side === "left" || side === "right" ? "row" : "col",
+      );
+      const newPaneFirst = side === "left" || side === "top";
+      const composerIndex = newPaneFirst ? 0 : 1;
+      const composer = root.children[composerIndex];
+      if (composer?.type !== "pane") throw new Error("Expected a pane");
+      expect(composer.content.kind).toBe("new-thread");
+      expect(layout?.focusedPaneId).toBe(composer.paneId);
+    },
+  );
+
+  it("starts the empty thread on the project and workspace it was split from", async () => {
+    const store = renderSplitArea({
+      path: threadPath("thr-a"),
+      layout: singleThreadLayout(),
+    });
+    await screen.findByTestId("pane-thr-a");
+
+    act(() => {
+      commandHandlers.get("pane.split.right")?.();
+    });
+
+    const composer = listPanes(store.get(splitLayoutAtom)!.root).find(
+      (pane) => pane.content.kind === "new-thread",
+    );
+    expect(composer?.content).toMatchObject({
+      kind: "new-thread",
+      seed: { projectId: PERSONAL_PROJECT_ID },
+    });
+  });
+
+  it("opens a second empty pane rather than focusing the first", async () => {
+    const store = renderSplitArea({
+      path: threadPath("thr-a"),
+      layout: singleThreadLayout(),
+    });
+    await screen.findByTestId("pane-thr-a");
+
+    act(() => {
+      commandHandlers.get("pane.split.right")?.();
+    });
+    act(() => {
+      commandHandlers.get("pane.split.down")?.();
+    });
+
+    const composers = listPanes(store.get(splitLayoutAtom)!.root).filter(
+      (pane) => pane.content.kind === "new-thread",
+    );
+    expect(composers).toHaveLength(2);
+    expect(new Set(composers.map((pane) => pane.paneId)).size).toBe(2);
+  });
+
+  it("leaves the layout alone at the pane cap", async () => {
+    let layout = singleThreadLayout();
+    for (let index = 1; index < MAX_PANES; index += 1) {
+      layout = splitPane(layout, layout.focusedPaneId, "right", {
+        kind: "new-thread",
+        composeId: `compose-${index}`,
+      });
+    }
+    const store = renderSplitArea({ path: threadPath("thr-a"), layout });
+    const before = store.get(splitLayoutAtom);
+
+    act(() => {
+      expect(commandHandlers.get("pane.split.right")?.()).toBe(true);
+    });
+
+    expect(store.get(splitLayoutAtom)).toBe(before);
+    expect(countPanes(store.get(splitLayoutAtom)!.root)).toBe(MAX_PANES);
   });
 
   it("prunes a stale focused pane and moves focus + URL to the survivor", async () => {

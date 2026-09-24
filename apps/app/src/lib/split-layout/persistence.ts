@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { MAX_PANES, countPanes, listPanes } from "./ops";
+import { DEFAULT_COMPOSE_ID } from "./types";
 import type { LayoutNode, PaneNode, SplitLayout, SplitNode } from "./types";
 
-export const SPLIT_LAYOUT_SCHEMA_VERSION = 1;
+export const SPLIT_LAYOUT_SCHEMA_VERSION = 2;
 export const SPLIT_LAYOUT_STORAGE_KEY = "bb.splitLayout";
 
 const paneContentSchema = z.discriminatedUnion("kind", [
@@ -13,7 +14,19 @@ const paneContentSchema = z.discriminatedUnion("kind", [
       threadId: z.string().min(1),
     })
     .strict(),
-  z.object({ kind: z.literal("new-thread") }).strict(),
+  z
+    .object({
+      kind: z.literal("new-thread"),
+      composeId: z.string().min(1),
+      seed: z
+        .object({
+          projectId: z.string().min(1),
+          environmentId: z.string().min(1).optional(),
+        })
+        .strict()
+        .optional(),
+    })
+    .strict(),
   z
     .object({
       kind: z.literal("plugin-panel"),
@@ -110,6 +123,35 @@ export function serializeSplitLayout(layout: SplitLayout): string {
   return JSON.stringify({ version: SPLIT_LAYOUT_SCHEMA_VERSION, layout });
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function addComposeIds(node: unknown): void {
+  if (!isRecord(node)) return;
+  if (node.type === "pane") {
+    const content = node.content;
+    if (
+      isRecord(content) &&
+      content.kind === "new-thread" &&
+      content.composeId === undefined
+    ) {
+      content.composeId = DEFAULT_COMPOSE_ID;
+    }
+    return;
+  }
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) addComposeIds(child);
+  }
+}
+
+function migrateStoredSplitLayout(parsed: unknown): unknown {
+  if (!isRecord(parsed) || parsed.version !== 1) return parsed;
+  const layout = parsed.layout;
+  if (isRecord(layout)) addComposeIds(layout.root);
+  return { ...parsed, version: SPLIT_LAYOUT_SCHEMA_VERSION };
+}
+
 export function deserializeSplitLayout(
   storedValue: string | null,
 ): SplitLayout | null {
@@ -117,7 +159,7 @@ export function deserializeSplitLayout(
     return null;
   }
   try {
-    const parsed: unknown = JSON.parse(storedValue);
+    const parsed: unknown = migrateStoredSplitLayout(JSON.parse(storedValue));
     const result = storedSplitLayoutSchema.safeParse(parsed);
     return result.success ? result.data.layout : null;
   } catch {

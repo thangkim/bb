@@ -44,15 +44,20 @@ describe("mixed page navigation", () => {
   it("keeps New Thread as a singleton and focuses its existing pane", () => {
     const withCompose = splitPane(twoPaneLayout(), "pane-2", "bottom", {
       kind: "new-thread",
+      composeId: "default",
     });
 
     const after = reconcileLayoutForContent(withCompose, {
       kind: "new-thread",
+      composeId: "default",
     });
 
     expect(listPanes(after.root)).toHaveLength(3);
     expect(after.focusedPaneId).toBe(
-      findPaneByContent(after.root, { kind: "new-thread" })?.paneId,
+      findPaneByContent(after.root, {
+        kind: "new-thread",
+        composeId: "default",
+      })?.paneId,
     );
     expect(focusedPaneRoute(after)).toBe("/");
   });

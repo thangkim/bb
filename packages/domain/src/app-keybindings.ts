@@ -31,6 +31,13 @@ export const PANE_DIRECTION_APP_COMMAND_IDS = [
   "pane.focus.down",
 ] as const;
 
+export const PANE_SPLIT_APP_COMMAND_IDS = [
+  "pane.split.left",
+  "pane.split.right",
+  "pane.split.up",
+  "pane.split.down",
+] as const;
+
 export const PANE_FOCUS_APP_COMMAND_IDS = [
   "pane.focus.1",
   "pane.focus.2",
@@ -55,6 +62,7 @@ export const APP_COMMAND_IDS = [
   "pane.focus.previous",
   "pane.focus.next",
   ...PANE_FOCUS_APP_COMMAND_IDS,
+  ...PANE_SPLIT_APP_COMMAND_IDS,
   "pane.maximize.toggle",
   "pane.close",
   "window.new",
@@ -126,6 +134,7 @@ const APP_COMMAND_CONTEXT_KEYS = [
   "questionOpen",
   "promptAvailable",
   "splitActive",
+  "splitAvailable",
   "webSurface",
   "macPlatform",
 ] as const;

@@ -281,10 +281,6 @@ export function SidebarNavigationModelProvider({
         const content = getSidebarNavigationRowContent(row);
         switch (row.action.kind) {
           case "new-thread":
-            if (options.openInSplit && content) {
-              openInSplit(current, content, item.label);
-              return;
-            }
             current.host.onNewChat?.();
             return;
           case "search-threads":

@@ -5,6 +5,12 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppLayout } from "./AppLayout";
+import { getDefaultStore } from "jotai";
+import { CompactViewportOverrideProvider } from "@bb/shared-ui/hooks/use-compact-viewport";
+import { findPane } from "@/lib/split-layout";
+import { splitLayoutAtom } from "@/lib/split-layout/atoms";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createAppQueryClient } from "@/lib/query-client";
 
 const ROOT_COMPOSE_PROJECT_ID_STORAGE_KEY = "bb.root-compose.project-id";
 
@@ -162,9 +168,18 @@ vi.mock("@/hooks/queries/thread-queries", () => ({
   getLatestPendingInteraction: () => null,
 }));
 
+function withQueryClient({ children }: { children: ReactNode }) {
+  return (
+    <QueryClientProvider client={createAppQueryClient()}>
+      {children}
+    </QueryClientProvider>
+  );
+}
+
 describe("AppLayout root compose project preference", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    getDefaultStore().set(splitLayoutAtom, null);
     commandHandlers.clear();
     mockUseThread.mockReturnValue({
       data: {
@@ -189,36 +204,55 @@ describe("AppLayout root compose project preference", () => {
     vi.clearAllMocks();
   });
 
-  it("uses the opened thread project for the new-thread command", async () => {
-    window.localStorage.setItem(
-      ROOT_COMPOSE_PROJECT_ID_STORAGE_KEY,
-      "proj_last_run",
-    );
+  it.each([
+    ["wide", false],
+    ["compact", true],
+  ] as const)(
+    "binds the new-thread command to the opened thread project on %s viewports",
+    async (_label, isCompactViewport) => {
+      window.localStorage.setItem(
+        ROOT_COMPOSE_PROJECT_ID_STORAGE_KEY,
+        "proj_last_run",
+      );
 
-    render(
-      <MemoryRouter
-        initialEntries={["/projects/proj_opened/threads/thr_opened"]}
-      >
-        <AppLayout>
-          <div>Thread route</div>
-        </AppLayout>
-      </MemoryRouter>,
-    );
+      render(
+        <CompactViewportOverrideProvider isCompactViewport={isCompactViewport}>
+          <MemoryRouter
+            initialEntries={["/projects/proj_opened/threads/thr_opened"]}
+          >
+            <AppLayout>
+              <div>Thread route</div>
+            </AppLayout>
+          </MemoryRouter>
+        </CompactViewportOverrideProvider>,
+        { wrapper: withQueryClient },
+      );
 
-    await waitFor(() => {
-      expect(document.title).toBe("Opened Thread");
-    });
+      await waitFor(() => {
+        expect(document.title).toBe("Opened Thread");
+      });
 
-    act(() => {
-      expect(commandHandlers.get("thread.new")?.()).toBe(true);
-    });
+      act(() => {
+        expect(commandHandlers.get("thread.new")?.()).toBe(true);
+      });
 
-    await waitFor(() => {
+      if (isCompactViewport) {
+        await waitFor(() => {
+          expect(
+            window.localStorage.getItem(ROOT_COMPOSE_PROJECT_ID_STORAGE_KEY),
+          ).toBe("proj_opened");
+        });
+        return;
+      }
+      const layout = getDefaultStore().get(splitLayoutAtom);
+      expect(layout?.root.type).toBe("split");
       expect(
-        window.localStorage.getItem(ROOT_COMPOSE_PROJECT_ID_STORAGE_KEY),
-      ).toBe("proj_opened");
-    });
-  });
+        layout === null ? null : findPane(layout.root, layout.focusedPaneId),
+      ).toMatchObject({
+        content: { kind: "new-thread", seed: { projectId: "proj_opened" } },
+      });
+    },
+  );
 
   it("keeps the stored project when the route has no project", () => {
     window.localStorage.setItem(
@@ -232,6 +266,7 @@ describe("AppLayout root compose project preference", () => {
           <div>New thread route</div>
         </AppLayout>
       </MemoryRouter>,
+      { wrapper: withQueryClient },
     );
 
     act(() => {

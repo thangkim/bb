@@ -40,7 +40,7 @@ export const APP_COMMAND_GROUPS: readonly AppCommandGroup[] = [
       command(
         "thread.new",
         "New thread",
-        "Start a thread in the active project.",
+        "Open a new thread beside the focused pane, in the same project and environment.",
       ),
       command(
         "thread.search",
@@ -178,6 +178,26 @@ export const APP_COMMAND_GROUPS: readonly AppCommandGroup[] = [
           `Focus chat pane ${index + 1}`,
           `Focus chat pane ${index + 1} in reading order.`,
         ),
+      ),
+      command(
+        "pane.split.left",
+        "Split chat pane left",
+        "Open an empty thread in a new pane to the left of the focused pane.",
+      ),
+      command(
+        "pane.split.right",
+        "Split chat pane right",
+        "Open an empty thread in a new pane to the right of the focused pane.",
+      ),
+      command(
+        "pane.split.up",
+        "Split chat pane up",
+        "Open an empty thread in a new pane above the focused pane.",
+      ),
+      command(
+        "pane.split.down",
+        "Split chat pane down",
+        "Open an empty thread in a new pane below the focused pane.",
       ),
       command(
         "pane.maximize.toggle",

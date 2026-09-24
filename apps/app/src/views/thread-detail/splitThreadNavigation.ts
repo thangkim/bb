@@ -2,9 +2,11 @@ import type { ThreadRoutePathArgs } from "@/lib/route-paths";
 import type { ThreadOpenSplit, ThreadPaneAction } from "@bb/server-contract";
 import {
   countPanes,
+  DEFAULT_COMPOSE_ID,
   findPane,
   findPaneByContent,
   findPaneByThread,
+  listPanes,
   MAX_PANES,
   replacePaneContent,
   setFocus,
@@ -73,7 +75,7 @@ export function paneContentRoute(content: PaneContent): string {
 
 export function paneContentForPathname(pathname: string): PaneContent | null {
   if (pathname === APP_ROOT_ROUTE_PATH) {
-    return { kind: "new-thread" };
+    return { kind: "new-thread", composeId: DEFAULT_COMPOSE_ID };
   }
   const thread = matchPath(
     { path: SPLITTABLE_THREAD_ROUTE_PATH, end: false },
@@ -102,6 +104,19 @@ export function paneContentForPathname(pathname: string): PaneContent | null {
   return null;
 }
 
+function findPaneForComposeRoute(
+  layout: SplitLayout,
+  content: PaneContent & { kind: "new-thread" },
+) {
+  const focused = findPane(layout.root, layout.focusedPaneId);
+  if (focused?.content.kind === "new-thread") return focused;
+  return (
+    findPaneByContent(layout.root, content) ??
+    listPanes(layout.root).find((pane) => pane.content.kind === "new-thread") ??
+    null
+  );
+}
+
 export function reconcileLayoutForContent(
   layout: SplitLayout | null,
   content: PaneContent,
@@ -109,7 +124,10 @@ export function reconcileLayoutForContent(
   if (layout === null) {
     return createSinglePaneContentLayout(content);
   }
-  const existing = findPaneByContent(layout.root, content);
+  const existing =
+    content.kind === "new-thread"
+      ? findPaneForComposeRoute(layout, content)
+      : findPaneByContent(layout.root, content);
   if (existing !== null) {
     const withRouteState =
       existing.content.kind === "plugin-panel" &&

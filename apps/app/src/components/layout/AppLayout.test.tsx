@@ -29,6 +29,8 @@ import { Link, MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppCommandProvider } from "@/components/commands/AppCommandProvider";
 import { AppLayout } from "./AppLayout";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createAppQueryClient } from "@/lib/query-client";
 import { CompactViewportOverrideProvider } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { setCompactSecondaryPanelPresentation } from "@/components/ui/secondary-panel-shelf-visibility";
 
@@ -210,6 +212,14 @@ function RouteContent() {
   );
 }
 
+function withQueryClient({ children }: { children: ReactNode }) {
+  return (
+    <QueryClientProvider client={createAppQueryClient()}>
+      {children}
+    </QueryClientProvider>
+  );
+}
+
 function renderLayout(initialPath = "/", children: ReactNode = null) {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
@@ -220,6 +230,7 @@ function renderLayout(initialPath = "/", children: ReactNode = null) {
         </AppLayout>
       </AppCommandProvider>
     </MemoryRouter>,
+    { wrapper: withQueryClient },
   );
 }
 
@@ -299,6 +310,7 @@ describe("mobile workspace sidebar access", () => {
             </AppCommandProvider>
           </MemoryRouter>
         </CompactViewportOverrideProvider>,
+        { wrapper: withQueryClient },
       );
       const toggle = screen.getByRole("button", { name: /^Toggle sidebar/ });
       expect(toggle.getAttribute("aria-expanded")).toBe("false");
@@ -619,6 +631,7 @@ describe("thread header section moves", () => {
             </AppCommandProvider>
           </MemoryRouter>
         </JotaiProvider>,
+        { wrapper: withQueryClient },
       );
       expect(
         screen.getByTestId("header-section-destinations").textContent,

@@ -3,6 +3,7 @@ import {
   MAX_PANES,
   countPanes,
   findPane,
+  findPaneByContent,
   findPaneByThread,
   listPanes,
   movePane,
@@ -228,5 +229,39 @@ describe("split layout operations", () => {
     }
     expect(resizeSplit(high, [], 1, 0.5)).toBe(high);
     expect(resizeSplit(high, [0], 0, 0.5)).toBe(high);
+  });
+
+  it("tells two empty panes apart by their compose id", () => {
+    const base: SplitLayout = {
+      root: {
+        type: "pane",
+        paneId: "pane-1",
+        content: { kind: "new-thread", composeId: "compose-a" },
+      },
+      focusedPaneId: "pane-1",
+    };
+    const layout = splitPane(base, "pane-1", "right", {
+      kind: "new-thread",
+      composeId: "compose-b",
+    });
+
+    expect(
+      findPaneByContent(layout.root, {
+        kind: "new-thread",
+        composeId: "compose-a",
+      })?.paneId,
+    ).toBe("pane-1");
+    expect(
+      findPaneByContent(layout.root, {
+        kind: "new-thread",
+        composeId: "compose-b",
+      })?.paneId,
+    ).not.toBe("pane-1");
+    expect(
+      findPaneByContent(layout.root, {
+        kind: "new-thread",
+        composeId: "compose-missing",
+      }),
+    ).toBeNull();
   });
 });

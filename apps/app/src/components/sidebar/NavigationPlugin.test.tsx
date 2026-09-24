@@ -224,7 +224,7 @@ function renderNavigation(options: RenderNavigationOptions = {}) {
       root: {
         type: "pane",
         paneId: "pane-1",
-        content: { kind: "new-thread" },
+        content: { kind: "new-thread", composeId: "default" },
       },
       focusedPaneId: "pane-1",
     });
@@ -1337,7 +1337,10 @@ describe("Navigation plugin in the sidebar navigation region", () => {
         const layout = store.get(splitLayoutAtom)!;
         expect(countPanes(layout.root)).toBe(2);
         expect(
-          findPaneByContent(layout.root, { kind: "new-thread" }),
+          findPaneByContent(layout.root, {
+            kind: "new-thread",
+            composeId: "default",
+          }),
         ).not.toBeNull();
         expect(
           findPaneByContent(layout.root, {
@@ -1726,18 +1729,8 @@ describe("Navigation plugin in the sidebar navigation region", () => {
     expect(visibleRowKeys()).toEqual(DEFAULT_VISIBLE_HOST_KEYS);
   });
 
-  it("preserves modifier-click when launching a built-in from Customize", async () => {
-    const { store } = renderNavigation({
-      splitEnabled: true,
-      initialLayout: {
-        root: {
-          type: "pane",
-          paneId: "pane-1",
-          content: { kind: "thread", projectId: "proj_1", threadId: "thr_1" },
-        },
-        focusedPaneId: "pane-1",
-      },
-    });
+  it("routes a modifier-click on New thread from Customize through the new-chat handler", async () => {
+    renderNavigation({ splitEnabled: true });
 
     await openCustomizeFromContextMenu(
       screen.getByRole("button", { name: "New thread" }),
@@ -1749,13 +1742,7 @@ describe("Navigation plugin in the sidebar navigation region", () => {
       { metaKey: true },
     );
 
-    expect(mocks.onNewChat).not.toHaveBeenCalled();
-    const layout = store.get(splitLayoutAtom);
-    expect(layout).not.toBeNull();
-    expect(countPanes(layout!.root)).toBe(2);
-    expect(
-      findPaneByContent(layout!.root, { kind: "new-thread" }),
-    ).not.toBeNull();
+    expect(mocks.onNewChat).toHaveBeenCalledOnce();
     await waitFor(() =>
       expect(
         screen.queryByRole("list", { name: "Sidebar navigation" }),

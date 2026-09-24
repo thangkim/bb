@@ -5,6 +5,7 @@ import { useStore } from "jotai";
 import { setPluginEnabled } from "@/hooks/queries/plugin-settings-queries";
 import { maximizedPaneIdAtom, splitLayoutAtom } from "@/lib/split-layout/atoms";
 import {
+  DEFAULT_COMPOSE_ID,
   findPane,
   listPanes,
   removePane,
@@ -40,7 +41,10 @@ export function useSetPluginEnabled() {
             continue;
           next =
             listPanes(next.root).length === 1
-              ? replacePaneContent(next, pane.paneId, { kind: "new-thread" })
+              ? replacePaneContent(next, pane.paneId, {
+                  kind: "new-thread",
+                  composeId: DEFAULT_COMPOSE_ID,
+                })
               : removePane(next, pane.paneId);
         }
       }

@@ -14,10 +14,12 @@ import {
   type ThreadRoutePathArgs,
 } from "@/lib/route-paths";
 import type { PluginComposerHost } from "@/components/plugin/plugin-composer-host";
-import type { SplitSide } from "@/lib/split-layout";
+import type { ComposeSeed, SplitSide } from "@/lib/split-layout";
 
 export interface PaneContextValue {
   paneId: string;
+  composeId?: string | null;
+  composeSeed?: ComposeSeed | null;
   isFocused: boolean;
   isSplitPane: boolean;
   secondaryPanelHost: PaneSecondaryPanelRegistration | null;
@@ -150,6 +152,8 @@ export function DefaultPaneContextProvider({
   const value = useMemo<PaneContextValue>(
     () => ({
       paneId: "main",
+      composeId: null,
+      composeSeed: null,
       isFocused: true,
       isSplitPane: false,
       secondaryPanelHost: null,
