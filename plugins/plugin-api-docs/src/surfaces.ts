@@ -558,6 +558,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Lock the input while it works, and tint the whole draft while it does",
           "Set the composer's pickers (provider, model, reasoning level, service tier, permission mode, and on the new-thread screen the project and environment) through the same paths the pickers use, and read back what the composer settled on",
           "Show muted provisional text at the caret, such as a live transcript, that never enters the draft or undo history, then insert the final text at the same spot as one undo step",
+          "Take over transcription of bb's own voice input while bb keeps its microphone, recording bar and Escape-to-cancel: read the audio recorded so far, transcribe through bb, preview at the caret, and supply the final text",
           "Render in the same row as bb's own prompt-box buttons; bb keeps up to 3 plugins with applicable actions inline, ranked by use, and moves the rest into an overflow menu",
         ],
         apiSymbols: [
@@ -566,6 +567,9 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "ExperimentalComposerSelection",
           "PluginComposerApi.experimental_beginProvisionalText",
           "ExperimentalComposerProvisionalText",
+          "ExperimentalComposerVoiceInput",
+          "ExperimentalComposerVoiceSession",
+          "ExperimentalComposerVoiceRecording",
         ],
       },
     ],

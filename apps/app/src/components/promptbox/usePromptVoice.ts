@@ -1,7 +1,8 @@
-import { useCallback, useMemo, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { transcribeVoiceInput } from "@/lib/api";
 import type { PromptBoxHandle, PromptVoiceConfig } from "./PromptBoxInternal";
+import type { PromptVoiceSession } from "./plugin-voice-input";
 
 async function requestVoiceTranscription({
   file,
@@ -23,9 +24,12 @@ function createVoiceAbortError(): DOMException {
 export function usePromptVoice(
   promptBoxRef: RefObject<PromptBoxHandle | null>,
 ): PromptVoiceConfig {
+  const pluginSessionRef = useRef<PromptVoiceSession | null>(null);
   const onTranscript = useCallback(
     (text: string) => {
-      promptBoxRef.current?.insertTextAtCursor(text);
+      const pluginSession = pluginSessionRef.current;
+      if (pluginSession) pluginSession.insert(text);
+      else promptBoxRef.current?.insertTextAtCursor(text);
     },
     [promptBoxRef],
   );
@@ -37,7 +41,10 @@ export function usePromptVoice(
 
   const transcribeAfterCompletionTransition = useCallback(
     async (args: Parameters<typeof requestVoiceTranscription>[0]) => {
-      const text = await requestVoiceTranscription(args);
+      const pluginSession = pluginSessionRef.current;
+      const text = pluginSession
+        ? await pluginSession.finish(args.file)
+        : await requestVoiceTranscription(args);
       await promptBoxRef.current?.playVoiceCompletionTransition();
       if (args.signal?.aborted) {
         throw createVoiceAbortError();
@@ -52,6 +59,31 @@ export function usePromptVoice(
     onTranscribe: transcribeAfterCompletionTransition,
     getPromptContext,
   });
+
+  const { state, readRecording } = voiceInput;
+  useEffect(() => {
+    if (state === "transcribing") return;
+    if (state === "recording") {
+      if (pluginSessionRef.current) return;
+      const promptContext = promptBoxRef.current?.getTextBeforeCursor();
+      pluginSessionRef.current =
+        promptBoxRef.current?.beginPluginVoiceInput({
+          readRecording,
+          transcribe: (file, signal) =>
+            requestVoiceTranscription({ file, promptContext, signal }),
+        }) ?? null;
+      return;
+    }
+    pluginSessionRef.current?.end();
+    pluginSessionRef.current = null;
+  }, [promptBoxRef, readRecording, state]);
+  useEffect(
+    () => () => {
+      pluginSessionRef.current?.end();
+      pluginSessionRef.current = null;
+    },
+    [],
+  );
 
   return useMemo<PromptVoiceConfig>(
     () => ({

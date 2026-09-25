@@ -209,7 +209,7 @@ function parseRegions(
   onRejected: RejectionReporter,
 ): Pick<
   ComposerCustomization,
-  "actions" | "banners" | "plusMenu" | "richText"
+  "actions" | "banners" | "plusMenu" | "richText" | "experimental_voiceInput"
 > {
   const actions = parseContributionArray<
     NonNullable<ComposerCustomization["actions"]>[number]
@@ -333,11 +333,28 @@ function parseRegions(
     }
   }
 
+  let experimental_voiceInput: ComposerCustomization["experimental_voiceInput"];
+  if (registration.experimental_voiceInput !== undefined) {
+    const raw = registration.experimental_voiceInput as NonNullable<
+      ComposerCustomization["experimental_voiceInput"]
+    > | null;
+    if (typeof raw?.start !== "function") {
+      onRejected(
+        `${kind}.experimental_voiceInput: must be an object with a "start" function when set`,
+      );
+    } else {
+      experimental_voiceInput = raw;
+    }
+  }
+
   return {
     ...(actions !== undefined ? { actions } : {}),
     ...(banners !== undefined ? { banners } : {}),
     ...(plusMenu !== undefined ? { plusMenu } : {}),
     ...(richText !== undefined ? { richText } : {}),
+    ...(experimental_voiceInput !== undefined
+      ? { experimental_voiceInput }
+      : {}),
   };
 }
 

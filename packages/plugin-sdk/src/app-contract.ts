@@ -2376,6 +2376,66 @@ export interface ComposerCustomization {
   }[];
   plusMenu?: readonly ComposerPlusMenuItem[];
   richText?: ComposerRichTextSpec;
+  /**
+   * Take part in bb's own voice input in these composers: bb keeps its
+   * microphone buttons, recording bar, Escape-to-cancel and completion
+   * transition, and hands the recording to this plugin instead of
+   * transcribing it itself. When several customizations match, the first
+   * one registered is used.
+   *
+   * Experimental: see docs/api_to_audit.md.
+   */
+  experimental_voiceInput?: ExperimentalComposerVoiceInput;
+}
+
+/** A plugin's part in bb's native voice input. See `ComposerCustomization.experimental_voiceInput`. */
+export interface ExperimentalComposerVoiceInput {
+  /**
+   * Called when bb's voice input starts recording in a matching composer.
+   * A throw is logged and that recording falls back to bb's own
+   * transcription.
+   */
+  start(
+    session: ExperimentalComposerVoiceSession,
+  ): ExperimentalComposerVoiceRecording;
+}
+
+/** One native voice recording handed to `experimental_voiceInput.start`. */
+export interface ExperimentalComposerVoiceSession {
+  /** Everything recorded so far as one playable audio file; empty before the first 250 ms chunk. */
+  readRecording(): File;
+  /**
+   * Transcribe audio through bb's own voice transcription, with the
+   * composer text before the caret at recording start as the hint. Rejects
+   * with the server's error, or when `signal` aborts.
+   */
+  transcribe(audio: File, options: { signal: AbortSignal }): Promise<string>;
+  /**
+   * A preview at the caret, as from `useComposer().experimental_beginProvisionalText`,
+   * or null when the composer has no editor. Use `update` while recording;
+   * bb commits it with the text `finish` resolves with and cancels it when
+   * the session ends any other way.
+   */
+  readonly provisionalText: ExperimentalComposerProvisionalText | null;
+  /**
+   * Aborted when the session ends: after the final text is inserted, or when
+   * the recording is cancelled, is too short, captures no audio, fails, or
+   * its composer unmounts.
+   */
+  readonly signal: AbortSignal;
+}
+
+/** What a plugin returns from `experimental_voiceInput.start`. */
+export interface ExperimentalComposerVoiceRecording {
+  /**
+   * Transcribe the finished recording in place of bb. Resolve with the text
+   * to insert: bb inserts it at the preview's anchor (or the caret when the
+   * preview has ended) as one undo step after its completion transition.
+   * Reject, or resolve with blank text, to show bb's "Voice input failed"
+   * error with a "Download recording" action. Not called when the
+   * recording ends any other way.
+   */
+  finish(recording: File): Promise<string>;
 }
 
 /** Host-rendered menu row in the composer's `+` menu. */

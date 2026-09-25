@@ -2990,8 +2990,9 @@ receive one; banners and surfaces outside a composer do not. Backed by an
 `editorRef` on the internal `PluginComposerViewProvider` and
 `prompt-provisional-text-extension.ts`. The testing harness records
 operations in `composer.provisionalText` / `composer.provisionalTextCalls`
-and appends commits to the draft. Consumer: the out-of-tree
-`plugins/voice-live-preview` dictation plugin.
+and appends commits to the draft. The same preview is handed to
+`experimental_voiceInput` sessions. Consumer: `plugins/voice-live-preview`
+through `experimental_voiceInput`.
 
 **Audit before stabilizing.**
 
@@ -3013,6 +3014,52 @@ and appends commits to the draft. Consumer: the out-of-tree
 5. **Commit fallback.** Appending to the draft when the editor was replaced
    loses the anchor. Confirm the fallback, and whether `commit` should report
    what happened.
+
+## `ComposerCustomization.experimental_voiceInput`
+
+**What it does.** Lets one plugin take over the transcription step of bb's
+own voice input while bb keeps its microphone buttons (expanded, compact and
+touch-primary), recording bar, waveform, Escape-to-cancel, error toasts and
+completion transition. When native recording starts in a composer, bb
+resolves the first registered customization with `experimental_voiceInput`
+whose `scopes` match (and none when plugin composer customizations are
+suppressed), begins a provisional-text preview at the caret, and calls
+`start(session)`. The `ExperimentalComposerVoiceSession` carries
+`readRecording()` (every 250 ms chunk so far as one file), `transcribe(file,
+{ signal })` (bb's own transcription route with the text before the caret at
+recording start as the hint), `provisionalText` (null without an editor) and
+`signal`. `start` returns `{ finish(recording) }`. On stop bb calls `finish`
+with the whole recording instead of transcribing, plays its completion
+transition, and inserts the resolved text at the preview anchor (or the caret
+when the preview already ended or the editor was replaced) as one undo step.
+A rejection or blank text shows bb's "Voice input failed" toast with
+"Download recording". The signal aborts when the session ends for any reason
+(after insertion, cancel, too-short or empty recording, recorder error,
+composer unmount); a `finish` still pending then is abandoned. A throwing
+`start`, or one returning no `finish`, is logged and that recording uses bb's
+native transcription. Backed by `readRecording` on `useVoiceInput`,
+`beginPluginVoiceInput` on the internal `PromptBoxHandle`
+(`plugin-voice-input.ts`), and a `voiceInput` resolution next to the rich-text
+contributions. The validator keeps the plugin's object as registered.
+Consumer: `plugins/voice-live-preview`, which adds live drafts, a retried
+final request and a last-draft fallback.
+
+**Audit before stabilizing.**
+
+1. **Arbitration.** Only the first matching customization participates;
+   others are silently ignored. Decide between first-wins, per-user choice,
+   or rejecting a second registration.
+2. **Hint freshness.** The transcription hint is captured once at recording
+   start. Confirm plugins do not need the current text before the anchor.
+3. **Result shape.** `finish` can only return text for bb to insert. Decide
+   whether a plugin needs "handled, insert nothing" or richer results
+   (mentions, formatting), and whether it needs its own error title.
+4. **Upload cost.** `readRecording` re-sends the whole recording each time a
+   plugin drafts. Decide whether a chunk stream or byte-offset reader belongs
+   in the contract before a second consumer.
+5. **Crash isolation.** A `finish` rejection is indistinguishable from a
+   transcription failure. Decide whether plugin bugs should fall back to
+   native transcription instead.
 
 ## Desktop browser control
 

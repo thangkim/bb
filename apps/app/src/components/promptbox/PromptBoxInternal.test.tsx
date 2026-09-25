@@ -35,6 +35,7 @@ import {
   useComposerView,
 } from "@/lib/plugin-sdk-hooks";
 import type { ExperimentalComposerProvisionalText } from "@get-bb/plugin-sdk";
+import type { PromptVoiceSession } from "./plugin-voice-input";
 import {
   getComposerTextEffects,
   useComposerTextEffects,
@@ -2501,6 +2502,56 @@ describe("PromptBoxInternal plugin composer actions", () => {
     ).toBeNull();
     expect(getPromptEditorElement().textContent).toBe("Draft");
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("hands native voice recordings to the scope's plugin voice input", async () => {
+    const started: string[] = [];
+    setPluginSlotRegistrations(
+      "voice",
+      pluginRegistrationSet([
+        {
+          id: "thread-voice",
+          scopes: ["thread"],
+          experimental_voiceInput: {
+            start() {
+              started.push("thread");
+              return { finish: async () => "" };
+            },
+          },
+        },
+        {
+          id: "live",
+          scopes: ["new-thread"],
+          experimental_voiceInput: {
+            start(session) {
+              started.push("new-thread");
+              session.provisionalText?.update("heard so far");
+              return { finish: async () => "final" };
+            },
+          },
+        },
+      ]),
+    );
+    const promptBoxRef = createRef<PromptBoxHandle>();
+    render(
+      <PromptBoxInternal
+        {...createPromptBoxProps({ value: "Draft", promptBoxRef })}
+      />,
+    );
+    await waitFor(() => getPromptEditorElement());
+
+    let session: PromptVoiceSession | null | undefined;
+    act(() => {
+      session = promptBoxRef.current?.beginPluginVoiceInput({
+        readRecording: () => new File([], "recording.webm"),
+        transcribe: async () => "",
+      });
+    });
+
+    expect(started).toEqual(["new-thread"]);
+    expect(getPromptEditorElement().textContent).toBe("Draft heard so far");
+    act(() => session?.end());
+    expect(getPromptEditorElement().textContent).toBe("Draft");
   });
 
   it("does not mount plugin actions in compact layout", () => {

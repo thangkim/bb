@@ -103,6 +103,9 @@ Read the installed declarations for exact current signatures.
 - `ExperimentalComposerSubmitOptions`
 - `ExperimentalComposerSelection`
 - `ExperimentalComposerProvisionalText`
+- `ExperimentalComposerVoiceInput`
+- `ExperimentalComposerVoiceSession`
+- `ExperimentalComposerVoiceRecording`
 - `PluginAgentConfiguration`
 - `PluginAgentConfigurationContext`
 - `PluginAgentToolContentPart`

@@ -105,6 +105,11 @@ import {
 import type { ComposerTextEffectSource } from "@/lib/composer-text-effects";
 import { promptEditorExtensions } from "./editor/prompt-editor-extensions";
 import {
+  usePluginVoiceInput,
+  type PromptVoiceSession,
+  type PromptVoiceSessionInput,
+} from "./plugin-voice-input";
+import {
   promptCommandResourceFromSuggestion,
   promptEditorClipboardTextFromSlice,
   promptEditorContentFromValue,
@@ -452,6 +457,9 @@ export interface PromptBoxHandle {
   insertTextAtCursor: (text: string) => void;
   getTextBeforeCursor: () => string | undefined;
   playVoiceCompletionTransition: () => Promise<void>;
+  beginPluginVoiceInput: (
+    input: PromptVoiceSessionInput,
+  ) => PromptVoiceSession | null;
 }
 
 export type { PromptBoxAction } from "./PromptBoxActionsMenu";
@@ -2637,6 +2645,12 @@ export function PromptBoxInternal({
     return beforeCursor.length > 0 ? beforeCursor : undefined;
   }, []);
 
+  const beginPluginVoiceInput = usePluginVoiceInput(
+    editorRef,
+    resolvedComposerEditor.voiceInput,
+    insertTextAtCursor,
+  );
+
   useImperativeHandle(
     promptBoxRef,
     () => ({
@@ -2645,8 +2659,10 @@ export function PromptBoxInternal({
       insertTextAtCursor,
       getTextBeforeCursor,
       playVoiceCompletionTransition,
+      beginPluginVoiceInput,
     }),
     [
+      beginPluginVoiceInput,
       capturePromptBoxHeight,
       focusEnd,
       getTextBeforeCursor,

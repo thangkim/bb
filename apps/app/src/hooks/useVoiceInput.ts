@@ -437,6 +437,17 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
     }
   }, [showError, state]);
 
+  const readRecording = useCallback(() => {
+    const mimeType =
+      mediaRecorderRef.current?.mimeType ||
+      resolvePreferredAudioMimeType() ||
+      "audio/webm";
+    return createRecordingFile(
+      new Blob(chunksRef.current, { type: mimeType }),
+      mimeType,
+    );
+  }, []);
+
   return {
     state,
     isSupported,
@@ -448,5 +459,6 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
     start,
     stop,
     cancel,
+    readRecording,
   };
 }

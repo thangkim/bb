@@ -640,6 +640,36 @@ describe("collectPluginAppRegistrations", () => {
     ]);
   });
 
+  it("keeps a composer voice input with a start function and rejects a malformed one", () => {
+    const rejected = vi.fn<(reason: string) => void>();
+    const voiceInput = { start: () => ({ finish: async () => "" }) };
+    const definition = definePluginApp((app) => {
+      app.composer.customize({
+        id: "voice",
+        experimental_voiceInput: voiceInput,
+      });
+      app.composer.customize({
+        id: "broken-voice",
+        experimental_voiceInput: {} as never,
+      });
+    });
+
+    const registrations = collectPluginAppRegistrations(definition, rejected);
+
+    expect(registrations.composerCustomizations).toEqual([
+      { id: "voice", experimental_voiceInput: voiceInput },
+      { id: "broken-voice" },
+    ]);
+    expect(
+      registrations.composerCustomizations?.[0]?.experimental_voiceInput,
+    ).toBe(voiceInput);
+    expect(rejected.mock.calls.map(([reason]) => reason)).toEqual([
+      expect.stringContaining(
+        'experimental_voiceInput: must be an object with a "start" function',
+      ),
+    ]);
+  });
+
   it("isolates malformed and duplicate nested composer contributions", () => {
     const rejected = vi.fn<(reason: string) => void>();
     const definition = definePluginApp((app) => {

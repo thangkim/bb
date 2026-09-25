@@ -75,29 +75,7 @@ function sanitizeErrorMessage(raw: string): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
-export function describeVoiceError(
-  error: unknown,
-  hasPreferredAudioInput = false,
-): string {
-  if (error instanceof DOMException) {
-    switch (error.name) {
-      case "NotAllowedError":
-      case "SecurityError":
-        return "Microphone permission denied";
-      case "NotFoundError":
-      case "DevicesNotFoundError":
-        return hasPreferredAudioInput
-          ? "Selected microphone was not found"
-          : "No microphone was found";
-      case "NotReadableError":
-      case "TrackStartError":
-        return "Microphone is already in use";
-      case "AbortError":
-        return "Voice capture was aborted";
-      default:
-        return "Failed to start voice recording";
-    }
-  }
+export function describeVoiceError(error: unknown): string {
   if (error instanceof Error) {
     const message = sanitizeErrorMessage(error.message);
     if (message !== null) return message;

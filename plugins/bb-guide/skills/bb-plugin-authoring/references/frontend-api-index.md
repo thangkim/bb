@@ -229,6 +229,9 @@ Read the installed SDK declarations for the exact current signatures.
 - `ExperimentalComposerSubmitOptions`
 - `ExperimentalComposerSelection`
 - `ExperimentalComposerProvisionalText`
+- `ExperimentalComposerVoiceInput`
+- `ExperimentalComposerVoiceSession`
+- `ExperimentalComposerVoiceRecording`
 - `ComposerRichTextSpec`
 - `ComposerStructuredDraft`
 - `PluginComposerTextEffect`

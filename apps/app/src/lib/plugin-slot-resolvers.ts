@@ -166,6 +166,26 @@ export function resolveComposerDraftObservers(
   return resolved;
 }
 
+export interface ResolvedComposerVoiceInput extends ResolvedComposerContribution {
+  voiceInput: NonNullable<ComposerCustomization["experimental_voiceInput"]>;
+}
+
+export function resolveComposerVoiceInput(
+  customizations: readonly PluginComposerCustomizationSlot[],
+  scopeKind: PluginComposerScope["kind"],
+): ResolvedComposerVoiceInput | null {
+  for (const customization of customizations) {
+    const voiceInput = customization.experimental_voiceInput;
+    if (!voiceInput || !composerCustomizationApplies(customization, scopeKind))
+      continue;
+    return {
+      ...resolvedComposerContribution(customization, "voice-input"),
+      voiceInput,
+    };
+  }
+  return null;
+}
+
 export function resolvePendingInteraction(
   registrations: readonly PluginPendingInteractionSlot[],
   pluginId: string,
