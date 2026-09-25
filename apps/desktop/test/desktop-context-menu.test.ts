@@ -51,9 +51,10 @@ const DEFAULT_MEDIA_FLAGS = {
 
 interface FakeWebContents extends Pick<
   DesktopContextMenuWebContents,
-  "replaceMisspelling" | "session"
+  "copyImageAt" | "replaceMisspelling" | "session"
 > {
   addedDictionaryWords: string[];
+  copiedImagePoints: { x: number; y: number }[];
   replacedMisspellings: string[];
   spellCheckerEnabledValues: boolean[];
 }
@@ -96,8 +97,13 @@ function createFakeWebContents(): FakeWebContents {
   const addedDictionaryWords: string[] = [];
   const replacedMisspellings: string[] = [];
   const spellCheckerEnabledValues: boolean[] = [];
+  const copiedImagePoints: { x: number; y: number }[] = [];
   return {
     addedDictionaryWords,
+    copiedImagePoints,
+    copyImageAt(x, y) {
+      copiedImagePoints.push({ x, y });
+    },
     replacedMisspellings,
     spellCheckerEnabledValues,
     replaceMisspelling(text) {
@@ -255,6 +261,44 @@ describe("desktop context menu", () => {
       { role: "copy", enabled: true },
       { role: "selectAll", enabled: true },
     ]);
+  });
+
+  it("copies the actual image instead of selected text for images", () => {
+    const webContents = createFakeWebContents();
+    const template = buildDesktopContextMenuTemplate({
+      params: createContextMenuParams({
+        x: 40,
+        y: 60,
+        mediaType: "image",
+        hasImageContents: true,
+        srcURL: "blob:screenshot",
+        selectionText: "image-1790231959313-c03sg5.png",
+        editFlags: { ...DEFAULT_EDIT_FLAGS, canCopy: true, canSelectAll: true },
+      }),
+      webContents,
+    });
+
+    expect(template.map((item) => item.label ?? item.role)).toEqual([
+      "Copy Image",
+      "selectAll",
+    ]);
+    expect(template[0]?.accelerator).toBe("CmdOrCtrl+C");
+    clickMenuItem(template[0]);
+    expect(webContents.copiedImagePoints).toEqual([{ x: 40, y: 60 }]);
+  });
+
+  it("falls back to text copy when the image has not loaded", () => {
+    const template = buildDesktopContextMenuTemplate({
+      params: createContextMenuParams({
+        mediaType: "image",
+        hasImageContents: false,
+        selectionText: "caption",
+        editFlags: { ...DEFAULT_EDIT_FLAGS, canCopy: true },
+      }),
+      webContents: createFakeWebContents(),
+    });
+
+    expect(template.map((item) => item.label ?? item.role)).toEqual(["copy"]);
   });
 
   it("does not show an empty menu for inert content", () => {
