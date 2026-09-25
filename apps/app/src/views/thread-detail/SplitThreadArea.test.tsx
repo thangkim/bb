@@ -33,6 +33,7 @@ import {
 } from "@/lib/split-layout";
 import type { LayoutNode, PaneContent, SplitLayout } from "@/lib/split-layout";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
+import { useRootComposeProjectId } from "@/lib/root-compose-selection";
 import { createBbDesktopApi } from "@/test/bb-desktop-test-utils";
 import { resourceRouteLabelAtom } from "@/components/layout/resourceRouteLabelAtom";
 import {
@@ -98,6 +99,7 @@ function HostedComposerScopeProbe({ threadId }: { threadId: string }) {
 
 function RootComposeFixture() {
   const pane = useContext(PaneContext);
+  const [composeProjectId] = useRootComposeProjectId();
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const panelModel = useMemo(
     () => ({
@@ -115,7 +117,13 @@ function RootComposeFixture() {
     pane?.secondaryPanelHost ?? null,
     panelModel,
   );
-  return <div data-testid="root-compose-view" />;
+  return (
+    <div
+      data-testid="root-compose-view"
+      data-compose-id={pane?.composeId ?? "default"}
+      data-compose-project-id={composeProjectId}
+    />
+  );
 }
 
 vi.mock("@bb/shared-ui/hooks/use-compact-viewport", () => ({
@@ -701,6 +709,51 @@ afterEach(() => {
 });
 
 describe("SplitThreadArea", () => {
+  it("renders two composer panes side by side, each on its own project", () => {
+    renderSplitArea({
+      path: "/",
+      routeContent: newThreadContent,
+      layout: {
+        root: {
+          type: "split",
+          dir: "row",
+          sizes: [0.5, 0.5],
+          children: [
+            {
+              type: "pane",
+              paneId: "pane-1",
+              content: {
+                kind: "new-thread",
+                composeId: "compose-a",
+                seed: { projectId: "proj_a" },
+              },
+            },
+            {
+              type: "pane",
+              paneId: "pane-2",
+              content: {
+                kind: "new-thread",
+                composeId: "compose-b",
+                seed: { projectId: "proj_b" },
+              },
+            },
+          ],
+        },
+        focusedPaneId: "pane-2",
+      },
+    });
+
+    expect(
+      screen.getAllByTestId("root-compose-view").map((composer) => ({
+        composeId: composer.dataset.composeId,
+        projectId: composer.dataset.composeProjectId,
+      })),
+    ).toEqual([
+      { composeId: "compose-a", projectId: "proj_a" },
+      { composeId: "compose-b", projectId: "proj_b" },
+    ]);
+  });
+
   it("hosts Browser-tab navigation on compact plugin-panel routes", async () => {
     viewportState.compact = true;
 

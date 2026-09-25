@@ -11,7 +11,10 @@ import { CompactViewportOverrideProvider } from "@bb/shared-ui/hooks/use-compact
 import { threadQueryKey } from "@/hooks/queries/query-keys";
 import { makeThreadResponse } from "@/test/fixtures/thread-responses";
 import { createAppQueryClient } from "./query-client";
-import { useRootComposeProjectId } from "./root-compose-selection";
+import {
+  rootComposeProjectIdAtomFor,
+  useRootComposeProjectId,
+} from "./root-compose-selection";
 import {
   computePaneRects,
   findPane,
@@ -96,6 +99,17 @@ function layoutOf(store: ReturnType<typeof createStore>): SplitLayout {
   return layout;
 }
 
+function focusedContent(store: ReturnType<typeof createStore>) {
+  const layout = layoutOf(store);
+  return findPane(layout.root, layout.focusedPaneId)?.content;
+}
+
+function composers(store: ReturnType<typeof createStore>) {
+  return listPanes(layoutOf(store).root).filter(
+    (pane) => pane.content.kind === "new-thread",
+  );
+}
+
 function fullLayout(): SplitLayout {
   let layout: SplitLayout = singlePane();
   for (let index = 2; index <= MAX_PANES; index += 1) {
@@ -109,14 +123,19 @@ function fullLayout(): SplitLayout {
   return { ...layout, focusedPaneId: "pane-1" };
 }
 
+interface Point {
+  x: number;
+  y: number;
+}
+
 describe("useSplitPanes", () => {
   it.each([
-    ["left", (rect: DOMRectLike, base: DOMRectLike) => rect.x < base.x],
-    ["right", (rect: DOMRectLike, base: DOMRectLike) => rect.x > base.x],
-    ["top", (rect: DOMRectLike, base: DOMRectLike) => rect.y < base.y],
-    ["bottom", (rect: DOMRectLike, base: DOMRectLike) => rect.y > base.y],
+    ["left", (rect: Point, base: Point) => rect.x < base.x],
+    ["right", (rect: Point, base: Point) => rect.x > base.x],
+    ["top", (rect: Point, base: Point) => rect.y < base.y],
+    ["bottom", (rect: Point, base: Point) => rect.y > base.y],
   ] as const)(
-    "splits a focused composer off to the %s, seeded from the focused thread",
+    "splits a composer off to the %s, seeded from the focused thread",
     (side, isOnSide) => {
       const { store, result, open } = renderSplitPanes({
         layout: singlePane(),
@@ -126,8 +145,10 @@ describe("useSplitPanes", () => {
       expect(open({ side })).toBe("opened");
 
       const layout = layoutOf(store);
-      const focused = findPane(layout.root, layout.focusedPaneId);
-      expect(focused?.content).toEqual({ kind: "new-thread" });
+      expect(focusedContent(store)).toMatchObject({
+        kind: "new-thread",
+        seed: { projectId: "proj_open", environmentId: "env_shared" },
+      });
       const rects = computePaneRects(layout.root);
       const composerRect = rects.get(layout.focusedPaneId);
       const threadRect = rects.get("pane-1");
@@ -136,23 +157,53 @@ describe("useSplitPanes", () => {
       }
       expect(isOnSide(composerRect, threadRect)).toBe(true);
       expect(result.current.location.pathname).toBe("/");
-      expect(result.current.location.state).toEqual({
-        focusPrompt: true,
-        reuseEnvironmentId: "env_shared",
-      });
+      expect(result.current.location.state).toEqual({ focusPrompt: true });
       expect(result.current.composeProjectId).toBe("proj_open");
     },
   );
 
-  it("uses an explicit project without carrying the focused thread's environment", () => {
-    const { result, open } = renderSplitPanes({ layout: singlePane() });
+  it("opens a second, independent composer on every split", () => {
+    const { store, result, open } = renderSplitPanes({ layout: singlePane() });
 
-    expect(
-      open({ side: "right", projectId: "proj_other", focusPrompt: false }),
-    ).toBe("opened");
+    expect(open({ side: "right" })).toBe("opened");
+    expect(open({ side: "bottom", projectId: "proj_other" })).toBe("opened");
 
+    const opened = composers(store);
+    expect(opened).toHaveLength(2);
+    const [first, second] = opened.map((pane) => pane.content);
+    if (first?.kind !== "new-thread" || second?.kind !== "new-thread") {
+      throw new Error("expected two composers");
+    }
+    expect(first.composeId).toBeDefined();
+    expect(second.composeId).toBeDefined();
+    expect(first.composeId).not.toBe(second.composeId);
+    expect(first.seed).toEqual({
+      projectId: "proj_open",
+      environmentId: "env_shared",
+    });
+    expect(second.seed).toEqual({ projectId: "proj_other" });
     expect(result.current.composeProjectId).toBe("proj_other");
-    expect(result.current.location.state).toEqual({});
+    expect(
+      store.get(rootComposeProjectIdAtomFor(first.composeId, "unused")),
+    ).toBe("proj_open");
+  });
+
+  it("seeds a split from a focused composer with that composer's project", () => {
+    const { store, open } = renderSplitPanes({ layout: singlePane() });
+    open({ side: "right" });
+    const seeded = focusedContent(store);
+    if (seeded?.kind !== "new-thread") throw new Error("expected a composer");
+    act(() =>
+      store.set(rootComposeProjectIdAtomFor(seeded.composeId), "proj_picked"),
+    );
+
+    open({ side: "bottom" });
+
+    expect(focusedContent(store)).toMatchObject({
+      kind: "new-thread",
+      seed: { projectId: "proj_picked" },
+    });
+    expect(composers(store)).toHaveLength(2);
   });
 
   it("builds the first layout from the route when nothing was stored yet", () => {
@@ -160,25 +211,50 @@ describe("useSplitPanes", () => {
 
     expect(open({ side: "right" })).toBe("opened");
 
-    expect(listPanes(layoutOf(store).root).map((pane) => pane.content)).toEqual(
-      [thread("thr_watching"), { kind: "new-thread" }],
-    );
+    expect(
+      listPanes(layoutOf(store).root).map((pane) => pane.content.kind),
+    ).toEqual(["thread", "new-thread"]);
   });
 
-  it("focuses the existing composer instead of opening a second one", () => {
-    const withComposer = splitPane(singlePane(), "pane-1", "right", {
-      kind: "new-thread",
-    });
-    const { store, open } = renderSplitPanes({
-      layout: { ...withComposer, focusedPaneId: "pane-1" },
+  describe("reuseComposer", () => {
+    it("keeps a focused composer instead of opening another", () => {
+      const { store, open } = renderSplitPanes({ layout: singlePane() });
+      open({ side: "right" });
+      const before = layoutOf(store);
+
+      expect(open({ side: "right", reuseComposer: true })).toBe("focused");
+
+      expect(layoutOf(store)).toEqual(before);
     });
 
-    expect(open({ side: "left" })).toBe("focused");
+    it("focuses an open composer seeded with the same project and environment", () => {
+      const { store, open } = renderSplitPanes({ layout: singlePane() });
+      open({ side: "right" });
+      const composerPaneId = layoutOf(store).focusedPaneId;
+      act(() =>
+        store.set(splitLayoutAtom, {
+          ...layoutOf(store),
+          focusedPaneId: "pane-1",
+        }),
+      );
 
-    const layout = layoutOf(store);
-    expect(listPanes(layout.root)).toHaveLength(2);
-    expect(findPane(layout.root, layout.focusedPaneId)?.content).toEqual({
-      kind: "new-thread",
+      expect(open({ side: "right", reuseComposer: true })).toBe("focused");
+
+      expect(layoutOf(store).focusedPaneId).toBe(composerPaneId);
+      expect(composers(store)).toHaveLength(1);
+    });
+
+    it("opens a composer when none matches the focused thread", () => {
+      const withDefault = splitPane(singlePane(), "pane-1", "right", {
+        kind: "new-thread",
+      });
+      const { store, open } = renderSplitPanes({
+        layout: { ...withDefault, focusedPaneId: "pane-1" },
+      });
+
+      expect(open({ side: "right", reuseComposer: true })).toBe("opened");
+
+      expect(composers(store)).toHaveLength(2);
     });
   });
 
@@ -200,8 +276,9 @@ describe("useSplitPanes", () => {
     const layout = layoutOf(store);
     expect(listPanes(layout.root)).toHaveLength(MAX_PANES);
     expect(layout.focusedPaneId).toBe("pane-1");
-    expect(findPane(layout.root, "pane-1")?.content).toEqual({
+    expect(findPane(layout.root, "pane-1")?.content).toMatchObject({
       kind: "new-thread",
+      seed: { projectId: "proj_open" },
     });
   });
 
@@ -236,8 +313,3 @@ describe("useSplitPanes", () => {
     expect(open({ side: "right" })).toBe("unavailable");
   });
 });
-
-interface DOMRectLike {
-  x: number;
-  y: number;
-}

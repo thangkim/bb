@@ -151,7 +151,7 @@ describe("split commands", () => {
 });
 
 describe("new-thread-beside", () => {
-  it("opens a composer to the right, replacing the focused pane at the cap", () => {
+  it("reuses a matching composer, else opens one to the right and replaces the focused pane at the cap", () => {
     const { openNewThread, view } = mountController(true, "replaced");
 
     command("new-thread-beside").run(context);
@@ -159,6 +159,7 @@ describe("new-thread-beside", () => {
     expect(openNewThread).toHaveBeenCalledWith({
       side: "right",
       atPaneCap: "replace",
+      reuseComposer: true,
     });
     expect(view.inspection.navigateCalls).toEqual([]);
     expect(toast).not.toHaveBeenCalled();

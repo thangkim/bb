@@ -13,9 +13,9 @@ Pane Splits adds five commands to the quick palette (Mod+Shift+P) and to Setting
 | `plugin:pane-splits/split-down`        | Panes: split new thread down              | Alt+S            |
 | `plugin:pane-splits/new-thread-beside` | Panes: new thread beside the focused pane | none             |
 
-A split command opens bb's new-thread composer in a new pane on that side of the focused pane, focuses the prompt, and seeds the project and environment from the focused thread. bb has one new-thread composer, so when it is already open in a pane, that pane is focused instead. At the 8-pane maximum the split is refused with the toast "Can't split — 8 panes is the maximum." The split commands are hidden on compact screens and on pages that cannot be shown in a pane, such as Settings.
+A split command opens a new composer in a new pane on that side of the focused pane and focuses its prompt. The composer starts on the focused thread's project and environment, or on the focused composer's project. Every composer pane keeps its own project, environment, section, and prompt draft, so splitting twice gives two independent composers. At the 8-pane maximum the split is refused with the toast "Can't split — 8 panes is the maximum." The split commands are hidden on compact screens and on pages that cannot be shown in a pane, such as Settings.
 
-`new-thread-beside` opens the composer to the right of the focused pane, or focuses it when it is already open. At the pane maximum it replaces the focused pane. On compact screens and pages that cannot be split it navigates to the New thread screen.
+`new-thread-beside` does nothing but focus the prompt when the focused pane is already a composer, and focuses an open composer for the same project and environment. Otherwise it opens a composer to the right of the focused pane, or, at the pane maximum, in place of the focused pane. On compact screens and pages that cannot be split it navigates to the New thread screen.
 
 Bind or rebind a command in Settings → Keyboard, or with the CLI:
 

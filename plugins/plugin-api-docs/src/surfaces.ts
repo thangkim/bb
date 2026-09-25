@@ -356,7 +356,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Use app-level SDK hooks and preserve their React context through portals",
           "Own the widget's chrome, position, visibility, and responsive behavior",
           "Coexist with other overlays while crashes remain isolated to the overlay that failed",
-          "Open bb's new-thread composer in a pane beside the focused one with experimental_useSplitPanes, for example from a command the overlay listens for",
+          "Open a new-thread composer, with its own project and draft, in a pane beside the focused one with experimental_useSplitPanes, for example from a command the overlay listens for",
         ],
         apiSymbols: [
           "ExperimentalAppOverlayRegistration",

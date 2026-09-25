@@ -56,6 +56,7 @@ function openNewThreadBeside(): void {
   const result = controller.splitPanes.openNewThread({
     side: "right",
     atPaneCap: "replace",
+    reuseComposer: true,
   });
   if (result === "unavailable") {
     controller.navigate.toCompose({ focusPrompt: true });

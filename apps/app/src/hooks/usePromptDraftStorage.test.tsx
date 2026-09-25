@@ -243,6 +243,38 @@ describe("usePromptDraftStorage", () => {
     );
   });
 
+  it("gives each composer pane its own new-thread draft", () => {
+    const main = renderHook(() =>
+      usePromptDraftStorage({ kind: "new-thread" }),
+    );
+    const left = renderHook(() =>
+      usePromptDraftStorage({ kind: "new-thread", composeId: "compose-a" }),
+    );
+    const right = renderHook(() =>
+      usePromptDraftStorage({ kind: "new-thread", composeId: "compose-b" }),
+    );
+
+    act(() => {
+      left.result.current.setDraft({
+        text: "left pane",
+        mentions: [],
+        attachments: [],
+      });
+    });
+
+    expect(main.result.current.storageKey).toBe(NEW_THREAD_DRAFT_KEY);
+    expect(left.result.current.text).toBe("left pane");
+    expect(right.result.current.text).toBe("");
+    expect(main.result.current.text).toBe("");
+    expect(
+      new Set([
+        main.result.current.storageKey,
+        left.result.current.storageKey,
+        right.result.current.storageKey,
+      ]).size,
+    ).toBe(3);
+  });
+
   it("keeps thread follow-up drafts scoped to the thread", () => {
     const { result } = renderHook(() =>
       usePromptDraftStorage({
