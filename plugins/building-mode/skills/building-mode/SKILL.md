@@ -23,11 +23,12 @@ The command follows the plugin-command defaults: it runs on the main surface and
 
 ## Source locations
 
-The plugin ships a Vite plugin, `plugins/building-mode/vite-source-locations.ts`, that bb's app Vite config loads when the plugin directory is present. It stamps every lowercase JSX element in bb's app and its workspace packages with `data-bb-src="<repo-relative path>:<line>:<column>"` and records where each top-level component, including `memo` and `forwardRef` components, is defined.
+Stamped builds tag every lowercase JSX element with `data-bb-src="<repo-relative path>:<line>:<column>"`, record where each top-level component (including `memo` and `forwardRef` components) is defined, and keep component names through minification. The stamping code lives in this plugin: `vite-source-locations.ts` for bb's app, which the app Vite config loads when the plugin directory is present, and `esbuild-source-locations.ts` for plugin UI bundles, which `@bb/plugin-build` loads when `VITE_BB_SOURCE_LOCATIONS=1` and the plugin being built sits inside a checkout that contains this plugin.
 
-- `pnpm dev` (the Vite dev server) always stamps.
-- `vite build` stamps only when `VITE_BB_SOURCE_LOCATIONS=1` is set, and then keeps component names through minification. Put `VITE_BB_SOURCE_LOCATIONS=1` in the git-ignored `.env.development.local` at the repository root so `pnpm start:worktree` and `pnpm desktop:worktree`, which load it through `dotenv -c development`, build a stamped app. `pnpm start`, `pnpm desktop`, and release builds carry no stamps unless the variable is set, and their resolved context says so.
-- Plugin UI bundles are never stamped. An element rendered by a plugin records the plugin ID instead; its source trail points at the bb slot that mounts the plugin.
+- bb's app: the Vite dev server (`pnpm dev`) always stamps. `vite build` stamps only with `VITE_BB_SOURCE_LOCATIONS=1`.
+- Plugin UIs (thread-list, sidebar, and every other plugin slot, plus path-installed plugins inside the checkout): stamped only with `VITE_BB_SOURCE_LOCATIONS=1`, under `pnpm dev`, `pnpm start:worktree`, and `pnpm desktop:worktree`. When the flag changes, the server rebuilds dev and path-installed plugin bundles on their next load, and Turbo keys bundled-plugin builds on the flag. Plugins outside the checkout are never stamped.
+- Put `VITE_BB_SOURCE_LOCATIONS=1` in the git-ignored `.env.development.local` at the repository root. `pnpm dev`, `pnpm start:worktree`, and `pnpm desktop:worktree` load it through `dotenv -c development`. `pnpm start`, `pnpm desktop`, and release builds carry no stamps unless the variable is set, and their resolved context says so.
+- Turbo does not track edits to the stamping files themselves; after changing them, rebuild with `--force`.
 
 Annotations record the nearest stamped location for up to six distinct files, innermost first. The hover label shows the innermost file, so a label without a file name means the element carries no stamps. Paths are relative to the repository root, so they apply in any worktree of the same checkout. Elements rendered through a dynamic tag such as `<Comp>` or a component report the stamp of the nearest stamped ancestor.
 
@@ -39,7 +40,7 @@ Each mention resolves to compact Markdown feedback: a `## bb UI feedback: <route
 
 - **Location:** a short readable selector built from ids, `data-testid`, `aria-label`, and the first plain class of up to five elements.
 - **Source:** the element's own stamp when it has one; otherwise the innermost component with a recorded definition, plus the next one in another file; otherwise the nearest stamped ancestor. Unstamped builds say that no source was recorded.
-- **Rendered by plugin**, when the element sits inside a plugin's UI.
+- **Rendered by plugin**, the ID of the plugin whose UI slot contains the element, when there is one.
 - **Source trail** and **React**, when present.
 - **Classes**, other **Attributes**, **Position**, and **Context**: up to 300 characters of visible text from the nearest ancestor that adds text around the element.
 - **Feedback:** the comment.

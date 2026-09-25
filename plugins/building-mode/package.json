@@ -39,6 +39,7 @@
     "@types/react-dom": "^19.0.0",
     "better-sqlite3": "12.10.0",
     "cron-parser": "^5.5.0",
+    "esbuild": "^0.28.0",
     "hono": "4.11.9",
     "jsdom": "^29.0.1",
     "magic-string": "^0.30.21",

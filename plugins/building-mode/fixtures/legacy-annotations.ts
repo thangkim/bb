@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const ANNOTATION_MENTION_PROVIDER_ID = "bb-ui-annotation";
+export const ANNOTATION_MENTION_PROVIDER_ID = "annotation";
 
 const rectSchema = z
   .object({
@@ -21,7 +21,6 @@ const pageElementSchema = z
     attributes: z.record(z.string(), z.string().max(400)),
     rect: rectSchema,
     sources: z.array(z.string().max(1000)).max(6),
-    pluginId: z.string().min(1).max(200).nullable(),
   })
   .strict();
 
@@ -85,12 +84,29 @@ export const reactProbeSchema = z
   .strict()
   .nullable();
 
+export const annotationSurfaceSchema = z.enum(["browser", "app"]);
+export type AnnotationSurface = z.infer<typeof annotationSurfaceSchema>;
+
 export const annotationRecordSchema = pageAnnotationSchema
   .extend({
     components: z.array(reactComponentSchema).max(12),
+    surface: annotationSurfaceSchema,
   })
   .strict();
 export type AnnotationRecord = z.infer<typeof annotationRecordSchema>;
+
+export const storedAnnotationRecordSchema = annotationRecordSchema
+  .extend({
+    surface: annotationSurfaceSchema.default("browser"),
+    element: pageElementSchema
+      .extend({
+        sources: pageElementSchema.shape.sources.default([]),
+        context: pageElementSchema.shape.context.default(""),
+        styles: z.record(z.string(), z.string()).optional(),
+      })
+      .strict(),
+  })
+  .strict();
 
 const SOURCE_ATTRIBUTE = "data-bb-src";
 
@@ -124,7 +140,8 @@ function formatComponent(component: ReactComponent): string {
     : `${component.name} (\`${component.source}\`)`;
 }
 
-function routeOf(record: AnnotationRecord): string {
+function pagePath(record: AnnotationRecord): string {
+  if (record.surface === "browser") return record.url;
   try {
     const url = new URL(record.url);
     return `${url.pathname}${url.search}${url.hash}`;
@@ -151,6 +168,10 @@ function summaryFor(
   ]
     .filter((part) => part.length > 0)
     .join(" ");
+}
+
+function headingFor(record: AnnotationRecord): string {
+  return summaryFor(record, 4, 40);
 }
 
 export function annotationMentionLabel(record: AnnotationRecord): string {
@@ -183,20 +204,26 @@ function primarySource(record: AnnotationRecord): string | null {
 export function formatAnnotationContext(record: AnnotationRecord): string {
   const { element } = record;
   const lines = [
-    `## bb UI feedback: ${routeOf(record)}`,
+    record.surface === "app"
+      ? `## bb UI feedback: ${pagePath(record)}`
+      : `## Page feedback: ${pagePath(record)}`,
+  ];
+  if (record.surface === "browser" && record.title.length > 0) {
+    lines.push(`**Page:** "${record.title}"`);
+  }
+  lines.push(
     `**Viewport:** ${record.viewport.width}×${record.viewport.height}`,
     "",
-    `### ${record.number}. ${summaryFor(record, 4, 40)}`,
+    `### ${record.number}. ${headingFor(record)}`,
     `**Location:** ${element.selector}`,
-  ];
-  const source = primarySource(record);
-  lines.push(
-    source === null
-      ? "**Source:** not recorded; this bb build has no source stamps. Search for the classes, text, or component names below."
-      : `**Source:** ${source}`,
   );
-  if (element.pluginId !== null) {
-    lines.push(`**Rendered by plugin:** \`${element.pluginId}\``);
+  const source = primarySource(record);
+  if (source !== null) {
+    lines.push(`**Source:** ${source}`);
+  } else if (record.surface === "app") {
+    lines.push(
+      "**Source:** not recorded; this bb build has no source stamps. Search for the classes, text, or component names below.",
+    );
   }
   if (element.sources.length > 0) {
     lines.push(

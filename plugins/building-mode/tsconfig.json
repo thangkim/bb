@@ -29,6 +29,10 @@
     "app.tsx",
     "vite-source-locations.ts",
     "vite-source-locations.test.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "annotations.parity.test.ts",
+    "esbuild-source-locations.ts",
+    "esbuild-source-locations.test.ts",
+    "fixtures/legacy-annotations.ts"
   ]
 }
