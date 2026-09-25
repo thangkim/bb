@@ -3306,7 +3306,10 @@ export function PromptBoxInternal({
             </>
           ) : null}
 
-          <PluginComposerViewProvider value={composerView}>
+          <PluginComposerViewProvider
+            value={composerView}
+            editorRef={editorRef}
+          >
             <div
               data-promptbox-action-row=""
               className={cn(

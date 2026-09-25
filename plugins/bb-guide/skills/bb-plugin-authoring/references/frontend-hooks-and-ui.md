@@ -83,6 +83,15 @@ experimental_data })` submits now and carries plugin-owned JSON to dispatch
   no project or environment), and a value that comes back different was
   reconciled. In a thread a provider change starts the same handoff the
   picker starts. It rejects in a queued-message editor or a side chat.
+  `experimental_beginProvisionalText()` returns `{ update(text), commit(text),
+  cancel() }` for muted, paint-only text at the caret (after the last
+  character when the person never placed the caret), such as a live
+  transcript: it never enters the draft or undo history and its anchor moves
+  with edits. `commit` inserts the final text there with whitespace padding
+  as one undo step; the preview is cancelled when the slot unmounts or its
+  scope changes. It returns null outside the prompt box's action row
+  (banners, surfaces outside a composer). Harness: `composer.provisionalText`
+  and `composer.provisionalTextCalls`.
 - `useComposerView()` → reactive `{ scope, layout, draft, run }` for the
   composer instance that mounted an action or banner. `layout` is
   `"expanded" | "compact" | "zen"`; `draft` is

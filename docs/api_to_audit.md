@@ -2927,6 +2927,57 @@ modes. The testing harness records accepted calls in `composer.selections`.
    submittable, which overloads "missing" with "no picker here". Decide
    whether the result should distinguish them.
 
+## `useComposer().experimental_beginProvisionalText`
+
+**What it does.** Starts a paint-only preview inside the composer editor that
+mounted the calling slot and returns an `ExperimentalComposerProvisionalText`
+handle with `update(text)`, `commit(text)` and `cancel()`. The preview is a
+ProseMirror widget decoration: muted, `aria-hidden`, never part of the draft,
+never persisted, and never in undo history (its transactions carry
+`addToHistory: false`). **Anchor rule:** the anchor is the selection when the
+preview begins, except that an editor the person has never focused, whose
+caret still sits at the very start, anchors after the last character instead;
+the anchor is remapped through every document change. `update` collapses
+whitespace and pads the text with a space on each side that touches a word.
+`commit` replaces the anchor range with the padded text in one transaction
+(one undo step) that also clears the preview, places the caret after it, and
+focuses the editor unless the pointer is coarse; blank text only ends the
+preview. **Lifecycle:** one preview per editor, so beginning another ends the
+previous one; `cancel` is idempotent; every handle is cancelled when the slot
+unmounts or its composer scope changes (the same release path as input locks
+and text effects), after which `commit` is a no-op. If the editor was
+destroyed or the preview was superseded before `commit`, the text is appended
+to the draft with a separating space so a transcript is not lost. Returns
+null when no editor is exposed to the calling surface: only slots rendered
+inside the prompt box's action row (composer actions and the plus menu)
+receive one; banners and surfaces outside a composer do not. Backed by an
+`editorRef` on the internal `PluginComposerViewProvider` and
+`prompt-provisional-text-extension.ts`. The testing harness records
+operations in `composer.provisionalText` / `composer.provisionalTextCalls`
+and appends commits to the draft. Consumer: the out-of-tree
+`plugins/voice-live-preview` dictation plugin.
+
+**Audit before stabilizing.**
+
+1. **Editor reach.** Decide whether banners, the compact layout (where
+   composer actions do not render), queued-message editors and side chats
+   should expose their editor, and whether `ComposerView` should advertise
+   provisional-text support so a plugin can tell "unsupported" from "not
+   mounted".
+2. **Anchor rule.** "Never focused" is tracked per editor instance through
+   the focus event. Confirm that restored drafts, autofocus and programmatic
+   focus produce the anchor users expect, and whether plugins need to pass an
+   explicit anchor (`"caret" | "end"`).
+3. **Multiple owners.** A second preview in the same editor silently ends the
+   first, including one owned by another plugin. Decide whether previews
+   should be per-plugin, stacked, or rejected while one is active.
+4. **Styling.** The widget always uses the muted foreground token. Decide
+   whether plugins may supply a class from their stylesheet, like
+   `setTextEffect`.
+5. **Commit fallback.** Appending to the draft when the editor was replaced
+   loses the anchor. Confirm the fallback, and whether `commit` should report
+   what happened.
+
 ## Desktop browser control
 
 `bb.sdk.experimental_desktopBrowsers` and the exported `ExperimentalDesktopBrowsersArea`, `ExperimentalDesktopBrowserScope`, `ExperimentalDesktopBrowserLease`, `ExperimentalDesktopBrowserCreateInput`, and `ExperimentalDesktopBrowserAcquireInput` expose explicit host/window/thread discovery, isolated tab creation, expiring control leases, scoped CDP connections, capture, reveal, close, release, disposable tab-state subscriptions, and cookie import from an installed browser through `listImportSources` and `importCookies` (`ExperimentalDesktopBrowserInstanceRequest`, `ExperimentalDesktopBrowserImportCookiesInput`, `ExperimentalDesktopBrowserImportSources`, `ExperimentalDesktopBrowserImportOutcome`). The matching core CLI is `bb browser`.

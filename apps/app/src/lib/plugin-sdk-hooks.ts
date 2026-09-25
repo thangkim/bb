@@ -30,6 +30,7 @@ import type {
   PluginProvidersState,
   PluginSettingsState,
   ExperimentalAppPanel,
+  ExperimentalComposerProvisionalText,
   ExperimentalComposerSelection,
   ExperimentalComposerSubmitOptions,
   ExperimentalFixedTabTargetState,
@@ -49,9 +50,14 @@ import {
 import { usePluginThreadPanelOpenHandler } from "@/components/plugin/plugin-thread-panel-navigation";
 import {
   PluginComposerViewContext,
+  usePluginComposerEditorRef,
   usePluginComposerHost,
   usePluginComposerHostDraft,
 } from "@/components/plugin/plugin-composer-host";
+import {
+  beginPromptProvisionalText,
+  normalizeProvisionalText,
+} from "@/components/promptbox/editor/prompt-provisional-text-extension";
 import { sdk } from "@/lib/sdk";
 import { getPluginBoundSdk } from "@/lib/plugin-bound-sdk";
 import { useSystemProviders } from "@/hooks/queries/system-queries";
@@ -701,6 +707,10 @@ export function useComposer(): PluginComposerApi {
   const slotOwnershipRegistry = useContext(PluginSlotOwnershipContext);
   const composerHost = usePluginComposerHost();
   const composerHostDraft = usePluginComposerHostDraft(composerHost);
+  const composerEditorRef = usePluginComposerEditorRef();
+  const provisionalTexts = useRef(
+    new Set<ExperimentalComposerProvisionalText>(),
+  );
   const { projectId, threadId } = useRouteState();
   const routeScope: PromptDraftScope = useMemo(
     () =>
@@ -788,6 +798,9 @@ export function useComposer(): PluginComposerApi {
   );
   const releaseVisualState = useCallback(() => {
     scopeOwnership.invalidate();
+    for (const provisionalText of [...provisionalTexts.current]) {
+      provisionalText.cancel();
+    }
     setComposerTextEffect(textEffectKey, pluginId, null, visualStateOwner);
     setComposerInputLock(textEffectKey, pluginId, false, visualStateOwner);
   }, [pluginId, scopeOwnership, textEffectKey, visualStateOwner]);
@@ -972,6 +985,37 @@ export function useComposer(): PluginComposerApi {
     [hostSetSelection, scopeOwnership],
   );
 
+  const experimental_beginProvisionalText = useCallback(() => {
+    const editor = composerEditorRef?.current;
+    if (!scopeOwnership.isActive() || !editor || editor.isDestroyed) {
+      return null;
+    }
+    registerVisualStateOwner();
+    const session = beginPromptProvisionalText(editor);
+    const handles = provisionalTexts.current;
+    const handle: ExperimentalComposerProvisionalText = {
+      update: (text) => session.update(text),
+      commit: (text) => {
+        handles.delete(handle);
+        const focus = !window.matchMedia?.("(pointer: coarse)").matches;
+        if (session.commit(text, { focus }) !== "detached") return;
+        const normalized = normalizeProvisionalText(text);
+        if (normalized.length === 0) return;
+        updateText((current) =>
+          current.length === 0 || /\s$/u.test(current)
+            ? `${current}${normalized}`
+            : `${current} ${normalized}`,
+        );
+      },
+      cancel: () => {
+        handles.delete(handle);
+        session.cancel();
+      },
+    };
+    handles.add(handle);
+    return handle;
+  }, [composerEditorRef, registerVisualStateOwner, scopeOwnership, updateText]);
+
   return useMemo(
     () => ({
       scope:
@@ -993,12 +1037,14 @@ export function useComposer(): PluginComposerApi {
       focus,
       experimental_submit,
       experimental_setSelection,
+      experimental_beginProvisionalText,
     }),
     [
       addQuote,
       clear,
       composerScope,
       composerText,
+      experimental_beginProvisionalText,
       experimental_setSelection,
       experimental_submit,
       focus,

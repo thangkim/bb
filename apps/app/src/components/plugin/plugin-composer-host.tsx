@@ -9,7 +9,9 @@ import {
   useState,
   useSyncExternalStore,
   type ReactNode,
+  type RefObject,
 } from "react";
+import type { Editor } from "@tiptap/core";
 import type {
   ComposerView,
   ExperimentalComposerSelection,
@@ -126,17 +128,33 @@ export const PluginComposerViewContext = createContext<
   ComposerView | undefined
 >(undefined);
 
+const PluginComposerEditorContext =
+  createContext<RefObject<Editor | null> | null>(null);
+
+export function usePluginComposerEditorRef(): RefObject<Editor | null> | null {
+  return useContext(PluginComposerEditorContext);
+}
+
 export function PluginComposerViewProvider({
   children,
   value,
+  editorRef,
 }: {
   children: ReactNode;
   value: ComposerView;
+  editorRef?: RefObject<Editor | null>;
 }) {
-  return (
+  const view = (
     <PluginComposerViewContext.Provider value={value}>
       {children}
     </PluginComposerViewContext.Provider>
+  );
+  return editorRef === undefined ? (
+    view
+  ) : (
+    <PluginComposerEditorContext.Provider value={editorRef}>
+      {view}
+    </PluginComposerEditorContext.Provider>
   );
 }
 

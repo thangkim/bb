@@ -219,7 +219,23 @@ export interface ComposerLog {
    * environment). Queued-message and side-chat scopes reject, as the app does.
    */
   selections: ExperimentalComposerSelection[];
+  /**
+   * Text of the live `experimental_beginProvisionalText` preview after
+   * whitespace collapsing, `""` while one is active but empty, or null when
+   * none is active. The harness has no caret: a commit appends to `text` with
+   * a separating space. Unmounting the slot or changing the composer scope
+   * cancels the preview, as the app does.
+   */
+  provisionalText: string | null;
+  /** Every provisional-text operation that took effect, in order. */
+  provisionalTextCalls: ComposerProvisionalTextCall[];
 }
+
+export type ComposerProvisionalTextCall =
+  | { type: "begin" }
+  | { type: "update"; text: string }
+  | { type: "commit"; text: string }
+  | { type: "cancel" };
 
 interface TestComposerStore {
   api: Omit<PluginComposerApi, "scope" | "text">;
@@ -1893,8 +1909,22 @@ export function renderSlot<
     focusCount: 0,
     submits: [],
     selections: [],
+    provisionalText: null,
+    provisionalTextCalls: [],
   };
   const composerOwnership = { active: true };
+  let provisionalSessionCount = 0;
+  let activeProvisionalSession: number | null = null;
+  const appendComposerText = (text: string) => {
+    const separator =
+      composerText.length === 0 || /\s$/u.test(composerText) ? "" : " ";
+    commitComposerText(`${composerText}${separator}${text}`);
+  };
+  const endProvisionalText = (call: ComposerProvisionalTextCall) => {
+    activeProvisionalSession = null;
+    composerLog.provisionalText = null;
+    composerLog.provisionalTextCalls.push(call);
+  };
   const submissionListeners = new Set<() => void>();
   const composer: TestComposerStore = {
     getAttachmentCount: () => composerAttachmentCount,
@@ -2006,6 +2036,43 @@ export function renderSlot<
         composerLog.selections.push(accepted);
         return accepted;
       },
+      experimental_beginProvisionalText() {
+        if (!composerOwnership.active) return null;
+        provisionalSessionCount += 1;
+        const session = provisionalSessionCount;
+        activeProvisionalSession = session;
+        composerLog.provisionalText = "";
+        composerLog.provisionalTextCalls.push({ type: "begin" });
+        let ended = false;
+        const isLive = () =>
+          composerOwnership.active && activeProvisionalSession === session;
+        const normalize = (text: string) => text.replace(/\s+/gu, " ").trim();
+        return {
+          update(text) {
+            if (ended || !isLive()) return;
+            const normalized = normalize(text);
+            composerLog.provisionalText = normalized;
+            composerLog.provisionalTextCalls.push({
+              type: "update",
+              text: normalized,
+            });
+          },
+          commit(text) {
+            if (ended || !composerOwnership.active) return;
+            ended = true;
+            const normalized = normalize(text);
+            if (activeProvisionalSession === session) {
+              endProvisionalText({ type: "commit", text: normalized });
+            }
+            if (normalized.length > 0) appendComposerText(normalized);
+          },
+          cancel() {
+            if (ended) return;
+            ended = true;
+            if (isLive()) endProvisionalText({ type: "cancel" });
+          },
+        };
+      },
     },
   };
 
@@ -2062,6 +2129,8 @@ export function renderSlot<
 
   const releaseComposerOwnership = (): void => {
     if (!composerOwnership.active) return;
+    if (activeProvisionalSession !== null)
+      endProvisionalText({ type: "cancel" });
     composerOwnership.active = false;
     composerLog.textEffect = null;
     composerLog.inputLocked = false;
@@ -2107,6 +2176,9 @@ export function renderSlot<
     scope: PluginComposerScope,
   ): Promise<void> => {
     await act(async () => {
+      if (activeProvisionalSession !== null) {
+        endProvisionalText({ type: "cancel" });
+      }
       composerScope = scope;
       notifyComposerListeners();
     });

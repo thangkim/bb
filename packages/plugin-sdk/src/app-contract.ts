@@ -2541,6 +2541,46 @@ export interface PluginComposerApi {
   experimental_setSelection(
     selection: ExperimentalComposerSelection,
   ): Promise<ExperimentalComposerSelection>;
+  /**
+   * Start painting provisional text inside this composer's editor, such as a
+   * live transcript while the person is still speaking.
+   *
+   * The text is anchored at the caret, or after the last character when the
+   * person never placed the caret in this editor, and the anchor moves with
+   * edits made around it. It is muted, hidden from assistive technology, and
+   * paint-only: it never enters the draft, persistence, or undo history.
+   * Starting a new preview in the same editor ends the previous one.
+   *
+   * Returns null when no editor is mounted for the calling surface (a banner,
+   * a plus-menu callback outside the prompt box, a surface outside any
+   * composer) or the surface is no longer active. The preview is cancelled
+   * automatically when the calling slot unmounts or its composer scope
+   * changes.
+   *
+   * Experimental: see docs/api_to_audit.md.
+   */
+  experimental_beginProvisionalText(): ExperimentalComposerProvisionalText | null;
+}
+
+/** A live preview started by `experimental_beginProvisionalText`. */
+export interface ExperimentalComposerProvisionalText {
+  /**
+   * Replace the provisional text. Whitespace is collapsed and the text is
+   * padded with a space on either side that touches a word. An empty string
+   * hides it without ending the preview.
+   */
+  update(text: string): void;
+  /**
+   * Insert text at the anchor, replacing a selection that was active when
+   * the preview began, with the same whitespace padding, as one undo step,
+   * and end the preview. Leaves the caret after the inserted text and
+   * focuses the editor on fine-pointer devices. Blank text only ends the
+   * preview. If the editor was replaced since the preview began, the text
+   * is appended to the draft instead. No-op after the preview has ended.
+   */
+  commit(text: string): void;
+  /** Remove the provisional text and end the preview. Idempotent. */
+  cancel(): void;
 }
 
 /**

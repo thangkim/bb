@@ -223,6 +223,7 @@ Read the installed SDK declarations for the exact current signatures.
 - `ComposerView`
 - `ExperimentalComposerSubmitOptions`
 - `ExperimentalComposerSelection`
+- `ExperimentalComposerProvisionalText`
 - `ComposerRichTextSpec`
 - `ComposerStructuredDraft`
 - `PluginComposerTextEffect`
