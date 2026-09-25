@@ -1,3 +1,4 @@
+import type { ExperimentalComposerProvisionalText } from "@get-bb/plugin-sdk";
 import { Extension, type Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import {
@@ -257,6 +258,33 @@ export function beginPromptProvisionalText(
       if (ended) return;
       ended = true;
       if (isLive()) dispatchMeta(editor, { type: "clear" });
+    },
+  };
+}
+
+function prefersFocusAfterCommit(): boolean {
+  return !window.matchMedia?.("(pointer: coarse)").matches;
+}
+
+export function createProvisionalTextHandle(
+  session: PromptProvisionalTextSession,
+  options: { onDetached(text: string): void; onEnd?(): void },
+): ExperimentalComposerProvisionalText {
+  return {
+    update: (text) => session.update(text),
+    commit: (text) => {
+      options.onEnd?.();
+      const result = session.commit(text, {
+        focus: prefersFocusAfterCommit(),
+      });
+      const normalized = normalizeProvisionalText(text);
+      if (result === "detached" && normalized.length > 0) {
+        options.onDetached(normalized);
+      }
+    },
+    cancel: () => {
+      options.onEnd?.();
+      session.cancel();
     },
   };
 }

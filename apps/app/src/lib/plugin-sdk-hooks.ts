@@ -56,7 +56,7 @@ import {
 } from "@/components/plugin/plugin-composer-host";
 import {
   beginPromptProvisionalText,
-  normalizeProvisionalText,
+  createProvisionalTextHandle,
 } from "@/components/promptbox/editor/prompt-provisional-text-extension";
 import { sdk } from "@/lib/sdk";
 import { getPluginBoundSdk } from "@/lib/plugin-bound-sdk";
@@ -991,27 +991,19 @@ export function useComposer(): PluginComposerApi {
       return null;
     }
     registerVisualStateOwner();
-    const session = beginPromptProvisionalText(editor);
     const handles = provisionalTexts.current;
-    const handle: ExperimentalComposerProvisionalText = {
-      update: (text) => session.update(text),
-      commit: (text) => {
-        handles.delete(handle);
-        const focus = !window.matchMedia?.("(pointer: coarse)").matches;
-        if (session.commit(text, { focus }) !== "detached") return;
-        const normalized = normalizeProvisionalText(text);
-        if (normalized.length === 0) return;
-        updateText((current) =>
-          current.length === 0 || /\s$/u.test(current)
-            ? `${current}${normalized}`
-            : `${current} ${normalized}`,
-        );
+    const handle = createProvisionalTextHandle(
+      beginPromptProvisionalText(editor),
+      {
+        onDetached: (text) =>
+          updateText((current) =>
+            current.length === 0 || /\s$/u.test(current)
+              ? `${current}${text}`
+              : `${current} ${text}`,
+          ),
+        onEnd: () => handles.delete(handle),
       },
-      cancel: () => {
-        handles.delete(handle);
-        session.cancel();
-      },
-    };
+    );
     handles.add(handle);
     return handle;
   }, [composerEditorRef, registerVisualStateOwner, scopeOwnership, updateText]);

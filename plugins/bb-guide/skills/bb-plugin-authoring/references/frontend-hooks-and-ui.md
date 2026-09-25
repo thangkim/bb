@@ -136,7 +136,7 @@ composer.updateText((current) => `${current}\n\nPlease summarize this.`);
 Composer customizations:
 
 - Register with `app.composer.customize({ id, scopes?, actions?, plusMenu?,
-banners?, richText? })`. Omitted `scopes` means all thread, queued-message,
+banners?, richText?, experimental_voiceInput? })`. Omitted `scopes` means all thread, queued-message,
   side-chat, and new-thread composers.
 - `actions` and `banners` are plugin React components. Calls to
   `useComposer()` and `useComposerView()` inside them are bound to the composer
@@ -152,6 +152,16 @@ banners?, richText? })`. Omitted `scopes` means all thread, queued-message,
   name from plugin CSS. Decorations are paint-only and never mutate the draft.
   `richText.onDraftChange(draft, view)` observes the debounced
   `ComposerStructuredDraft`, including mention ranges.
+- `experimental_voiceInput.start(session)` runs when bb's own microphone starts
+  recording in a matching composer (first matching registration wins). bb
+  keeps its buttons, recording bar, Escape-to-cancel and completion
+  transition. `session` has `readRecording()` (all audio so far as a `File`),
+  `transcribe(file, { signal })` (bb's transcription route), `provisionalText`
+  (a caret preview, or null) and `signal` (aborted when the session ends).
+  Return `{ finish(recording) }`: bb calls it on stop instead of transcribing
+  and inserts the resolved text at the preview anchor as one undo step; a
+  rejection shows bb's "Voice input failed" toast with "Download recording".
+  A throwing `start` falls back to native transcription.
 - Use a vendored BB prompt icon-button recipe for native-matching action chrome
   and provide an accessible label. Each component/callback is isolated so one
   failing customization does not degrade the native composer. Complete
