@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { defineConfig, type PluginOption, type UserConfig } from "vite";
@@ -9,14 +10,17 @@ import { sharedUiEnvSeam } from "./vite-shared-ui-seam.js";
 import { cachedReactCompiler } from "./vite-react-compiler.js";
 
 const appDir = dirname(fileURLToPath(import.meta.url));
-const sourceLocationPlugins: PluginOption[] = await import(
-  /* @vite-ignore */ pathToFileURL(
-    resolve(appDir, "../../plugins/building-mode/vite-source-locations.ts"),
-  ).href
-).then(
-  (module: { sourceLocations(): PluginOption }) => [module.sourceLocations()],
-  () => [],
+const sourceLocationsPath = resolve(
+  appDir,
+  "../../plugins/building-mode/vite-source-locations.ts",
 );
+const sourceLocationPlugins: PluginOption[] = existsSync(sourceLocationsPath)
+  ? await import(
+      /* @vite-ignore */ pathToFileURL(sourceLocationsPath).href
+    ).then((module: { sourceLocations(): PluginOption }) => [
+      module.sourceLocations(),
+    ])
+  : [];
 
 export const sharedViteConfig = {
   plugins: [
