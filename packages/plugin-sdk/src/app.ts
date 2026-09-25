@@ -216,3 +216,6 @@ export const experimental_useProviders = runtimeFunction(
 export const experimental_useCodeTheme = runtimeFunction(
   "experimental_useCodeTheme",
 );
+export const experimental_useSplitPanes = runtimeFunction(
+  "experimental_useSplitPanes",
+);

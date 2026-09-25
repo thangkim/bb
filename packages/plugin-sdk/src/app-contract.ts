@@ -1323,6 +1323,57 @@ export interface PluginCodeThemeState {
 }
 
 /**
+ * Where {@link ExperimentalSplitPanes.openNewThread} puts the new-thread
+ * composer. `side` is relative to the focused pane. `projectId` omitted keeps
+ * the focused thread's project and environment, or the composer's current
+ * project when the focused pane is not a thread. `focusPrompt` defaults to
+ * true. `atPaneCap` decides what happens when the split already holds the
+ * maximum number of panes: `"refuse"` (the default) changes nothing,
+ * `"replace"` shows the composer in the focused pane instead.
+ */
+export interface ExperimentalSplitPaneNewThreadOptions {
+  side: "left" | "right" | "top" | "bottom";
+  projectId?: string;
+  focusPrompt?: boolean;
+  atPaneCap?: "replace" | "refuse";
+}
+
+/**
+ * What {@link ExperimentalSplitPanes.openNewThread} did. `"opened"`: a new
+ * pane was split off. `"focused"`: the composer was already in a pane, which
+ * now has focus (bb has one new-thread composer, so it never opens twice).
+ * `"replaced"`: the pane cap was reached and the focused pane now shows the
+ * composer. `"at-cap"`: the pane cap was reached and nothing changed.
+ * `"unavailable"`: splits are unavailable here (see
+ * {@link ExperimentalSplitPanes.isAvailable}) and nothing changed.
+ */
+export type ExperimentalSplitPaneOpenResult =
+  | "opened"
+  | "focused"
+  | "replaced"
+  | "at-cap"
+  | "unavailable";
+
+/**
+ * Host-owned split-pane actions (see
+ * {@link PluginSdkApp.experimental_useSplitPanes}).
+ */
+export interface ExperimentalSplitPanes {
+  /**
+   * False on compact viewports and on routes that cannot be shown in a pane
+   * (settings, for example). `openNewThread` then returns `"unavailable"`.
+   */
+  isAvailable: boolean;
+  /**
+   * Opens bb's new-thread composer in a pane beside the focused one, focuses
+   * that pane, and navigates to it.
+   */
+  openNewThread(
+    options: ExperimentalSplitPaneNewThreadOptions,
+  ): ExperimentalSplitPaneOpenResult;
+}
+
+/**
  * The `threads` area of {@link PluginBrowserBbSdk}: bb's public thread API
  * with the calling plugin's identity filled in. `spawn` and `fork` stamp
  * `origin: "plugin"` and `originPluginId` unless the call names another
@@ -3305,6 +3356,12 @@ export interface PluginSdkApp {
    * docs/api_to_audit.md.
    */
   experimental_useCodeTheme(): PluginCodeThemeState;
+  /**
+   * Split-pane actions for the main area (see {@link ExperimentalSplitPanes}),
+   * such as opening a new-thread composer beside the focused pane.
+   * Experimental: see docs/api_to_audit.md.
+   */
+  experimental_useSplitPanes(): ExperimentalSplitPanes;
   /**
    * The host-owned chat component (see {@link ThreadChatProps}). Together
    * with `Markdown`, the only components the SDK ships — everything else

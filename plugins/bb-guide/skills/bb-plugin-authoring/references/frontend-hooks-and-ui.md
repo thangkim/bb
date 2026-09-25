@@ -103,6 +103,21 @@ experimental_data })` submits now and carries plugin-owned JSON to dispatch
   approximate the palette by reading bb's CSS variables: `--canvas` / `--ink`
   carry the app chrome, not the syntax colors, and a custom palette that
   declares its own code theme would not follow.
+- `experimental_useSplitPanes()` → `{ isAvailable, openNewThread(options) }`
+  — host-owned split-pane actions for the main area. `isAvailable` is false
+  on compact viewports and on routes that cannot be shown in a pane.
+  `openNewThread({ side, projectId?, focusPrompt?, atPaneCap? })` opens bb's
+  new-thread composer in a pane on `side` (`"left" | "right" | "top" |
+  "bottom"`) of the focused pane, focuses it, and navigates there. Omitting
+  `projectId` keeps the focused thread's project and environment. The prompt
+  is focused unless `focusPrompt: false`. At the pane cap, `atPaneCap:
+  "refuse"` (the default) changes nothing and `"replace"` shows the composer
+  in the focused pane. bb has one new-thread composer, so when it is already
+  in a pane that pane is focused instead. It returns what happened:
+  `"opened" | "focused" | "replaced" | "at-cap" | "unavailable"`; fall back
+  to `useBbNavigate().toCompose()` on `"unavailable"`. Call the hook in a
+  component (an `experimental_appOverlay` controller for keyboard commands)
+  and invoke `openNewThread` from an event or command.
 
 ```tsx
 const composer = useComposer();

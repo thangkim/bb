@@ -21,6 +21,7 @@ import {
   type ComposerView,
   type ExperimentalAppOverlayRegistration,
   type ExperimentalQuestionFormHost,
+  type ExperimentalSplitPanes,
   type PluginAppDefinition,
   type PluginAppSetup,
   type PluginCodeThemeState,
@@ -261,6 +262,7 @@ interface SlotEnv {
   sdkCalls: SdkCall[];
   providers: PluginProvidersState;
   codeTheme: PluginCodeThemeState;
+  splitPanes: ExperimentalSplitPanes;
   branchesState: BranchesState;
   checkoutState: CheckoutState;
 }
@@ -1032,6 +1034,9 @@ const testPluginSdkApp = {
   experimental_useCodeTheme(): PluginCodeThemeState {
     return useSlotEnv("experimental_useCodeTheme").codeTheme;
   },
+  experimental_useSplitPanes(): ExperimentalSplitPanes {
+    return useSlotEnv("experimental_useSplitPanes").splitPanes;
+  },
   experimental_useSidebarThreadActions(): PluginSidebarThreadActions {
     return useSlotEnv("experimental_useSidebarThreadActions").sidebarActions;
   },
@@ -1414,6 +1419,12 @@ export interface RenderSlotOptions<
    * mode with no resolved document, the state a plugin sees on first paint.
    */
   codeTheme?: Partial<PluginCodeThemeState>;
+  /**
+   * What `experimental_useSplitPanes()` reports. Omitted → unavailable, with
+   * an `openNewThread` that returns `"unavailable"`; pass a spy as
+   * `openNewThread` to observe calls and choose results.
+   */
+  experimental_splitPanes?: Partial<ExperimentalSplitPanes>;
   branchesState?: Partial<BranchesState>;
   /** Checkout facts `experimental_useCheckoutState()` reports. */
   checkoutState?: Partial<CheckoutState>;
@@ -2043,6 +2054,11 @@ export function renderSlot<
     sdkCalls,
     providers,
     codeTheme,
+    splitPanes: {
+      isAvailable: options.experimental_splitPanes?.isAvailable ?? false,
+      openNewThread:
+        options.experimental_splitPanes?.openNewThread ?? (() => "unavailable"),
+    },
     branchesState: {
       branches: options.branchesState?.branches ?? [],
       remoteBranches: options.branchesState?.remoteBranches ?? [],
