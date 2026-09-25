@@ -1,0 +1,9 @@
+::highlight(bb-thread-find-match) {
+  background-color: var(--sidebar-search-match);
+  color: var(--ink);
+}
+
+::highlight(bb-thread-find-active) {
+  background-color: var(--sidebar-search-match-border);
+  color: var(--ink);
+}
