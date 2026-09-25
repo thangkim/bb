@@ -13,7 +13,19 @@ const paneContentSchema = z.discriminatedUnion("kind", [
       threadId: z.string().min(1),
     })
     .strict(),
-  z.object({ kind: z.literal("new-thread") }).strict(),
+  z
+    .object({
+      kind: z.literal("new-thread"),
+      composeId: z.string().min(1).optional(),
+      seed: z
+        .object({
+          projectId: z.string().min(1),
+          environmentId: z.string().min(1).optional(),
+        })
+        .strict()
+        .optional(),
+    })
+    .strict(),
   z
     .object({
       kind: z.literal("plugin-panel"),

@@ -1842,14 +1842,17 @@ while a palette switch resolves, so a consumer never paints an unthemed frame.
 ## `app.experimental_useSplitPanes` (`@get-bb/plugin-sdk/app`)
 
 **What it does.** Returns `{ isAvailable, openNewThread(options) }`.
-`openNewThread({ side, projectId?, focusPrompt?, atPaneCap? })` opens bb's
-new-thread composer in a pane on `side` of the focused pane, focuses it, and
-navigates to it, the way a thread opens with `threads.open({ split })`.
-Omitting `projectId` seeds the composer with the focused thread's project and
-environment. Because bb has one new-thread composer, a composer already in a
-pane is focused instead (`"focused"`). At the pane cap it refuses (`"at-cap"`)
-unless `atPaneCap: "replace"` puts the composer in the focused pane
-(`"replaced"`). `isAvailable` is false, and every call returns
+`openNewThread({ side, projectId?, focusPrompt?, atPaneCap?, reuseComposer? })`
+opens a new composer in a pane on `side` of the focused pane, focuses it, and
+navigates to it, the way a thread opens with `threads.open({ split })`. Each
+composer pane has its own compose id, stored with the pane, and keeps its own
+project, environment, section, fork target, and prompt draft; the composer
+bb shows without a split keeps the existing tab-persisted state. Omitting
+`projectId` seeds the pane with the focused thread's project and environment,
+or the focused composer's project. `reuseComposer: true` focuses the focused
+composer, or one seeded with the same project and environment, instead of
+opening another (`"focused"`). At the pane cap it refuses (`"at-cap"`) unless
+`atPaneCap: "replace"` puts the composer in the focused pane (`"replaced"`). `isAvailable` is false, and every call returns
 `"unavailable"`, on compact viewports and on routes that cannot be shown in a
 pane. It exists so a plugin can own the "split a new thread off" keyboard
 commands (the `pane-splits` plugin) without core keybindings.
@@ -1863,9 +1866,11 @@ commands (the `pane-splits` plugin) without core keybindings.
 2. **Vocabulary.** `side` uses `"top" | "bottom"`, while
    `threads.open({ split })` uses `"top" | "down"` plus `"replace"`. Settle on
    one before either stabilizes.
-3. **Shared composer.** With one composer, opening beside a thread that
-   belongs to another project retargets the existing composer's project.
-   Confirm that is right, or give panes their own composers first.
+3. **Composer identity.** Seeded panes match for `reuseComposer` by the seed
+   they opened with, not by the project the user later picked, and a closed
+   pane's unsent draft stays in local storage under its compose id. Decide
+   whether reuse should follow the live selection and whether closing a pane
+   should discard its draft.
 4. **Layout reads.** Plugins read the layout through `useSidebarSplitLayout`,
    which reports null for a single pane and does not say which pane holds the
    composer. Decide whether this hook should expose the layout it acts on.

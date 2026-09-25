@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useStore } from "jotai";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router-dom";
 import type {
   ExperimentalSplitPaneNewThreadOptions,
@@ -15,20 +15,52 @@ import {
   reconcileLayoutForContent,
 } from "@/views/thread-detail/splitThreadNavigation";
 import { getRootComposeRoutePath } from "./route-paths";
-import { useSetRootComposeProjectId } from "./root-compose-selection";
+import { rootComposeProjectIdAtomFor } from "./root-compose-selection";
 import {
   countPanes,
   findPane,
-  findPaneByContent,
+  listPanes,
   MAX_PANES,
   replacePaneContent,
   setFocus,
   splitPane,
+  type ComposeSeed,
   type PaneContent,
 } from "./split-layout";
 import { maximizedPaneIdAtom, splitLayoutAtom } from "./split-layout/atoms";
 
-const NEW_THREAD_CONTENT: PaneContent = { kind: "new-thread" };
+let composeIdSequence = 0;
+
+function nextComposeId(): string {
+  composeIdSequence += 1;
+  return `compose-${Date.now().toString(36)}-${composeIdSequence}`;
+}
+
+type JotaiStore = ReturnType<typeof useStore>;
+
+function composeSeedFor(
+  options: ExperimentalSplitPaneNewThreadOptions,
+  focused: PaneContent | undefined,
+  queryClient: QueryClient,
+  store: JotaiStore,
+): ComposeSeed {
+  if (options.projectId !== undefined) return { projectId: options.projectId };
+  if (focused?.kind === "thread") {
+    const environmentId = queryClient.getQueryData<ThreadResponse>(
+      threadQueryKey(focused.threadId),
+    )?.environmentId;
+    return {
+      projectId: focused.projectId,
+      ...(environmentId == null ? {} : { environmentId }),
+    };
+  }
+  const scoped = focused?.kind === "new-thread" ? focused : undefined;
+  return {
+    projectId: store.get(
+      rootComposeProjectIdAtomFor(scoped?.composeId, scoped?.seed?.projectId),
+    ),
+  };
+}
 
 export function useSplitPanes(): ExperimentalSplitPanes {
   const store = useStore();
@@ -36,7 +68,6 @@ export function useSplitPanes(): ExperimentalSplitPanes {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const splitWorkspaceActive = useSplitWorkspaceActive();
-  const setRootComposeProjectId = useSetRootComposeProjectId();
   const isAvailable =
     splitWorkspaceActive && paneContentForPathname(pathname) !== null;
 
@@ -50,60 +81,46 @@ export function useSplitPanes(): ExperimentalSplitPanes {
         store.get(splitLayoutAtom) ??
         reconcileLayoutForContent(null, routeContent);
       const focused = findPane(layout.root, layout.focusedPaneId)?.content;
-      const focusedThread = focused?.kind === "thread" ? focused : null;
-      const projectId = options.projectId ?? focusedThread?.projectId;
-      const environmentId =
-        options.projectId === undefined && focusedThread !== null
-          ? (queryClient.getQueryData<ThreadResponse>(
-              threadQueryKey(focusedThread.threadId),
-            )?.environmentId ?? null)
-          : null;
-      const existing = findPaneByContent(layout.root, NEW_THREAD_CONTENT);
+      const seed = composeSeedFor(options, focused, queryClient, store);
+      const reused =
+        options.reuseComposer !== true
+          ? undefined
+          : focused?.kind === "new-thread"
+            ? layout.focusedPaneId
+            : listPanes(layout.root).find(
+                ({ content }) =>
+                  content.kind === "new-thread" &&
+                  content.seed?.projectId === seed.projectId &&
+                  content.seed.environmentId === seed.environmentId,
+              )?.paneId;
       const atCap = countPanes(layout.root) >= MAX_PANES;
-      if (existing === null && atCap && options.atPaneCap !== "replace") {
+      if (reused === undefined && atCap && options.atPaneCap !== "replace") {
         return "at-cap";
       }
+      const content: PaneContent = {
+        kind: "new-thread",
+        composeId: nextComposeId(),
+        seed,
+      };
       const result: ExperimentalSplitPaneOpenResult =
-        existing !== null ? "focused" : atCap ? "replaced" : "opened";
+        reused !== undefined ? "focused" : atCap ? "replaced" : "opened";
       const next =
-        existing !== null
-          ? setFocus(layout, existing.paneId)
+        reused !== undefined
+          ? setFocus(layout, reused)
           : atCap
-            ? replacePaneContent(
-                layout,
-                layout.focusedPaneId,
-                NEW_THREAD_CONTENT,
-              )
-            : splitPane(
-                layout,
-                layout.focusedPaneId,
-                options.side,
-                NEW_THREAD_CONTENT,
-              );
+            ? replacePaneContent(layout, layout.focusedPaneId, content)
+            : splitPane(layout, layout.focusedPaneId, options.side, content);
       store.set(splitLayoutAtom, next);
       if (store.get(maximizedPaneIdAtom) !== null) {
         store.set(maximizedPaneIdAtom, next.focusedPaneId);
       }
-      if (projectId !== undefined) setRootComposeProjectId(projectId);
       void navigate(getRootComposeRoutePath(), {
         replace: result === "focused",
-        state: {
-          ...(options.focusPrompt === false ? {} : { focusPrompt: true }),
-          ...(environmentId === null
-            ? {}
-            : { reuseEnvironmentId: environmentId }),
-        },
+        state: options.focusPrompt === false ? null : { focusPrompt: true },
       });
       return result;
     },
-    [
-      navigate,
-      pathname,
-      queryClient,
-      setRootComposeProjectId,
-      splitWorkspaceActive,
-      store,
-    ],
+    [navigate, pathname, queryClient, splitWorkspaceActive, store],
   );
 
   return useMemo(

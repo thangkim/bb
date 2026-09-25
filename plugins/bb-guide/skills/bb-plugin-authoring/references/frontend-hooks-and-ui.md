@@ -115,14 +115,17 @@ experimental_data })` submits now and carries plugin-owned JSON to dispatch
 - `experimental_useSplitPanes()` → `{ isAvailable, openNewThread(options) }`
   — host-owned split-pane actions for the main area. `isAvailable` is false
   on compact viewports and on routes that cannot be shown in a pane.
-  `openNewThread({ side, projectId?, focusPrompt?, atPaneCap? })` opens bb's
-  new-thread composer in a pane on `side` (`"left" | "right" | "top" |
-  "bottom"`) of the focused pane, focuses it, and navigates there. Omitting
-  `projectId` keeps the focused thread's project and environment. The prompt
-  is focused unless `focusPrompt: false`. At the pane cap, `atPaneCap:
-  "refuse"` (the default) changes nothing and `"replace"` shows the composer
-  in the focused pane. bb has one new-thread composer, so when it is already
-  in a pane that pane is focused instead. It returns what happened:
+  `openNewThread({ side, projectId?, focusPrompt?, atPaneCap?, reuseComposer? })`
+  opens a new composer in a pane on `side` (`"left" | "right" | "top" |
+  "bottom"`) of the focused pane, focuses it, and navigates there. Every
+  composer pane keeps its own project, environment, section, and prompt
+  draft. Omitting `projectId` keeps the focused thread's project and
+  environment, or the focused composer's project. The prompt is focused unless
+  `focusPrompt: false`. At the pane cap, `atPaneCap: "refuse"` (the default)
+  changes nothing and `"replace"` shows the composer in the focused pane.
+  `reuseComposer: true` focuses the focused composer, or an open one for the
+  same project and environment, instead of opening another. It returns what
+  happened:
   `"opened" | "focused" | "replaced" | "at-cap" | "unavailable"`; fall back
   to `useBbNavigate().toCompose()` on `"unavailable"`. Call the hook in a
   component (an `experimental_appOverlay` controller for keyboard commands)

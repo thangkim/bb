@@ -1323,28 +1323,30 @@ export interface PluginCodeThemeState {
 }
 
 /**
- * Where {@link ExperimentalSplitPanes.openNewThread} puts the new-thread
+ * Where {@link ExperimentalSplitPanes.openNewThread} puts a new-thread
  * composer. `side` is relative to the focused pane. `projectId` omitted keeps
- * the focused thread's project and environment, or the composer's current
- * project when the focused pane is not a thread. `focusPrompt` defaults to
- * true. `atPaneCap` decides what happens when the split already holds the
- * maximum number of panes: `"refuse"` (the default) changes nothing,
- * `"replace"` shows the composer in the focused pane instead.
+ * the focused thread's project and environment, or the focused composer's
+ * current project. `focusPrompt` defaults to true. `atPaneCap` decides what
+ * happens when the split already holds the maximum number of panes:
+ * `"refuse"` (the default) changes nothing, `"replace"` shows the composer in
+ * the focused pane instead. `reuseComposer: true` focuses a composer instead
+ * of opening another when the focused pane already is one, or when one is
+ * open for the same project and environment.
  */
 export interface ExperimentalSplitPaneNewThreadOptions {
   side: "left" | "right" | "top" | "bottom";
   projectId?: string;
   focusPrompt?: boolean;
   atPaneCap?: "replace" | "refuse";
+  reuseComposer?: boolean;
 }
 
 /**
  * What {@link ExperimentalSplitPanes.openNewThread} did. `"opened"`: a new
- * pane was split off. `"focused"`: the composer was already in a pane, which
- * now has focus (bb has one new-thread composer, so it never opens twice).
- * `"replaced"`: the pane cap was reached and the focused pane now shows the
- * composer. `"at-cap"`: the pane cap was reached and nothing changed.
- * `"unavailable"`: splits are unavailable here (see
+ * composer pane was split off. `"focused"`: with `reuseComposer`, an open
+ * composer now has focus. `"replaced"`: the pane cap was reached and the
+ * focused pane now shows a new composer. `"at-cap"`: the pane cap was reached
+ * and nothing changed. `"unavailable"`: splits are unavailable here (see
  * {@link ExperimentalSplitPanes.isAvailable}) and nothing changed.
  */
 export type ExperimentalSplitPaneOpenResult =
@@ -1365,8 +1367,9 @@ export interface ExperimentalSplitPanes {
    */
   isAvailable: boolean;
   /**
-   * Opens bb's new-thread composer in a pane beside the focused one, focuses
-   * that pane, and navigates to it.
+   * Opens a new composer in a pane beside the focused one, focuses that pane,
+   * and navigates to it. Each composer pane keeps its own project,
+   * environment, section, and prompt draft.
    */
   openNewThread(
     options: ExperimentalSplitPaneNewThreadOptions,

@@ -1,3 +1,8 @@
+export interface ComposeSeed {
+  projectId: string;
+  environmentId?: string;
+}
+
 export type PaneContent =
   | {
       kind: "thread";
@@ -6,6 +11,8 @@ export type PaneContent =
     }
   | {
       kind: "new-thread";
+      composeId?: string;
+      seed?: ComposeSeed;
     }
   | {
       kind: "plugin-panel";

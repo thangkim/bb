@@ -57,6 +57,35 @@ describe("mixed page navigation", () => {
     expect(focusedPaneRoute(after)).toBe("/");
   });
 
+  it("keeps a focused seeded composer when the compose route is reconciled", () => {
+    const layout = splitPane(twoPaneLayout(), "pane-2", "bottom", {
+      kind: "new-thread",
+      composeId: "compose-a",
+      seed: { projectId: "p1" },
+    });
+
+    expect(reconcileLayoutForContent(layout, { kind: "new-thread" })).toBe(
+      layout,
+    );
+  });
+
+  it("opens the default composer, not a seeded one, from a focused thread", () => {
+    const withSeeded = splitPane(twoPaneLayout(), "pane-2", "bottom", {
+      kind: "new-thread",
+      composeId: "compose-a",
+    });
+    const fromThread = { ...withSeeded, focusedPaneId: "pane-1" };
+
+    const after = reconcileLayoutForContent(fromThread, { kind: "new-thread" });
+
+    expect(after.focusedPaneId).toBe("pane-1");
+    expect(listPanes(after.root).map((pane) => pane.content)).toEqual([
+      { kind: "new-thread" },
+      { kind: "thread", projectId: "p1", threadId: "thread-2" },
+      { kind: "new-thread", composeId: "compose-a" },
+    ]);
+  });
+
   it("updates a plugin pane's subpath without duplicating the panel", () => {
     const plugin = {
       kind: "plugin-panel",

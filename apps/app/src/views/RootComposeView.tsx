@@ -1,9 +1,10 @@
 import { useInitialPromptDraft } from "@/components/promptbox/mentions/initial-prompt-draft";
+import type { PromptDraftScope } from "@/hooks/usePromptDraftStorage";
 import {
   ThreadTitle,
   useThreadTitleDisplayText,
 } from "@/components/thread/ThreadTitleMentions";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -511,6 +512,14 @@ export function LegacyProjectComposeRedirect({
 export function RootComposeView() {
   const [rootComposeProjectId, setRootComposeProjectId] =
     useRootComposeProjectId();
+  const composeId = useOptionalPaneContext()?.composeId;
+  const draftStorage = useMemo<PromptDraftScope>(
+    () =>
+      composeId === undefined
+        ? { kind: "new-thread" }
+        : { kind: "new-thread", composeId },
+    [composeId],
+  );
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -615,7 +624,7 @@ export function RootComposeView() {
     <NewThreadComposer
       projectId={rootComposeProjectId}
       onProjectChange={handleProjectChange}
-      draftStorage={{ kind: "new-thread" }}
+      draftStorage={draftStorage}
       selectionScope="new-thread"
       seed={composerSeed}
       resetKey={forkSeed?.sourceThreadId ?? null}
@@ -739,6 +748,7 @@ function RootComposeSurface({
   const restorePromptDraftIfEmpty = promptDraft.restoreIfEmpty;
 
   useEffect(() => {
+    if (!isFocusedPane) return;
     const initialPrompt = readInitialPromptFromSearch(location.search);
     if (initialPrompt === null || searchInitialDraft === undefined) return;
     setStartedComposing(true);
@@ -748,6 +758,7 @@ function RootComposeSurface({
       { replace: true, state: location.state },
     );
   }, [
+    isFocusedPane,
     location.search,
     location.state,
     navigate,
@@ -756,6 +767,7 @@ function RootComposeSurface({
     searchInitialDraft,
   ]);
   useEffect(() => {
+    if (!isFocusedPane) return;
     if (stateInitialPrompt !== null && stateInitialDraft === undefined) return;
     const sectionTarget = readRootComposeSectionTargetFromLocationState(
       location.state,
@@ -793,6 +805,7 @@ function RootComposeSurface({
       state: null,
     });
   }, [
+    isFocusedPane,
     location.search,
     location.state,
     navigate,
@@ -808,6 +821,7 @@ function RootComposeSurface({
     stateInitialDraft,
   ]);
   useEffect(() => {
+    if (!isFocusedPane) return;
     const initialPrompt = readInitialPromptFromLocationState(location.state);
     if (initialPrompt === null || stateInitialDraft === undefined) return;
     const nextDraft = stateInitialDraft;
@@ -821,6 +835,7 @@ function RootComposeSurface({
       state: { focusPrompt: true },
     });
   }, [
+    isFocusedPane,
     location.search,
     location.state,
     navigate,
@@ -834,10 +849,29 @@ function RootComposeSurface({
     "focusPrompt" in location.state &&
     location.state.focusPrompt === true;
   useEffect(() => {
-    if (!shouldFocusPrompt || isPointerCoarse) return;
+    if (!shouldFocusPrompt || isPointerCoarse || !isFocusedPane) return;
     const handle = window.requestAnimationFrame(focusPromptBox);
     return () => window.cancelAnimationFrame(handle);
-  }, [focusPromptBox, isPointerCoarse, location.key, shouldFocusPrompt]);
+  }, [
+    focusPromptBox,
+    isFocusedPane,
+    isPointerCoarse,
+    location.key,
+    shouldFocusPrompt,
+  ]);
+  const composeSeed = paneContext?.composeSeed;
+  const seededEnvironmentId =
+    composeSeed?.projectId === projectId
+      ? composeSeed.environmentId
+      : undefined;
+  const seededEnvironmentRef = useRef(false);
+  useEffect(() => {
+    if (seededEnvironmentId === undefined || seededEnvironmentRef.current) {
+      return;
+    }
+    seededEnvironmentRef.current = true;
+    seedEnvironmentSelectionValue(encodeReuseValue(seededEnvironmentId));
+  }, [seedEnvironmentSelectionValue, seededEnvironmentId]);
 
   const mobileRecentThreads = useMemo(
     () => buildMobileRecentThreads({ sidebarNavigation }),
@@ -1950,7 +1984,10 @@ function RootComposeSurface({
   const isCompactHomeLayout = isCompactViewport && !showEmptyWelcome;
 
   const promptBox = renderPromptBox({
-    id: "root-compose-prompt",
+    id:
+      paneContext?.composeId === undefined
+        ? "root-compose-prompt"
+        : `root-compose-prompt-${paneContext.composeId}`,
     autoFocus: !isProviderCliBlocked,
     mentionMenuPlacement: isCompactHomeLayout ? "top" : "bottom",
     banner: promptBanner,

@@ -944,9 +944,14 @@ const WorkspacePaneContent = memo(function WorkspacePaneContent({
           },
     [paneId, secondaryPanelRegistry],
   );
+  const composeId =
+    content.kind === "new-thread" ? content.composeId : undefined;
+  const composeSeed = content.kind === "new-thread" ? content.seed : undefined;
   const value = useMemo<PaneContextValue>(
     () => ({
       paneId,
+      ...(composeId === undefined ? {} : { composeId }),
+      ...(composeSeed === undefined ? {} : { composeSeed }),
       isFocused,
       isSplitPane,
       secondaryPanelHost,
@@ -963,6 +968,8 @@ const WorkspacePaneContent = memo(function WorkspacePaneContent({
     }),
     [
       beginPaneDrag,
+      composeId,
+      composeSeed,
       isBoundedPane,
       isFocused,
       isSplitPane,
@@ -1511,7 +1518,13 @@ function PaneStaleWatcher({ threadId, onStale }: PaneStaleWatcherProps) {
     ) {
       onStaleRef.current();
     }
-  }, [isConfirmedArchived, isDeleted, isGone, isUnarchived, unarchivesInFlight]);
+  }, [
+    isConfirmedArchived,
+    isDeleted,
+    isGone,
+    isUnarchived,
+    unarchivesInFlight,
+  ]);
 
   return null;
 }

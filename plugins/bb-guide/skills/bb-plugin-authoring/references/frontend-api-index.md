@@ -70,7 +70,7 @@ Read the installed SDK declarations for the exact current signatures.
   `bb` CLI and the backend `bb.sdk` expose
 - `experimental_useProviders`
 - `experimental_useCodeTheme`
-- `experimental_useSplitPanes` — open bb's new-thread composer in a pane
+- `experimental_useSplitPanes` — open a new-thread composer in a pane
   beside the focused one
 
 ## Type exports

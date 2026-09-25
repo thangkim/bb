@@ -132,4 +132,51 @@ describe("split layout persistence", () => {
       deserializeSplitLayout(serializeSplitLayout(layoutWithPaneCount(9))),
     ).toBeNull();
   });
+
+  it("round-trips composer panes with their compose ids and seeds", () => {
+    const layout: SplitLayout = {
+      root: {
+        type: "split",
+        dir: "row",
+        sizes: [0.5, 0.5],
+        children: [
+          { type: "pane", paneId: "pane-1", content: { kind: "new-thread" } },
+          {
+            type: "pane",
+            paneId: "pane-2",
+            content: {
+              kind: "new-thread",
+              composeId: "compose-7",
+              seed: { projectId: "proj-1", environmentId: "env-1" },
+            },
+          },
+        ],
+      },
+      focusedPaneId: "pane-2",
+    };
+
+    expect(deserializeSplitLayout(serializeSplitLayout(layout))).toEqual(
+      layout,
+    );
+  });
+
+  it("still reads a stored layout whose composer has no compose id", () => {
+    const stored = JSON.stringify({
+      version: 1,
+      layout: {
+        root: {
+          type: "pane",
+          paneId: "pane-1",
+          content: { kind: "new-thread" },
+        },
+        focusedPaneId: "pane-1",
+      },
+    });
+
+    expect(deserializeSplitLayout(stored)?.root).toEqual({
+      type: "pane",
+      paneId: "pane-1",
+      content: { kind: "new-thread" },
+    });
+  });
 });
