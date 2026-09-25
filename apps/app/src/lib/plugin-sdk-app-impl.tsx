@@ -62,6 +62,7 @@ import {
 import { SidebarNavigationIcon } from "@/components/sidebar/SidebarNavigationModel";
 import { useAppNavigationHost } from "./app-navigation-host";
 import { useCodeTheme } from "./plugin-code-theme";
+import { useSplitPanes } from "./plugin-split-panes";
 
 export const pluginSdkAppImplementation = installDeprecatedAliases(
   {
@@ -110,6 +111,7 @@ export const pluginSdkAppImplementation = installDeprecatedAliases(
     useSdk,
     experimental_useProviders: useProviders,
     experimental_useCodeTheme: useCodeTheme,
+    experimental_useSplitPanes: useSplitPanes,
   } satisfies PluginSdkApp,
   { experimental_UrlLink: "UrlLink" },
 );

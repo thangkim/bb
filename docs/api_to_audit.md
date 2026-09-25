@@ -1839,6 +1839,37 @@ while a palette switch resolves, so a consumer never paints an unthemed frame.
 4. **Consumer count.** One consumer today. Confirm a second engine (CodeMirror,
    xterm) needs the same payload before the prefix drops.
 
+## `app.experimental_useSplitPanes` (`@get-bb/plugin-sdk/app`)
+
+**What it does.** Returns `{ isAvailable, openNewThread(options) }`.
+`openNewThread({ side, projectId?, focusPrompt?, atPaneCap? })` opens bb's
+new-thread composer in a pane on `side` of the focused pane, focuses it, and
+navigates to it, the way a thread opens with `threads.open({ split })`.
+Omitting `projectId` seeds the composer with the focused thread's project and
+environment. Because bb has one new-thread composer, a composer already in a
+pane is focused instead (`"focused"`). At the pane cap it refuses (`"at-cap"`)
+unless `atPaneCap: "replace"` puts the composer in the focused pane
+(`"replaced"`). `isAvailable` is false, and every call returns
+`"unavailable"`, on compact viewports and on routes that cannot be shown in a
+pane. It exists so a plugin can own the "split a new thread off" keyboard
+commands (the `pane-splits` plugin) without core keybindings.
+
+**Audit before stabilizing.**
+
+1. **Content kinds.** Only the new-thread composer can be opened. Decide
+   whether the hook should take a pane content (thread, plugin panel) and
+   subsume `experimental_useSidebarThreadSplit`'s open-in-split path, or stay
+   composer-only.
+2. **Vocabulary.** `side` uses `"top" | "bottom"`, while
+   `threads.open({ split })` uses `"top" | "down"` plus `"replace"`. Settle on
+   one before either stabilizes.
+3. **Shared composer.** With one composer, opening beside a thread that
+   belongs to another project retargets the existing composer's project.
+   Confirm that is right, or give panes their own composers first.
+4. **Layout reads.** Plugins read the layout through `useSidebarSplitLayout`,
+   which reports null for a single pane and does not say which pane holds the
+   composer. Decide whether this hook should expose the layout it acts on.
+
 ## `app.experimental_usePluginId` (`@get-bb/plugin-sdk/app`)
 
 **What it does.** Returns the id of the plugin that owns the calling component,
