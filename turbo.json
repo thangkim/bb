@@ -153,6 +153,7 @@
     },
     "prepare:bundled": {
       "dependsOn": ["topo", "^build"],
+      "env": ["VITE_BB_SOURCE_LOCATIONS"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "!dist/**",

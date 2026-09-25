@@ -19,6 +19,7 @@ import {
 import { RUNTIME_EXPORT_MANIFEST } from "./generated/runtime-export-manifest.generated.js";
 import { type PluginBuildToolchain } from "./toolchain.js";
 import { createPluginArtifactMeta } from "./plugin-artifact-meta.js";
+import { loadPluginAppSourceLocations } from "./source-locations-hook.js";
 import {
   isRecord,
   readPluginPackageJsonFile,
@@ -375,6 +376,7 @@ async function buildTailwindCss(
 async function bundledInputPaths(
   metafile: Metafile,
   absWorkingDir: string,
+  virtualNamespaces: readonly string[],
 ): Promise<Set<string>> {
   const paths = new Set<string>();
   await Promise.all(
@@ -382,6 +384,9 @@ async function bundledInputPaths(
       if (
         input.startsWith(`${SHIM_NAMESPACE}:`) ||
         input.startsWith(`${ZOD_LOCALE_STUB_NAMESPACE}:`) ||
+        virtualNamespaces.some((namespace) =>
+          input.startsWith(`${namespace}:`),
+        ) ||
         input.startsWith("(")
       ) {
         return;
@@ -400,6 +405,7 @@ interface PluginAppBuildResult {
 
 interface PluginAppBuildOptions {
   minify: boolean;
+  sourceRoot?: string;
 }
 
 export async function buildPluginApp(
@@ -417,6 +423,9 @@ export async function buildPluginApp(
   const jsPath = join(distDir, "app.js");
   const cssPath = join(distDir, "app.css");
   const metaPath = join(distDir, "app.meta.json");
+  const sourceLocations = await loadPluginAppSourceLocations(
+    options.sourceRoot ?? rootDir,
+  );
 
   const stageDir = await mkdtemp(join(distDir, ".stage-"));
   try {
@@ -445,7 +454,12 @@ export async function buildPluginApp(
         __BB_PLUGIN_ID__: JSON.stringify(pluginId),
       },
       logLevel: "error",
-      plugins: [zodLocaleStubPlugin(), runtimeShimPlugin()],
+      ...sourceLocations?.buildOptions,
+      plugins: [
+        zodLocaleStubPlugin(),
+        ...(sourceLocations === null ? [] : [sourceLocations.plugin]),
+        runtimeShimPlugin(),
+      ],
     });
 
     let authoredCss = "";
@@ -461,7 +475,11 @@ export async function buildPluginApp(
           "esbuild did not return the metafile required for dependency Tailwind scanning",
         );
       }
-      bundledInputs = await bundledInputPaths(bundle.metafile, rootDir);
+      bundledInputs = await bundledInputPaths(
+        bundle.metafile,
+        rootDir,
+        sourceLocations === null ? [] : [sourceLocations.namespace],
+      );
     }
     const tailwindCss = (
       await buildTailwindCss(
@@ -482,7 +500,14 @@ export async function buildPluginApp(
     await writeFile(
       stagedMetaPath,
       JSON.stringify(
-        createPluginArtifactMeta({ packageName, pluginVersion, bbVersion }),
+        {
+          ...createPluginArtifactMeta({
+            packageName,
+            pluginVersion,
+            bbVersion,
+          }),
+          ...(sourceLocations === null ? {} : { sourceLocations: true }),
+        },
         null,
         2,
       ) + "\n",

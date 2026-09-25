@@ -320,6 +320,45 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
     expect(entry?.app.bundle?.compatible).toBe(true);
   }, 120_000);
 
+  it("rebuilds a path plugin at load when source-location stamping is switched", async () => {
+    const fixtures = join(harness.config.dataDir, "fixtures");
+    await mkdir(join(fixtures, "plugins", "building-mode"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(fixtures, "plugins", "building-mode", "esbuild-source-locations.ts"),
+      'export function pluginAppSourceLocations() { return { namespace: "bb-test-stamp", buildOptions: { keepNames: true }, plugin: { name: "bb-test-stamp", setup() {} } }; }\n',
+    );
+    const rootDir = join(fixtures, "bb-plugin-stamped");
+    await writeAppPluginFixture(rootDir, { name: "bb-plugin-stamped" });
+    const metaPath = join(rootDir, "dist", "app.meta.json");
+    const previousFlag = process.env.VITE_BB_SOURCE_LOCATIONS;
+    try {
+      delete process.env.VITE_BB_SOURCE_LOCATIONS;
+      await harness.pluginService.installPath(rootDir);
+      expect(JSON.parse(await readFile(metaPath, "utf8"))).not.toHaveProperty(
+        "sourceLocations",
+      );
+
+      process.env.VITE_BB_SOURCE_LOCATIONS = "1";
+      await harness.pluginService.reload("stamped");
+      expect(JSON.parse(await readFile(metaPath, "utf8"))).toHaveProperty(
+        "sourceLocations",
+        true,
+      );
+
+      delete process.env.VITE_BB_SOURCE_LOCATIONS;
+      await harness.pluginService.reload("stamped");
+      expect(JSON.parse(await readFile(metaPath, "utf8"))).not.toHaveProperty(
+        "sourceLocations",
+      );
+    } finally {
+      if (previousFlag === undefined)
+        delete process.env.VITE_BB_SOURCE_LOCATIONS;
+      else process.env.VITE_BB_SOURCE_LOCATIONS = previousFlag;
+    }
+  }, 120_000);
+
   it("keeps an npm plugin's backend running with compatible:false on a major mismatch (no rebuild)", async () => {
     const rootDir = join(harness.config.dataDir, "fixtures", "bb-plugin-oldie");
     await writeAppPluginFixture(rootDir, { name: "bb-plugin-oldie" });
