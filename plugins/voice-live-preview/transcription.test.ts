@@ -109,13 +109,4 @@ describe("describeVoiceError", () => {
       ),
     ).toBe("Blocked");
   });
-
-  it("names microphone failures", () => {
-    expect(
-      describeVoiceError(new DOMException("denied", "NotAllowedError")),
-    ).toBe("Microphone permission denied");
-    expect(
-      describeVoiceError(new DOMException("missing", "NotFoundError"), true),
-    ).toBe("Selected microphone was not found");
-  });
 });

@@ -1,5 +1,3 @@
-export const CHUNK_TIMESLICE_MS = 250;
-
 export const DRAFT_POLICY = {
   firstDelayMs: 3_000,
   minAudioMs: 3_000,
@@ -13,8 +11,8 @@ export const DRAFT_POLICY = {
 
 export interface DraftSchedulerDeps {
   now(): number;
-  chunkCount(): number;
-  request(chunkCount: number, signal: AbortSignal): Promise<string>;
+  recordedMs(): number;
+  request(signal: AbortSignal): Promise<string>;
   onDraft(text: string): void;
 }
 
@@ -35,7 +33,7 @@ export function createDraftScheduler(deps: DraftSchedulerDeps): DraftScheduler {
   let startedAtMs = 0;
   let intervalMs: number = DRAFT_POLICY.firstDelayMs;
   let requestCount = 0;
-  let sentChunkCount = 0;
+  let sentRecordedMs = 0;
   let draft = "";
   let timer: ReturnType<typeof setTimeout> | null = null;
   let inFlight: Promise<void> | null = null;
@@ -66,7 +64,7 @@ export function createDraftScheduler(deps: DraftSchedulerDeps): DraftScheduler {
     abortInFlight = null;
   };
 
-  const send = async (chunkCount: number): Promise<boolean> => {
+  const send = async (): Promise<boolean> => {
     const controller = new AbortController();
     const timeout = setTimeout(
       () =>
@@ -75,7 +73,7 @@ export function createDraftScheduler(deps: DraftSchedulerDeps): DraftScheduler {
     );
     abortInFlight = () => controller.abort();
     try {
-      const text = await deps.request(chunkCount, controller.signal);
+      const text = await deps.request(controller.signal);
       if (controller.signal.aborted) return false;
       const normalized = normalizeTranscript(text);
       if (normalized.length > 0) {
@@ -101,8 +99,8 @@ export function createDraftScheduler(deps: DraftSchedulerDeps): DraftScheduler {
       halt();
       return;
     }
-    const chunkCount = deps.chunkCount();
-    const newAudioMs = (chunkCount - sentChunkCount) * CHUNK_TIMESLICE_MS;
+    const recordedMs = deps.recordedMs();
+    const newAudioMs = recordedMs - sentRecordedMs;
     if (
       elapsedMs < DRAFT_POLICY.minAudioMs ||
       newAudioMs < DRAFT_POLICY.minNewAudioMs
@@ -110,9 +108,9 @@ export function createDraftScheduler(deps: DraftSchedulerDeps): DraftScheduler {
       schedule(intervalMs);
       return;
     }
-    sentChunkCount = chunkCount;
+    sentRecordedMs = recordedMs;
     requestCount += 1;
-    const request = send(chunkCount);
+    const request = send();
     const settled = request.then(() => undefined);
     inFlight = settled;
     const succeeded = await request;
@@ -135,7 +133,7 @@ export function createDraftScheduler(deps: DraftSchedulerDeps): DraftScheduler {
       startedAtMs = startedAt;
       intervalMs = DRAFT_POLICY.firstDelayMs;
       requestCount = 0;
-      sentChunkCount = 0;
+      sentRecordedMs = 0;
       draft = "";
       schedule(DRAFT_POLICY.firstDelayMs);
     },
