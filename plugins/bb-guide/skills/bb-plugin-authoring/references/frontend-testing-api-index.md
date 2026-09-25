@@ -12,6 +12,7 @@ Read `testing.md` for examples and fidelity limits.
 - `NavigateCall`
 - `ExperimentalFixedTabOpenCall`
 - `ComposerLog`
+- `ComposerProvisionalTextCall`
 - `SidebarActionCall`
 - `SidebarNavigationCall`
 - `installTestPluginRuntime`

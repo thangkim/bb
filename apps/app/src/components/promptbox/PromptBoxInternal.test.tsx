@@ -34,6 +34,7 @@ import {
   useComposer,
   useComposerView,
 } from "@/lib/plugin-sdk-hooks";
+import type { ExperimentalComposerProvisionalText } from "@get-bb/plugin-sdk";
 import {
   getComposerTextEffects,
   useComposerTextEffects,
@@ -2338,6 +2339,168 @@ describe("PromptBoxInternal plugin composer actions", () => {
 
     completions[0]?.();
     expect(staleWrite).not.toHaveBeenCalled();
+  });
+
+  it("paints provisional text at the anchor and commits it as one undo step", async () => {
+    const captured: { preview: ExperimentalComposerProvisionalText | null } = {
+      preview: null,
+    };
+    function DictateProbe() {
+      const composer = useComposer();
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              captured.preview = composer.experimental_beginProvisionalText();
+            }}
+          >
+            Begin preview
+          </button>
+          <button
+            type="button"
+            onClick={() => captured.preview?.update("so far")}
+          >
+            Update preview
+          </button>
+          <button
+            type="button"
+            onClick={() => captured.preview?.commit("  final   words ")}
+          >
+            Commit preview
+          </button>
+        </>
+      );
+    }
+    setPluginSlotRegistrations(
+      "dictate",
+      pluginRegistrationSet([
+        { id: "tools", actions: [{ id: "probe", component: DictateProbe }] },
+      ]),
+    );
+    const draft = emptyPromptDraftState();
+    const host: PluginComposerHost = {
+      scope: { kind: "thread", threadId: "provisional-thread" },
+      textEffectKey: "provisional-text-composer",
+      getCurrent: () => draft,
+      subscribeDraft: () => () => {},
+      setDraft: vi.fn(),
+      focus: vi.fn(),
+    };
+    const changes: string[] = [];
+    function Harness() {
+      const [value, setValue] = useState("Hello world");
+      return (
+        <MemoryRouter>
+          <PluginComposerHostProvider value={host}>
+            <PromptBoxInternal
+              {...createPromptBoxProps({
+                value,
+                onChange: (next) => {
+                  changes.push(next);
+                  setValue(next);
+                },
+              })}
+            />
+          </PluginComposerHostProvider>
+        </MemoryRouter>
+      );
+    }
+    render(<Harness />);
+    await waitFor(() => getPromptEditorElement());
+
+    fireEvent.click(screen.getByRole("button", { name: "Begin preview" }));
+    expect(captured.preview).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Update preview" }));
+
+    const painted = document.querySelector("[data-promptbox-provisional-text]");
+    expect(painted?.textContent).toBe(" so far");
+    expect(painted?.getAttribute("aria-hidden")).toBe("true");
+    expect(getPromptEditorElement().textContent).toBe("Hello world so far");
+    expect(changes).toEqual([]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Commit preview" }));
+    await waitFor(() => {
+      expect(changes.at(-1)).toBe("Hello world final words");
+    });
+    expect(
+      document.querySelector("[data-promptbox-provisional-text]"),
+    ).toBeNull();
+
+    const editor = (getPromptEditorElement() as TiptapEditorHTMLElement).editor;
+    act(() => {
+      editor?.commands.undo();
+    });
+    await waitFor(() => {
+      expect(changes.at(-1)).toBe("Hello world");
+    });
+  });
+
+  it("cancels provisional text when the action's composer scope changes", async () => {
+    const captured: { preview: ExperimentalComposerProvisionalText | null } = {
+      preview: null,
+    };
+    function PreviewProbe() {
+      const composer = useComposer();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            captured.preview = composer.experimental_beginProvisionalText();
+            captured.preview?.update("listening");
+          }}
+        >
+          Listen
+        </button>
+      );
+    }
+    setPluginSlotRegistrations(
+      "dictate-scope",
+      pluginRegistrationSet([
+        { id: "tools", actions: [{ id: "probe", component: PreviewProbe }] },
+      ]),
+    );
+    const draft = emptyPromptDraftState();
+    const host = (threadId: string): PluginComposerHost => ({
+      scope: { kind: "thread", threadId },
+      textEffectKey: `provisional-scope:${threadId}`,
+      getCurrent: () => draft,
+      subscribeDraft: () => () => {},
+      setDraft: vi.fn(),
+      focus: vi.fn(),
+    });
+    const onChange = vi.fn();
+    const props = createPromptBoxProps({ value: "Draft", onChange });
+    const rendered = render(
+      <MemoryRouter>
+        <PluginComposerHostProvider value={host("one")}>
+          <PromptBoxInternal {...props} />
+        </PluginComposerHostProvider>
+      </MemoryRouter>,
+    );
+    await waitFor(() => getPromptEditorElement());
+    fireEvent.click(screen.getByRole("button", { name: "Listen" }));
+    expect(
+      document.querySelector("[data-promptbox-provisional-text]")?.textContent,
+    ).toBe(" listening");
+    const stale = captured.preview;
+
+    rendered.rerender(
+      <MemoryRouter>
+        <PluginComposerHostProvider value={host("two")}>
+          <PromptBoxInternal {...props} />
+        </PluginComposerHostProvider>
+      </MemoryRouter>,
+    );
+    act(() => {
+      stale?.commit("stale words");
+    });
+
+    expect(
+      document.querySelector("[data-promptbox-provisional-text]"),
+    ).toBeNull();
+    expect(getPromptEditorElement().textContent).toBe("Draft");
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("does not mount plugin actions in compact layout", () => {

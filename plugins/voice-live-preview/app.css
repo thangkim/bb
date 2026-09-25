@@ -1,0 +1,4 @@
+[data-promptbox-action-row]:has([data-voice-live-preview])
+  button[data-promptbox-expanded-only][aria-label="Start voice input"] {
+  display: none;
+}
