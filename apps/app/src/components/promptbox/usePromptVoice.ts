@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
+import { useSystemConfig } from "@/hooks/queries/system-queries";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { transcribeVoiceInput } from "@/lib/api";
 import type { PromptBoxHandle, PromptVoiceConfig } from "./PromptBoxInternal";
@@ -25,6 +26,8 @@ export function usePromptVoice(
   promptBoxRef: RefObject<PromptBoxHandle | null>,
 ): PromptVoiceConfig {
   const pluginSessionRef = useRef<PromptVoiceSession | null>(null);
+  const serviceRunsLocally =
+    useSystemConfig().data?.voiceTranscriptionRunsLocally ?? false;
   const onTranscript = useCallback(
     (text: string) => {
       const pluginSession = pluginSessionRef.current;
@@ -71,12 +74,13 @@ export function usePromptVoice(
           readRecording,
           transcribe: (file, signal) =>
             requestVoiceTranscription({ file, promptContext, signal }),
+          serviceRunsLocally,
         }) ?? null;
       return;
     }
     pluginSessionRef.current?.end();
     pluginSessionRef.current = null;
-  }, [promptBoxRef, readRecording, state]);
+  }, [promptBoxRef, readRecording, serviceRunsLocally, state]);
   useEffect(
     () => () => {
       pluginSessionRef.current?.end();

@@ -50,7 +50,11 @@ function start(
   const session = startPluginVoiceSession({
     voiceInput: voiceInput === null ? null : resolved(voiceInput),
     editor,
-    input: { readRecording: () => recording, transcribe },
+    input: {
+      readRecording: () => recording,
+      transcribe,
+      serviceRunsLocally: true,
+    },
     insertAtCaret,
   });
   return { session, insertAtCaret, transcribe };
@@ -84,6 +88,7 @@ describe("startPluginVoiceSession", () => {
     });
 
     expect(received?.readRecording()).toBe(recording);
+    expect(received?.serviceRunsLocally).toBe(true);
     const signal = new AbortController().signal;
     await expect(received?.transcribe(recording, { signal })).resolves.toBe(
       "draft words",

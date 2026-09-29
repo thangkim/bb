@@ -31,6 +31,7 @@ export function makeSystemConfig(
     primaryHostId: null,
     primaryHostPlatform: null,
     voiceTranscriptionEnabled: false,
+    voiceTranscriptionRunsLocally: false,
     dataDir: "/tmp/bb-test",
     ...overrides,
   };

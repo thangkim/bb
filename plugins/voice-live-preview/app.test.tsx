@@ -17,7 +17,10 @@ function recordingOf(text: string): File {
   return new File([text], "recording.webm", { type: "audio/webm" });
 }
 
-function fakeSession(transcribe: Transcribe) {
+function fakeSession(
+  transcribe: Transcribe,
+  options: { serviceRunsLocally?: boolean } = {},
+) {
   const controller = new AbortController();
   const previews: string[] = [];
   const provisionalText: ExperimentalComposerProvisionalText = {
@@ -28,6 +31,7 @@ function fakeSession(transcribe: Transcribe) {
   const session: ExperimentalComposerVoiceSession = {
     readRecording: () => recordingOf("so far"),
     transcribe: vi.fn(transcribe),
+    serviceRunsLocally: options.serviceRunsLocally ?? false,
     provisionalText,
     signal: controller.signal,
   };
@@ -86,6 +90,21 @@ describe("live voice session", () => {
     const final = recordingOf("everything");
     await expect(recording.finish(final)).resolves.toBe("Final words");
     expect(vi.mocked(session.transcribe).mock.calls.at(-1)?.[0]).toBe(final);
+  });
+
+  it("drafts every second when the voice service runs locally", async () => {
+    const { recording, previews, session } = fakeSession(
+      async () => `draft ${previews.length + 1}`,
+      { serviceRunsLocally: true },
+    );
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(previews).toEqual(["draft 1"]);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(previews).toEqual(["draft 1", "draft 2", "draft 3"]);
+    expect(session.transcribe).toHaveBeenCalledTimes(3);
+
+    await recording.finish(recordingOf("everything"));
   });
 
   it("waits for an in-flight draft before the final request", async () => {

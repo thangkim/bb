@@ -5,6 +5,7 @@ import {
   isAiTaskAvailable,
   runTextAiTask,
 } from "../../src/services/ai/ai-tasks.js";
+import { resolveVoiceTranscriptionRunsLocally } from "../../src/services/ai/voice-transcription.js";
 import { registerFakeAiService } from "../helpers/ai-services.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
@@ -364,6 +365,45 @@ describe("AI task routing", () => {
         serviceId: "bb",
       });
       expect(isAiTaskAvailable(harness.deps, "voice")).toBe(false);
+    });
+  });
+
+  it("reports whether the voice service in use runs locally", async () => {
+    await withTestHarness({}, async (harness) => {
+      registerFakeAiService(harness.deps.aiServices, {
+        id: "codex",
+        pluginId: "provider-codex",
+        builtin: true,
+        transcribe: async () => "hello",
+        status: async () => ({ ready: true }),
+      });
+      registerFakeAiService(harness.deps.aiServices, {
+        id: "local-whisper",
+        pluginId: "local-whisper",
+        complete: null,
+        transcribe: async () => "hello",
+        status: async () => ({ ready: true }),
+        runsLocally: true,
+      });
+      await Promise.all([
+        harness.deps.aiServices.status({
+          pluginId: "provider-codex",
+          serviceId: "codex",
+        }),
+        harness.deps.aiServices.status({
+          pluginId: "local-whisper",
+          serviceId: "local-whisper",
+        }),
+      ]);
+
+      expect(resolveVoiceTranscriptionRunsLocally(harness.deps)).toBe(false);
+
+      setAiServiceSelection(harness.deps.db, "voice", {
+        mode: "service",
+        pluginId: "local-whisper",
+        serviceId: "local-whisper",
+      });
+      expect(resolveVoiceTranscriptionRunsLocally(harness.deps)).toBe(true);
     });
   });
 });

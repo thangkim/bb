@@ -1136,6 +1136,7 @@ export interface NormalizedPluginAiService {
     PluginAiServiceDeclaration["transcribe"]
   > | null;
   readonly status: NonNullable<PluginAiServiceDeclaration["status"]> | null;
+  readonly runsLocally: boolean;
 }
 
 const RESERVED_AI_SERVICE_IDS: ReadonlySet<string> = new Set([
@@ -1200,7 +1201,18 @@ export function validatePluginAiServiceDeclaration(
       `AI service "${id}" must declare complete, transcribe, or both`,
     );
   }
-  return Object.freeze({ id, displayName, complete, transcribe, status });
+  const runsLocally = declaration.runsLocally ?? false;
+  if (typeof runsLocally !== "boolean") {
+    throw new Error(`AI service "${id}" runsLocally must be a boolean`);
+  }
+  return Object.freeze({
+    id,
+    displayName,
+    complete,
+    transcribe,
+    status,
+    runsLocally,
+  });
 }
 
 /** The collision a plugin's second registration of one AI-service id raises. */

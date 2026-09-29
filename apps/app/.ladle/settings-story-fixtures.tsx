@@ -204,6 +204,7 @@ const systemConfig = makeSystemConfig({
   primaryHostId: HOST_IDS.local,
   primaryHostPlatform: "darwin",
   voiceTranscriptionEnabled: true,
+  voiceTranscriptionRunsLocally: false,
   dataDir: "/Users/michael/.bb",
 });
 

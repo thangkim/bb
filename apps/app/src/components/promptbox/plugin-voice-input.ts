@@ -10,6 +10,7 @@ import {
 export interface PromptVoiceSessionInput {
   readRecording(): File;
   transcribe(audio: File, signal: AbortSignal): Promise<string>;
+  serviceRunsLocally: boolean;
 }
 
 export interface PromptVoiceSession {
@@ -55,6 +56,7 @@ export function startPluginVoiceSession({
     recording = voiceInput.voiceInput.start({
       readRecording: () => input.readRecording(),
       transcribe: (audio, { signal }) => input.transcribe(audio, signal),
+      serviceRunsLocally: input.serviceRunsLocally,
       provisionalText,
       signal: controller.signal,
     });

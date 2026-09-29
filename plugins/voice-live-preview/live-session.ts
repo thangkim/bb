@@ -2,7 +2,11 @@ import type {
   ExperimentalComposerVoiceRecording,
   ExperimentalComposerVoiceSession,
 } from "@get-bb/plugin-sdk/app";
-import { createDraftScheduler } from "./draft-scheduler.js";
+import {
+  CLOUD_DRAFT_POLICY,
+  LOCAL_DRAFT_POLICY,
+  createDraftScheduler,
+} from "./draft-scheduler.js";
 import { describeVoiceError, runFinalTranscription } from "./transcription.js";
 
 export interface LiveSessionToasts {
@@ -37,6 +41,9 @@ export function startLiveVoiceSession(
 ): ExperimentalComposerVoiceRecording {
   const startedAtMs = Date.now();
   const scheduler = createDraftScheduler({
+    policy: session.serviceRunsLocally
+      ? LOCAL_DRAFT_POLICY
+      : CLOUD_DRAFT_POLICY,
     now: () => Date.now(),
     recordedMs: () => Date.now() - startedAtMs,
     request: (signal) => {

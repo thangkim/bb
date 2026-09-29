@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  CLOUD_DRAFT_POLICY,
+  LOCAL_DRAFT_POLICY,
   createDraftScheduler,
+  type DraftPolicy,
   type DraftSchedulerDeps,
 } from "./draft-scheduler.js";
 
@@ -9,9 +12,11 @@ let startedAt = 0;
 function recordingScheduler(
   request: DraftSchedulerDeps["request"],
   recordedMs: () => number = () => Date.now() - startedAt,
+  policy: DraftPolicy = CLOUD_DRAFT_POLICY,
 ) {
   const drafts: string[] = [];
   const scheduler = createDraftScheduler({
+    policy,
     now: () => Date.now(),
     recordedMs,
     request,
@@ -201,5 +206,73 @@ describe("createDraftScheduler", () => {
     expect(scheduler.lastDraft()).toBe("");
     scheduler.stop();
     expect(signals[1]?.aborted).toBe(true);
+  });
+
+  describe("for a service that runs locally", () => {
+    const elapsed = () => Date.now() - startedAt;
+
+    it("sends a draft every second from the first second", async () => {
+      const request = vi.fn(async () => "draft");
+      const { scheduler } = recordingScheduler(
+        request,
+        elapsed,
+        LOCAL_DRAFT_POLICY,
+      );
+
+      await vi.advanceTimersByTimeAsync(999);
+      expect(request).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(request).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(9_000);
+      expect(request).toHaveBeenCalledTimes(10);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(request).toHaveBeenCalledTimes(70);
+      scheduler.stop();
+    });
+
+    it("sends the next draft as soon as a slow one returns", async () => {
+      const sentAt: number[] = [];
+      const request = vi.fn(async () => {
+        sentAt.push(Date.now() - startedAt);
+        await new Promise((resolve) => setTimeout(resolve, 1_600));
+        return "draft";
+      });
+      const { scheduler } = recordingScheduler(
+        request,
+        elapsed,
+        LOCAL_DRAFT_POLICY,
+      );
+
+      await vi.advanceTimersByTimeAsync(6_000);
+
+      expect(sentAt).toHaveLength(4);
+      expect(sentAt[0]).toBe(1_000);
+      for (let index = 1; index < sentAt.length; index += 1) {
+        const gap = sentAt[index]! - sentAt[index - 1]!;
+        expect(gap).toBeGreaterThanOrEqual(1_600);
+        expect(gap).toBeLessThan(1_610);
+      }
+      scheduler.stop();
+    });
+
+    it("keeps drafting through two failures and stops after three in a row", async () => {
+      const outcomes = [false, false, true, false, false, false];
+      const request = vi.fn(async () => {
+        if (outcomes.shift() === false) throw new Error("model loading");
+        return "draft";
+      });
+      const { scheduler, drafts } = recordingScheduler(
+        request,
+        elapsed,
+        LOCAL_DRAFT_POLICY,
+      );
+
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(request).toHaveBeenCalledTimes(6);
+      expect(drafts).toEqual(["draft"]);
+      scheduler.stop();
+    });
   });
 });

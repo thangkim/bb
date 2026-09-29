@@ -21,8 +21,29 @@ describe("validatePluginAiServiceDeclaration", () => {
       complete,
       transcribe: null,
       status,
+      runsLocally: false,
     });
     expect(Object.isFrozen(normalized)).toBe(true);
+  });
+
+  it("carries runsLocally and rejects a non-boolean value", () => {
+    expect(
+      validatePluginAiServiceDeclaration({
+        id: "local-voice",
+        displayName: "Local voice",
+        transcribe,
+        runsLocally: true,
+      }),
+    ).toMatchObject({ runsLocally: true });
+    expect(() =>
+      validatePluginAiServiceDeclaration({
+        id: "local-voice",
+        displayName: "Local voice",
+        transcribe,
+        // @ts-expect-error — a string is not a boolean.
+        runsLocally: "yes",
+      }),
+    ).toThrow('AI service "local-voice" runsLocally must be a boolean');
   });
 
   it("accepts a transcribe-only service", () => {

@@ -112,15 +112,24 @@ export function aiTaskServices(
   return service === null ? [] : [service];
 }
 
+export function availableAiTaskService(
+  deps: Pick<AiTaskDeps, "aiServices" | "db">,
+  task: AiTask,
+): AiServiceRegistration | null {
+  const selection = getAiServiceSelections(deps.db)[task];
+  return (
+    aiTaskServices(deps, task, selection).find(
+      (service) =>
+        deps.aiServices.peekStatus(aiServiceKey(service))?.ready === true,
+    ) ?? null
+  );
+}
+
 export function isAiTaskAvailable(
   deps: Pick<AiTaskDeps, "aiServices" | "db">,
   task: AiTask,
 ): boolean {
-  const selection = getAiServiceSelections(deps.db)[task];
-  return aiTaskServices(deps, task, selection).some(
-    (service) =>
-      deps.aiServices.peekStatus(aiServiceKey(service))?.ready === true,
-  );
+  return availableAiTaskService(deps, task) !== null;
 }
 
 function linkedSignal(

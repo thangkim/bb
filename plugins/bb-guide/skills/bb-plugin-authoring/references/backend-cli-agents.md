@@ -299,6 +299,9 @@ bb.experimental_aiServices.register({
 - `status()` is optional. Its message shows beside the service in the picker.
   A service that is not ready is skipped by Automatic and hides the
   microphone. bb caches the result for about 10 seconds.
+- `runsLocally: true` declares that the service runs on the user's machine
+  with no per-request cost. Voice-input plugins see it as
+  `session.serviceRunsLocally` and may send live drafts more often.
 - The plugin owns everything behind the function: model, API, retries. Failure
   is a rejected promise. bb aborts `signal` after 5 seconds for text and 10
   seconds for voice.

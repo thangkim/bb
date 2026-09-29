@@ -1,6 +1,10 @@
 import type { LoggedWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { isAiTaskAvailable, runAiTask } from "./ai-tasks.js";
+import {
+  availableAiTaskService,
+  isAiTaskAvailable,
+  runAiTask,
+} from "./ai-tasks.js";
 
 interface TranscribeVoiceInputArgs {
   file: File;
@@ -14,6 +18,12 @@ export function resolveVoiceTranscriptionEnabled(
   deps: LoggedWorkSessionDeps,
 ): boolean {
   return isAiTaskAvailable(deps, "voice");
+}
+
+export function resolveVoiceTranscriptionRunsLocally(
+  deps: LoggedWorkSessionDeps,
+): boolean {
+  return availableAiTaskService(deps, "voice")?.runsLocally ?? false;
 }
 
 function trimPrompt(prompt: string | undefined): string | null {

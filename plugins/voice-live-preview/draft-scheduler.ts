@@ -1,4 +1,17 @@
-export const DRAFT_POLICY = {
+export interface DraftPolicy {
+  readonly firstDelayMs: number;
+  readonly minAudioMs: number;
+  readonly minNewAudioMs: number;
+  readonly intervalGrowth: number;
+  readonly maxIntervalMs: number;
+  readonly maxRequests: number;
+  readonly maxRecordingMs: number;
+  readonly timeoutMs: number;
+  readonly maxFailures: number;
+  readonly intervalFromSend: boolean;
+}
+
+export const CLOUD_DRAFT_POLICY: DraftPolicy = {
   firstDelayMs: 3_000,
   minAudioMs: 3_000,
   minNewAudioMs: 2_500,
@@ -7,9 +20,25 @@ export const DRAFT_POLICY = {
   maxRequests: 12,
   maxRecordingMs: 180_000,
   timeoutMs: 4_000,
-} as const;
+  maxFailures: 1,
+  intervalFromSend: false,
+};
+
+export const LOCAL_DRAFT_POLICY: DraftPolicy = {
+  firstDelayMs: 1_000,
+  minAudioMs: 1_000,
+  minNewAudioMs: 600,
+  intervalGrowth: 1,
+  maxIntervalMs: 1_000,
+  maxRequests: 1_200,
+  maxRecordingMs: 600_000,
+  timeoutMs: 8_000,
+  maxFailures: 3,
+  intervalFromSend: true,
+};
 
 export interface DraftSchedulerDeps {
+  policy: DraftPolicy;
   now(): number;
   recordedMs(): number;
   request(signal: AbortSignal): Promise<string>;
@@ -29,10 +58,12 @@ export function normalizeTranscript(text: string): string {
 }
 
 export function createDraftScheduler(deps: DraftSchedulerDeps): DraftScheduler {
+  const { policy } = deps;
   let stopped = true;
   let startedAtMs = 0;
-  let intervalMs: number = DRAFT_POLICY.firstDelayMs;
+  let intervalMs: number = policy.firstDelayMs;
   let requestCount = 0;
+  let consecutiveFailures = 0;
   let sentRecordedMs = 0;
   let draft = "";
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -69,7 +100,7 @@ export function createDraftScheduler(deps: DraftSchedulerDeps): DraftScheduler {
     const timeout = setTimeout(
       () =>
         controller.abort(new DOMException("Draft timed out", "TimeoutError")),
-      DRAFT_POLICY.timeoutMs,
+      policy.timeoutMs,
     );
     abortInFlight = () => controller.abort();
     try {
@@ -93,37 +124,45 @@ export function createDraftScheduler(deps: DraftSchedulerDeps): DraftScheduler {
     if (stopped) return;
     const elapsedMs = deps.now() - startedAtMs;
     if (
-      elapsedMs > DRAFT_POLICY.maxRecordingMs ||
-      requestCount >= DRAFT_POLICY.maxRequests
+      elapsedMs > policy.maxRecordingMs ||
+      requestCount >= policy.maxRequests
     ) {
       halt();
       return;
     }
     const recordedMs = deps.recordedMs();
     const newAudioMs = recordedMs - sentRecordedMs;
-    if (
-      elapsedMs < DRAFT_POLICY.minAudioMs ||
-      newAudioMs < DRAFT_POLICY.minNewAudioMs
-    ) {
+    if (elapsedMs < policy.minAudioMs || newAudioMs < policy.minNewAudioMs) {
       schedule(intervalMs);
       return;
     }
     sentRecordedMs = recordedMs;
     requestCount += 1;
+    const sentAtMs = deps.now();
+    const nextDelay = () =>
+      policy.intervalFromSend
+        ? Math.max(0, intervalMs - (deps.now() - sentAtMs))
+        : intervalMs;
     const request = send();
     const settled = request.then(() => undefined);
     inFlight = settled;
     const succeeded = await request;
     if (inFlight === settled) inFlight = null;
     if (!succeeded) {
-      halt();
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= policy.maxFailures) {
+        halt();
+        return;
+      }
+      schedule(nextDelay());
       return;
     }
+    consecutiveFailures = 0;
     intervalMs = Math.min(
-      DRAFT_POLICY.maxIntervalMs,
-      Math.round(intervalMs * DRAFT_POLICY.intervalGrowth),
+      policy.maxIntervalMs,
+      Math.round(intervalMs * policy.intervalGrowth),
     );
-    schedule(intervalMs);
+    schedule(nextDelay());
   };
 
   return {
@@ -131,11 +170,12 @@ export function createDraftScheduler(deps: DraftSchedulerDeps): DraftScheduler {
       stop();
       stopped = false;
       startedAtMs = startedAt;
-      intervalMs = DRAFT_POLICY.firstDelayMs;
+      intervalMs = policy.firstDelayMs;
       requestCount = 0;
+      consecutiveFailures = 0;
       sentRecordedMs = 0;
       draft = "";
-      schedule(DRAFT_POLICY.firstDelayMs);
+      schedule(policy.firstDelayMs);
     },
     halt,
     stop,

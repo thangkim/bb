@@ -61,6 +61,7 @@ import {
 } from "../services/ai/ai-services-view.js";
 import {
   resolveVoiceTranscriptionEnabled,
+  resolveVoiceTranscriptionRunsLocally,
   transcribeVoiceInput,
 } from "../services/ai/voice-transcription.js";
 import {
@@ -222,6 +223,7 @@ export function registerSystemRoutes(
           ? null
           : deps.hub.getDaemonPlatformForHost(primaryHostId),
       voiceTranscriptionEnabled: resolveVoiceTranscriptionEnabled(deps),
+      voiceTranscriptionRunsLocally: resolveVoiceTranscriptionRunsLocally(deps),
       dataDir: deps.config.dataDir,
     };
   }
