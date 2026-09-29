@@ -43,7 +43,6 @@ const unavailableSystemConfig: SystemConfigResponse = {
   primaryHostId: null,
   primaryHostPlatform: null,
   voiceTranscriptionEnabled: false,
-  voiceTranscriptionRunsLocally: false,
   dataDir: "",
 };
 

@@ -19,7 +19,6 @@ function service(
     complete: async () => "reply",
     transcribe: null,
     status,
-    runsLocally: false,
   };
 }
 

@@ -2411,12 +2411,6 @@ export interface ExperimentalComposerVoiceSession {
    */
   transcribe(audio: File, options: { signal: AbortSignal }): Promise<string>;
   /**
-   * Whether the voice service `transcribe` reaches when the recording starts
-   * runs on the user's machine (`PluginAiServiceDeclaration.runsLocally`), so
-   * requests cost nothing and live drafts can be sent more often.
-   */
-  readonly serviceRunsLocally: boolean;
-  /**
    * A preview at the caret, as from `useComposer().experimental_beginProvisionalText`,
    * or null when the composer has no editor. Use `update` while recording;
    * bb commits it with the text `finish` resolves with and cancels it when

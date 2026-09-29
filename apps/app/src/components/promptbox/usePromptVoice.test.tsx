@@ -16,16 +16,6 @@ vi.mock("@/hooks/useVoiceInput", () => ({
   useVoiceInput: vi.fn(),
 }));
 
-const systemConfig = vi.hoisted(() => ({
-  data: { voiceTranscriptionRunsLocally: false } as
-    | { voiceTranscriptionRunsLocally: boolean }
-    | undefined,
-}));
-
-vi.mock("@/hooks/queries/system-queries", () => ({
-  useSystemConfig: () => systemConfig,
-}));
-
 type VoiceState = "idle" | "recording" | "transcribing" | "error";
 
 const recordingFile = new File(["so far"], "recording.webm", {
@@ -71,7 +61,6 @@ function latestVoiceOptions() {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
-  systemConfig.data = { voiceTranscriptionRunsLocally: false };
 });
 
 describe("usePromptVoice", () => {
@@ -158,7 +147,6 @@ describe("usePromptVoice", () => {
     mockVoiceInput("recording");
     rerender();
     expect(input?.readRecording()).toBe(recordingFile);
-    expect(input?.serviceRunsLocally).toBe(false);
     vi.mocked(transcribeVoiceInput).mockResolvedValue({ text: "Draft" });
     const signal = new AbortController().signal;
     await expect(input?.transcribe(recordingFile, signal)).resolves.toBe(
@@ -220,41 +208,5 @@ describe("usePromptVoice", () => {
     unmount();
     expect(sessions[1]?.end).toHaveBeenCalledOnce();
     expect(sessions[0]?.finish).not.toHaveBeenCalled();
-  });
-
-  it("tells the plugin session whether the voice service runs locally", () => {
-    systemConfig.data = { voiceTranscriptionRunsLocally: true };
-    mockVoiceInput("idle");
-    let input:
-      | Parameters<PromptBoxHandle["beginPluginVoiceInput"]>[0]
-      | undefined;
-    const promptBoxRef = promptBoxHandle((next) => {
-      input = next;
-      return null;
-    });
-    const { rerender } = renderHook(() => usePromptVoice(promptBoxRef));
-
-    mockVoiceInput("recording");
-    rerender();
-
-    expect(input?.serviceRunsLocally).toBe(true);
-  });
-
-  it("treats a config that has not loaded yet as a remote service", () => {
-    systemConfig.data = undefined;
-    mockVoiceInput("idle");
-    let input:
-      | Parameters<PromptBoxHandle["beginPluginVoiceInput"]>[0]
-      | undefined;
-    const promptBoxRef = promptBoxHandle((next) => {
-      input = next;
-      return null;
-    });
-    const { rerender } = renderHook(() => usePromptVoice(promptBoxRef));
-
-    mockVoiceInput("recording");
-    rerender();
-
-    expect(input?.serviceRunsLocally).toBe(false);
   });
 });

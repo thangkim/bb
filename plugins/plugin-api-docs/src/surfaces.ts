@@ -1206,7 +1206,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Lets a plugin answer bb's helper tasks with plain functions — a prompt in and text out for thread titles and commit messages, and audio in and text out for the microphone button. With this, a plugin can:",
         bullets: [
           "Write thread titles and commit messages with any model or API the plugin chooses",
-          "Transcribe voice input for the microphone button in the prompt box, and declare runsLocally so live previews draft more often",
+          "Transcribe voice input for the microphone button in the prompt box",
           "Appear as a choice per task in Settings → AI services, with a status line that says how to make it ready",
         ],
         apiSymbols: [

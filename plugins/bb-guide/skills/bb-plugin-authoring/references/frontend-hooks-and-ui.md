@@ -159,10 +159,8 @@ banners?, richText?, experimental_voiceInput? })`. Omitted `scopes` means all th
   recording in a matching composer (first matching registration wins). bb
   keeps its buttons, recording bar, Escape-to-cancel and completion
   transition. `session` has `readRecording()` (all audio so far as a `File`),
-  `transcribe(file, { signal })` (bb's transcription route),
-  `serviceRunsLocally` (the voice service declared `runsLocally`, so drafts
-  are cheap to send often), `provisionalText` (a caret preview, or null) and
-  `signal` (aborted when the session ends).
+  `transcribe(file, { signal })` (bb's transcription route), `provisionalText`
+  (a caret preview, or null) and `signal` (aborted when the session ends).
   Return `{ finish(recording) }`: bb calls it on stop instead of transcribing
   and inserts the resolved text at the preview anchor as one undo step; a
   rejection shows bb's "Voice input failed" toast with "Download recording".

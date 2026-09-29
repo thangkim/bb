@@ -55,7 +55,7 @@ Change settings in Settings → Installed plugins → Local Whisper or with `bb 
 - A piece with a second or more of speech is identified by the small language model. Under a second, the language model is trusted when it is at least 90% sure; otherwise the main model decides. Pieces under 0.4 seconds keep the previous piece's language. Speech identified as an unlisted language uses the likeliest listed one.
 - A piece's language is remembered by the recording and its position, and finished spans are cached for 10 minutes, so each live draft identifies only new pieces and transcribes only the span being spoken. Drafts take about a second; the final transcript after live drafts usually takes one to two seconds.
 - Without earlier drafts, identification stops after 5 seconds and the remaining pieces keep the last language, so a long cold recording can lose language switches after that point.
-- The service declares `runsLocally`, so the Voice live preview plugin drafts about every second.
+- The Voice live preview plugin recognizes `local-whisper/local-whisper` as a local service and drafts about every second while it is selected.
 - Every request sends the same fields, because `whisper-server` keeps request options from one request to the next.
 - bb stops waiting for a transcript after 10 seconds. Loading turbo from a cold disk can take longer, so a first request can fail while the model keeps loading; the next one succeeds.
 - The model unloads after `keepLoadedMinutes` without use, when the plugin is disabled or reloaded, and when bb stops.

@@ -1955,13 +1955,6 @@ export interface PluginAiServiceDeclaration {
    * Omit it when the service is always ready.
    */
   readonly status?: () => Promise<PluginAiServiceStatus>;
-  /**
-   * Whether the service runs on the user's own machine, with no per-request
-   * cost or network round trip. bb reports it to voice-input plugins as
-   * `ExperimentalComposerVoiceSession.serviceRunsLocally` so live drafts can
-   * transcribe more often. Defaults to `false`.
-   */
-  readonly runsLocally?: boolean;
 }
 
 export interface PluginAiServices {

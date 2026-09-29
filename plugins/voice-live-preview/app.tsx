@@ -3,6 +3,7 @@ import {
   definePluginApp,
   type PluginCommandRegistration,
 } from "@get-bb/plugin-sdk/app";
+import { fetchDraftPolicy } from "./draft-cadence.js";
 import { startLiveVoiceSession } from "./live-session.js";
 import {
   resolveDictateComposer,
@@ -36,9 +37,11 @@ export default definePluginApp((app) => {
     id: "voice-live-preview",
     experimental_voiceInput: {
       start: (session) =>
-        startLiveVoiceSession(session, {
-          warning: (title, options) => toast.warning(title, options),
-        }),
+        startLiveVoiceSession(
+          session,
+          { warning: (title, options) => toast.warning(title, options) },
+          fetchDraftPolicy(),
+        ),
     },
   });
   app.commands.register(createDictateCommand(isMacPlatform()));

@@ -206,7 +206,6 @@ export default function localWhisperPlugin(bb: BbPluginApi): void {
   bb.experimental_aiServices.register({
     id: SERVICE_ID,
     displayName: "Local Whisper",
-    runsLocally: true,
     async transcribe(audio, { signal, hint }) {
       const result = await transcribeBytes({
         audio: new Uint8Array(await audio.arrayBuffer()),

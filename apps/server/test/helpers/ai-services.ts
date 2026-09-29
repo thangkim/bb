@@ -27,7 +27,6 @@ export interface RegisterFakeAiServiceArgs {
     | ((audio: File, options: PluginAiTranscribeOptions) => Promise<string>)
     | null;
   status?: (() => Promise<PluginAiServiceStatus>) | null;
-  runsLocally?: boolean;
 }
 
 export function registerFakeAiService(
@@ -47,7 +46,6 @@ export function registerFakeAiService(
     displayName: args.displayName ?? "Fake AI",
     pluginId: args.pluginId ?? "fake-ai-plugin",
     builtin: args.builtin ?? false,
-    runsLocally: args.runsLocally ?? false,
     complete:
       complete === null
         ? null

@@ -2489,7 +2489,7 @@ its error codes, `kinds`, the reserved server-direct ids, and the
 Consumers: the codex plugin and the bb-ai plugin.
 
 **What it does.** A plugin registers plain server-side functions:
-`bb.experimental_aiServices.register({ id, displayName, complete?, transcribe?, status?, runsLocally? })`.
+`bb.experimental_aiServices.register({ id, displayName, complete?, transcribe?, status? })`.
 `complete(prompt, { signal }) → Promise<string>` serves thread titles and
 commit messages; `transcribe(audio: File, { signal, hint }) → Promise<string>`
 serves voice input; `status() → Promise<{ ready: true } | { ready: false, message }>`
@@ -2499,11 +2499,6 @@ older). At least one of `complete` / `transcribe` is required; which tasks a
 service appears for follows from the functions it declares. bb owns the
 prompts and the reply cleanup; the plugin owns the model, the API, and any retries. Failure is a
 rejected promise, and core aborts `signal` at 5 s (text) or 10 s (voice).
-`runsLocally` (default `false`) declares that the service runs on the user's
-machine with no per-request cost; `/system/config` reports it for the ready
-voice service in use as `voiceTranscriptionRunsLocally`, and voice-input
-plugins receive it as `ExperimentalComposerVoiceSession.serviceRunsLocally`.
-Consumer: the local-whisper plugin.
 
 The user picks per task in Settings → AI services, `bb settings ai-services
 set`, or `sdk.system.setAiServiceSelection` (`automatic` | `off` |
@@ -2536,9 +2531,6 @@ the service's `signal` when the HTTP request is cancelled.
    Decide whether it should become a user-editable setting.
 5. **Several services per plugin.** Confirm the id-per-registration shape and
    the per-plugin id scope (plugin id plus service id).
-6. **Cost signal.** `runsLocally` stands in for "cheap and fast enough to call
-   often". Decide whether callers need a richer hint (expected latency, a
-   per-request cost, a rate limit) and whether it belongs per task.
 
 ## `PluginFileOpenerSource.experimental_hostId` (`@get-bb/plugin-sdk/app`)
 
@@ -3035,10 +3027,8 @@ suppressed), begins a provisional-text preview at the caret, and calls
 `start(session)`. The `ExperimentalComposerVoiceSession` carries
 `readRecording()` (every 250 ms chunk so far as one file), `transcribe(file,
 { signal })` (bb's own transcription route with the text before the caret at
-recording start as the hint), `serviceRunsLocally` (whether the ready voice
-service at recording start declared `runsLocally`, from
-`/system/config`'s `voiceTranscriptionRunsLocally`), `provisionalText` (null
-without an editor) and `signal`. `start` returns `{ finish(recording) }`. On stop bb calls `finish`
+recording start as the hint), `provisionalText` (null without an editor) and
+`signal`. `start` returns `{ finish(recording) }`. On stop bb calls `finish`
 with the whole recording instead of transcribing, plays its completion
 transition, and inserts the resolved text at the preview anchor (or the caret
 when the preview already ended or the editor was replaced) as one undo step.
@@ -3051,9 +3041,8 @@ native transcription. Backed by `readRecording` on `useVoiceInput`,
 `beginPluginVoiceInput` on the internal `PromptBoxHandle`
 (`plugin-voice-input.ts`), and a `voiceInput` resolution next to the rich-text
 contributions. The validator keeps the plugin's object as registered.
-Consumer: `plugins/voice-live-preview`, which adds live drafts (every second
-when `serviceRunsLocally`, otherwise at growing intervals), a retried final
-request and a last-draft fallback.
+Consumer: `plugins/voice-live-preview`, which adds live drafts, a retried
+final request and a last-draft fallback.
 
 **Audit before stabilizing.**
 
@@ -3071,9 +3060,6 @@ request and a last-draft fallback.
 5. **Crash isolation.** A `finish` rejection is indistinguishable from a
    transcription failure. Decide whether plugin bugs should fall back to
    native transcription instead.
-6. **Service identity.** `serviceRunsLocally` is fixed at recording start and
-   says nothing else about the service. Decide whether sessions should expose
-   the selected service (or a cost/latency hint) instead.
 
 ## Desktop browser control
 

@@ -2545,7 +2545,6 @@ describe("PromptBoxInternal plugin composer actions", () => {
       session = promptBoxRef.current?.beginPluginVoiceInput({
         readRecording: () => new File([], "recording.webm"),
         transcribe: async () => "",
-        serviceRunsLocally: false,
       });
     });
 

@@ -6,6 +6,11 @@ import type {
   ExperimentalComposerVoiceSession,
 } from "@get-bb/plugin-sdk/app";
 import { createDictateCommand } from "./app.js";
+import {
+  CLOUD_DRAFT_POLICY,
+  LOCAL_DRAFT_POLICY,
+  type DraftPolicy,
+} from "./draft-scheduler.js";
 import { startLiveVoiceSession } from "./live-session.js";
 import { toggleNativeDictation, trackFocusedComposer } from "./native-mic.js";
 
@@ -19,7 +24,7 @@ function recordingOf(text: string): File {
 
 function fakeSession(
   transcribe: Transcribe,
-  options: { serviceRunsLocally?: boolean } = {},
+  options: { policy?: Promise<DraftPolicy> } = {},
 ) {
   const controller = new AbortController();
   const previews: string[] = [];
@@ -31,12 +36,15 @@ function fakeSession(
   const session: ExperimentalComposerVoiceSession = {
     readRecording: () => recordingOf("so far"),
     transcribe: vi.fn(transcribe),
-    serviceRunsLocally: options.serviceRunsLocally ?? false,
     provisionalText,
     signal: controller.signal,
   };
   const warning = vi.fn();
-  const recording = startLiveVoiceSession(session, { warning });
+  const recording = startLiveVoiceSession(
+    session,
+    { warning },
+    options.policy ?? Promise.resolve(CLOUD_DRAFT_POLICY),
+  );
   return { controller, previews, session, recording, warning };
 }
 
@@ -95,7 +103,7 @@ describe("live voice session", () => {
   it("drafts every second when the voice service runs locally", async () => {
     const { recording, previews, session } = fakeSession(
       async () => `draft ${previews.length + 1}`,
-      { serviceRunsLocally: true },
+      { policy: Promise.resolve(LOCAL_DRAFT_POLICY) },
     );
 
     await vi.advanceTimersByTimeAsync(1_000);
@@ -105,6 +113,20 @@ describe("live voice session", () => {
     expect(session.transcribe).toHaveBeenCalledTimes(3);
 
     await recording.finish(recordingOf("everything"));
+  });
+
+  it("transcribes the final recording without drafts when it stops before the schedule is known", async () => {
+    const { recording, previews, session } = fakeSession(
+      async () => "Final words",
+      { policy: new Promise<DraftPolicy>(() => {}) },
+    );
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await expect(recording.finish(recordingOf("everything"))).resolves.toBe(
+      "Final words",
+    );
+    expect(previews).toEqual([]);
+    expect(session.transcribe).toHaveBeenCalledOnce();
   });
 
   it("waits for an in-flight draft before the final request", async () => {
