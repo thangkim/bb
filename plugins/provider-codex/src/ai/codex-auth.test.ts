@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { readCodexAuthCredentials } from "./codex-auth.js";
+import { readCodexAiStatus, readCodexAuthCredentials } from "./codex-auth.js";
 
 const tempDirs: string[] = [];
 
@@ -97,5 +97,51 @@ it("reads ChatGPT credentials with the account id from the access token claims",
     accountEmail: "codex@example.com",
     expired: false,
     isFedrampAccount: true,
+  });
+});
+
+it("reports the AI service as not ready once the ChatGPT access token has expired", async () => {
+  const homeDir = await fs.mkdtemp(path.join(os.tmpdir(), "bb-codex-home-"));
+  tempDirs.push(homeDir);
+  vi.stubEnv("HOME", homeDir);
+  vi.stubEnv("CODEX_HOME", "");
+  const base64UrlJson = (value: object) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
+  const writeChatGptAuth = async (expSeconds: number) => {
+    const accessToken = `${base64UrlJson({ alg: "none" })}.${base64UrlJson({
+      exp: expSeconds,
+      "https://api.openai.com/auth": { chatgpt_account_id: "account-123" },
+    })}.sig`;
+    const codexHome = path.join(homeDir, ".codex");
+    await fs.mkdir(codexHome, { recursive: true });
+    await fs.writeFile(
+      path.join(codexHome, "auth.json"),
+      JSON.stringify({
+        auth_mode: "chatgpt",
+        tokens: { access_token: accessToken, refresh_token: "refresh" },
+      }),
+    );
+  };
+
+  await writeChatGptAuth(Math.floor(Date.now() / 1000) - 60);
+  await expect(readCodexAiStatus()).resolves.toEqual({
+    ready: false,
+    message:
+      "Codex sign-in expired. Open Codex or run `codex login` on the primary machine to renew it",
+  });
+
+  await writeChatGptAuth(Math.floor(Date.now() / 1000) + 3600);
+  await expect(readCodexAiStatus()).resolves.toEqual({ ready: true });
+});
+
+it("reports a missing sign-in as not ready", async () => {
+  const homeDir = await fs.mkdtemp(path.join(os.tmpdir(), "bb-codex-home-"));
+  tempDirs.push(homeDir);
+  vi.stubEnv("HOME", homeDir);
+  vi.stubEnv("CODEX_HOME", "");
+
+  await expect(readCodexAiStatus()).resolves.toEqual({
+    ready: false,
+    message: "Run `codex login` on the primary machine to sign in",
   });
 });

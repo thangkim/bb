@@ -8,6 +8,7 @@ import {
 } from "@get-bb/plugin-sdk/provider-bridge";
 import { resolveCodexHome } from "../codex-home.js";
 import { AiServiceFailure } from "./failure.js";
+import type { CodexAiStatus } from "./host-contract.js";
 
 const CODEX_AUTH_FILE_NAME = "auth.json";
 const CHATGPT_AUTH_CLAIM_PATH = "https://api.openai.com/auth";
@@ -222,4 +223,28 @@ export async function readCodexAuthCredentials(): Promise<CodexAuthCredentials> 
         UNUSABLE_AUTH_MESSAGES[auth.reason](auth.authPath),
       );
   }
+}
+
+export async function readCodexAiStatus(): Promise<CodexAiStatus> {
+  let credentials: CodexAuthCredentials;
+  try {
+    credentials = await readCodexAuthCredentials();
+  } catch (error) {
+    return {
+      ready: false,
+      message:
+        error instanceof AiServiceFailure &&
+        error.detailCode !== "codex_auth_missing"
+          ? error.message
+          : "Run `codex login` on the primary machine to sign in",
+    };
+  }
+  if (credentials.type === "chatgpt" && credentials.expired) {
+    return {
+      ready: false,
+      message:
+        "Codex sign-in expired. Open Codex or run `codex login` on the primary machine to renew it",
+    };
+  }
+  return { ready: true };
 }

@@ -9,8 +9,8 @@ import {
   completeCodexInference,
   transcribeCodexVoice,
 } from "./ai/chatgpt-client.js";
-import { readCodexAuthCredentials } from "./ai/codex-auth.js";
-import { AiServiceFailure, toAiServiceFailure } from "./ai/failure.js";
+import { readCodexAiStatus } from "./ai/codex-auth.js";
+import { toAiServiceFailure } from "./ai/failure.js";
 import {
   codexAiHostContract,
   type CodexAiStatus,
@@ -42,20 +42,6 @@ export default experimental_defineHostEntry({
       textResult(completeCodexInference(input, context.signal)),
     "codex.ai.transcribe": (input, context) =>
       textResult(transcribeCodexVoice(input, context.signal)),
-    "codex.ai.status": async (): Promise<CodexAiStatus> => {
-      try {
-        await readCodexAuthCredentials();
-        return { ready: true };
-      } catch (error) {
-        return {
-          ready: false,
-          message:
-            error instanceof AiServiceFailure &&
-            error.detailCode !== "codex_auth_missing"
-              ? error.message
-              : "Run `codex login` on the primary machine to sign in",
-        };
-      }
-    },
+    "codex.ai.status": (): Promise<CodexAiStatus> => readCodexAiStatus(),
   },
 });
