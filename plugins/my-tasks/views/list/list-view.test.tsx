@@ -341,18 +341,28 @@ describe("projects list", () => {
     );
   });
 
-  it("changes a project's status from its status icon", async () => {
+  it("shows a chevron instead of a status icon and toggles it with the tasks", async () => {
     const slot = renderList();
     const row = await projectRow(slot, PLANNED.id);
-    fireEvent.click(
-      within(row).getByRole("button", {
-        name: /Change status, currently Todo/,
-      }),
-    );
-    const drawer = await slot.findByRole("dialog", { name: "Change status" });
-    fireEvent.click(
-      await within(drawer).findByRole("menuitem", { name: /In Review/ }),
-    );
+    expect(
+      within(row).queryByRole("button", { name: /Change status/ }),
+    ).toBeNull();
+    const toggle = within(row).getByRole("button", { name: "Show tasks" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    const hide = within(row).getByRole("button", { name: "Hide tasks" });
+    expect(hide.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(hide);
+    within(row).getByRole("button", { name: "Show tasks" });
+  });
+
+  it("changes a project's status from its right-click menu", async () => {
+    const slot = renderList();
+    const row = await projectRow(slot, PLANNED.id);
+    fireEvent.contextMenu(row);
+    const statusItem = await slot.findByRole("menuitem", { name: /Status/ });
+    fireEvent.keyDown(statusItem, { key: "ArrowRight" });
+    fireEvent.click(await slot.findByRole("menuitem", { name: /In Review/ }));
     await waitFor(() =>
       expect(
         slot.rpcCalls

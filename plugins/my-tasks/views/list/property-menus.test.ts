@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { PRIORITIES, PROJECT_STATUSES } from "../../shared/contract.js";
+import { PRIORITIES } from "../../shared/contract.js";
 import {
   isBareKey,
   PRIORITY_MENU_ORDER,
   priorityForShortcut,
-  statusForShortcut,
 } from "./property-menus.js";
 
 describe("PRIORITY_MENU_ORDER", () => {
@@ -14,21 +13,6 @@ describe("PRIORITY_MENU_ORDER", () => {
     expect([...PRIORITY_MENU_ORDER].sort()).toEqual(
       [...PRIORITIES].sort(),
     );
-  });
-});
-
-describe("statusForShortcut", () => {
-  it("maps 1-based digits to canonical status order", () => {
-    expect(statusForShortcut("1")).toBe(PROJECT_STATUSES[0]);
-    expect(statusForShortcut("3")).toBe(PROJECT_STATUSES[2]);
-    expect(statusForShortcut("6")).toBe(PROJECT_STATUSES[5]);
-  });
-
-  it("rejects out-of-range and non-digit keys", () => {
-    expect(statusForShortcut("0")).toBeNull();
-    expect(statusForShortcut("7")).toBeNull();
-    expect(statusForShortcut("s")).toBeNull();
-    expect(statusForShortcut("")).toBeNull();
   });
 });
 

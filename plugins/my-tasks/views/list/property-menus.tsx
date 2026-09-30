@@ -57,14 +57,6 @@ export const PRIORITY_MENU_ORDER: readonly Priority[] = [
   "low",
 ];
 
-export function statusForShortcut(key: string): ProjectStatus | null {
-  if (!/^[0-9]$/.test(key)) return null;
-  const index = Number(key) - 1;
-  return index >= 0 && index < PROJECT_STATUSES.length
-    ? (PROJECT_STATUSES[index] ?? null)
-    : null;
-}
-
 export function priorityForShortcut(key: string): Priority | null {
   if (!/^[0-9]$/.test(key)) return null;
   const index = Number(key);
@@ -127,74 +119,11 @@ function PickerOption({
   );
 }
 
-const TRIGGER_CLASS =
-  "relative z-10 inline-flex size-5 shrink-0 items-center justify-center rounded-sm hover:bg-state-active focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-state-active max-md:pointer-coarse:size-8";
-
 const PRIORITY_TRIGGER_CLASS =
   "relative z-10 inline-flex h-5 shrink-0 items-center rounded-md hover:opacity-75 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:opacity-75 max-md:pointer-coarse:h-8";
 
 export const CHIP_TRIGGER_CLASS =
   "relative z-10 flex h-5 shrink-0 items-center gap-1 rounded-md border border-border px-1.5 text-xs text-subtle-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:text-foreground";
-
-export function StatusEditor({
-  status,
-  onChange,
-  open,
-  onOpenChange,
-  className,
-}: {
-  status: ProjectStatus;
-  onChange: (status: ProjectStatus) => void;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  className?: string;
-}) {
-  const select = (next: ProjectStatus) => {
-    if (next !== status) onChange(next);
-  };
-  return (
-    <DropdownMenu open={open} onOpenChange={onOpenChange}>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label={`Change status, currently ${STATUS_LABELS[status]}`}
-          className={cn(TRIGGER_CLASS, className)}
-        >
-          <StatusIcon status={status} />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        className="min-w-56"
-        mobileTitle="Change status"
-        onKeyDown={(event) => {
-          const shortcut = statusForShortcut(event.key);
-          if (shortcut !== null && isBareKey(event)) {
-            event.preventDefault();
-            select(shortcut);
-            onOpenChange(false);
-          }
-        }}
-      >
-        <MenuHeading label="Change status…" shortcut="S" />
-        {PROJECT_STATUSES.map((option, index) => (
-          <DropdownMenuItem
-            key={option}
-            aria-current={option === status ? "true" : undefined}
-            onSelect={() => select(option)}
-          >
-            <PickerOption
-              icon={<StatusIcon status={option} />}
-              label={STATUS_LABELS[option]}
-              active={option === status}
-              shortcut={index + 1}
-            />
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
 
 export function PriorityEditor({
   priority,

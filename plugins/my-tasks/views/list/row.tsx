@@ -19,7 +19,6 @@ import {
   isBareKey,
   PriorityEditor,
   ProjectContextMenu,
-  StatusEditor,
   type ProjectEditFn,
 } from "./property-menus.js";
 
@@ -51,9 +50,9 @@ export function ProjectRow({
   isLastInSection,
 }: ProjectRowProps) {
   const [taskDragOver, setTaskDragOver] = useState(false);
-  const [openMenu, setOpenMenu] = useState<
-    "status" | "priority" | "dueDate" | null
-  >(null);
+  const [openMenu, setOpenMenu] = useState<"priority" | "dueDate" | null>(
+    null,
+  );
   const [expanded, setExpanded] = useState(false);
   const working = (summary?.activeAgentCount ?? 0) > 0;
 
@@ -105,41 +104,28 @@ export function ProjectRow({
             onClick={onOpen}
             onKeyDown={(event) => {
               if (!isBareKey(event)) return;
-              const key = event.key.toLowerCase();
-              if (key === "s") {
-                event.preventDefault();
-                setOpenMenu("status");
-              } else if (key === "p") {
+              if (event.key.toLowerCase() === "p") {
                 event.preventDefault();
                 setOpenMenu("priority");
               }
             }}
             className="absolute inset-0 cursor-pointer rounded-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
           />
-          <div className="group relative col-start-1 row-start-1 mt-0.5 size-5 shrink-0">
-            <StatusEditor
-              status={project.status}
-              onChange={(status) => onEdit(project, { status })}
-              open={openMenu === "status"}
-              onOpenChange={(next) => setOpenMenu(next ? "status" : null)}
-              className="transition-opacity group-hover:opacity-0"
+          <button
+            type="button"
+            aria-expanded={expanded}
+            aria-label={expanded ? "Hide tasks" : "Show tasks"}
+            onClick={() => setExpanded((open) => !open)}
+            className={cn(
+              "relative z-10 col-start-1 row-start-1 mt-0.5 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-sm p-0 hover:bg-state-active focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              working ? "text-timeline-accent" : "text-muted-foreground",
+            )}
+          >
+            <Icon
+              name={expanded ? "ChevronUp" : "ChevronDown"}
+              className="size-3.5"
             />
-            <button
-              type="button"
-              aria-expanded={expanded}
-              aria-label={expanded ? "Hide tasks" : "Show tasks"}
-              onClick={() => setExpanded((open) => !open)}
-              className={cn(
-                "pointer-events-none absolute inset-0 z-10 flex cursor-pointer items-center justify-center rounded-sm p-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100",
-                working ? "text-timeline-accent" : "text-muted-foreground",
-              )}
-            >
-              <Icon
-                name={expanded ? "ChevronUp" : "ChevronDown"}
-                className="size-3.5"
-              />
-            </button>
-          </div>
+          </button>
           <span className="col-start-2 row-start-1 min-w-0 truncate pt-0.5 text-sm">
             {project.name}
           </span>
