@@ -316,6 +316,59 @@ describe("tasks storage", () => {
     }
   });
 
+  it("moves a task to another project with a new key, keeping its history", async () => {
+    const { harness, store } = setup();
+    try {
+      const source = createProject(store, "SRC");
+      const target = createProject(store, "DST");
+      store.createTask({ projectId: target.id, title: "Already there" });
+      const task = store.createTask({ projectId: source.id, title: "Move me" });
+      const sourceLabel = store.createLabel({
+        projectId: source.id,
+        name: "Old",
+        color: "red",
+      });
+      store.addTaskLabel(task.id, sourceLabel.id);
+      store.createComment({
+        taskId: task.id,
+        kind: "user",
+        authorName: "You",
+        body: "History",
+      });
+      store.upsertTaskThread({
+        taskId: task.id,
+        threadId: "thr_moving",
+        presetName: "Attached",
+        title: "Worker",
+        liveStatus: "working",
+      });
+
+      const moved = store.moveTaskToProject(task.id, target.id);
+
+      expect(moved).toMatchObject({
+        id: task.id,
+        projectId: target.id,
+        key: "DST-2",
+        title: "Move me",
+      });
+      expect(store.getProject(target.id)?.nextTaskNumber).toBe(3);
+      expect(store.getTaskByKey("SRC-1")).toBeUndefined();
+      expect(store.listTaskLabels(task.id)).toEqual([]);
+      expect(store.listComments(task.id).map((comment) => comment.body)).toEqual(
+        ["History"],
+      );
+      expect(
+        store.listTaskThreads(task.id).map((thread) => thread.threadId),
+      ).toEqual(["thr_moving"]);
+      expect(
+        store.listTasks({ projectId: target.id }).map((entry) => entry.title),
+      ).toEqual(["Already there", "Move me"]);
+      expect(store.moveTaskToProject(task.id, target.id).key).toBe("DST-2");
+    } finally {
+      await harness.dispose();
+    }
+  });
+
   it("keeps a task's place when it is checked off", async () => {
     const { harness, store } = setup();
     try {

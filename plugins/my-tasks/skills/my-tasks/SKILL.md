@@ -139,6 +139,8 @@ each renders its own card.
 - Use `done` only when the task's completion criteria are met.
 - Tasks have no sub-tasks; split larger work into more tasks in the same
   project.
+- `bb my-tasks move ABC-12 --project XYZ` moves a task to another project and
+  gives it a new key there (for example `XYZ-4`); use the new key afterwards.
 - Write one comment per meaningful milestone. Combine related facts into a
   useful update; never spam progress pings, command-by-command narration, or
   repeated status messages.

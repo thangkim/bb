@@ -4,6 +4,7 @@ import Tag01Icon from "@hugeicons/core-free-icons/Tag01Icon";
 import type {
   Label,
   Preset,
+  Project,
   Task,
   TaskThread,
 } from "../../shared/contract.js";
@@ -24,6 +25,7 @@ import {
 } from "../list/property-menus.js";
 import { useListTaskEdits } from "../list/use-task-edits.js";
 import { AttachThreadPicker, NewThreadMenu } from "./thread-actions.js";
+import { useMoveTaskToProject, writeDraggedTask } from "./move-task.js";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -124,9 +126,11 @@ interface TaskChecklistRowProps {
   labelsById: ReadonlyMap<string, Label>;
   projectLabels: readonly Label[];
   presets: Preset[] | undefined;
+  otherProjects: readonly Project[];
   pending: boolean;
   onEdit: TaskEditFn;
   onDelete: () => void;
+  onMoveToProject: (projectId: string) => void;
   onError: (message: string) => void;
 }
 
@@ -136,9 +140,11 @@ function TaskChecklistRow({
   labelsById,
   projectLabels,
   presets,
+  otherProjects,
   pending,
   onEdit,
   onDelete,
+  onMoveToProject,
   onError,
 }: TaskChecklistRowProps) {
   const navigation = useTasksNavigation();
@@ -152,10 +158,20 @@ function TaskChecklistRow({
       onEdit={onEdit}
       onDelete={onDelete}
       projectLabels={projectLabels}
+      otherProjects={otherProjects}
+      onMoveToProject={onMoveToProject}
     >
       <div
         data-task-key={task.key}
         aria-busy={pending || undefined}
+        draggable
+        onDragStart={(event) => {
+          event.stopPropagation();
+          writeDraggedTask(event.dataTransfer, {
+            taskId: task.id,
+            projectId: task.projectId,
+          });
+        }}
         className={cn("py-1", pending && "opacity-70")}
       >
         <div className="flex min-w-0 items-center gap-2">
@@ -309,6 +325,7 @@ function AddTaskRow({
 
 interface TaskChecklistProps {
   projectId: string;
+  projects: readonly Project[] | undefined;
   labels: readonly Label[] | undefined;
   presets: Preset[] | undefined;
   onError: (message: string) => void;
@@ -317,6 +334,7 @@ interface TaskChecklistProps {
 
 export function TaskChecklist({
   projectId,
+  projects,
   labels,
   presets,
   onError,
@@ -340,6 +358,11 @@ export function TaskChecklist({
     () => new Map(projectLabels.map((label) => [label.id, label])),
     [projectLabels],
   );
+  const otherProjects = useMemo(
+    () => (projects ?? []).filter((project) => project.id !== projectId),
+    [projects, projectId],
+  );
+  const moveTask = useMoveTaskToProject(onError);
 
   if (displayTasks === undefined) {
     return (
@@ -366,9 +389,11 @@ export function TaskChecklist({
           labelsById={labelsById}
           projectLabels={projectLabels}
           presets={presets}
+          otherProjects={otherProjects}
           pending={edits.pending.has(task.id)}
           onEdit={edits.edit}
           onDelete={() => edits.remove(task)}
+          onMoveToProject={(targetId) => moveTask(task.id, targetId)}
           onError={onError}
         />
       ))}

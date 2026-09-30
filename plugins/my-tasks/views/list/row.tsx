@@ -10,6 +10,11 @@ import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { TaskChecklist } from "../tasks/checklist.js";
 import {
+  isTaskDrag,
+  PROJECT_DRAG_TYPE,
+  readDraggedTask,
+} from "../tasks/move-task.js";
+import {
   DueDateChip,
   isBareKey,
   PriorityEditor,
@@ -20,27 +25,32 @@ import {
 
 interface ProjectRowProps {
   project: Project;
+  projects: readonly Project[] | undefined;
   summary: SidebarProjectSummary | undefined;
   labels: readonly Label[] | undefined;
   presets: Preset[] | undefined;
   onEdit: ProjectEditFn;
   onDelete: () => void;
   onOpen: () => void;
+  onMoveTaskHere: (taskId: string) => void;
   onError: (message: string) => void;
   isLastInSection: boolean;
 }
 
 export function ProjectRow({
   project,
+  projects,
   summary,
   labels,
   presets,
   onEdit,
   onDelete,
   onOpen,
+  onMoveTaskHere,
   onError,
   isLastInSection,
 }: ProjectRowProps) {
+  const [taskDragOver, setTaskDragOver] = useState(false);
   const [openMenu, setOpenMenu] = useState<
     "status" | "priority" | "dueDate" | null
   >(null);
@@ -51,15 +61,40 @@ export function ProjectRow({
     <ProjectContextMenu project={project} onEdit={onEdit} onDelete={onDelete}>
       <div
         data-project-id={project.id}
+        data-task-drop-target={taskDragOver || undefined}
+        onDragOver={(event) => {
+          if (!isTaskDrag(event.dataTransfer)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          event.dataTransfer.dropEffect = "move";
+          setTaskDragOver(true);
+        }}
+        onDragLeave={(event) => {
+          const next = event.relatedTarget;
+          if (next instanceof Node && event.currentTarget.contains(next)) {
+            return;
+          }
+          setTaskDragOver(false);
+        }}
+        onDrop={(event) => {
+          const dragged = readDraggedTask(event.dataTransfer);
+          if (dragged === null) return;
+          event.preventDefault();
+          event.stopPropagation();
+          setTaskDragOver(false);
+          if (dragged.projectId !== project.id) onMoveTaskHere(dragged.taskId);
+        }}
         className={cn(
           "w-full text-left hover:bg-state-hover",
           !isLastInSection && "border-b border-border-hairline",
+          taskDragOver &&
+            "bg-surface-selected outline-2 -outline-offset-2 outline-dashed outline-input",
         )}
       >
         <div
           draggable
           onDragStart={(event) => {
-            event.dataTransfer.setData("text/plain", project.id);
+            event.dataTransfer.setData(PROJECT_DRAG_TYPE, project.id);
             event.dataTransfer.effectAllowed = "move";
           }}
           className="relative grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 px-3.5 py-2"
@@ -133,6 +168,7 @@ export function ProjectRow({
           <div className="pb-2 pl-10.5 pr-3.5">
             <TaskChecklist
               projectId={project.id}
+              projects={projects}
               labels={labels}
               presets={presets}
               onError={onError}

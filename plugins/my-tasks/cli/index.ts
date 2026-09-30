@@ -1912,6 +1912,48 @@ export function registerTasksCli(
           },
         }),
 
+        move: cliCommand({
+          summary: "Move a task into another tracker project",
+          description:
+            "The task gets the next key in the destination project (for example ABC-12 becomes XYZ-4) and keeps its comments, attachments, and attached threads. Labels that belong only to the old project are removed.",
+          positionals: [KEY_POSITIONAL],
+          options: {
+            project: {
+              ...REQUIRED_PROJECT_OPTION,
+              required: true,
+            },
+            json: JSON_OPTION,
+          },
+          run(input, ctx) {
+            return guard(async () => {
+              const task = await resolveTask(
+                domain,
+                input.positionals["key-or-id"],
+              );
+              const project = await resolveProject(
+                domain,
+                input.options.project,
+              );
+              const moved = unwrapTask(
+                tasksRpcContract.moveTaskToProject.output.parse(
+                  await domain.moveTaskToProject(
+                    tasksRpcContract.moveTaskToProject.input.parse({
+                      taskId: task.id,
+                      projectId: project.id,
+                      authorName: taskAuthor(ctx),
+                    }),
+                  ),
+                ),
+              );
+              return input.options.json
+                ? JSON.stringify({ task: moved, previousKey: task.key })
+                : moved.key === task.key
+                  ? `${task.key} is already in ${project.prefix}`
+                  : `Moved ${task.key} to ${moved.key}  ${moved.title}`;
+            });
+          },
+        }),
+
         comment: cliCommand({
           summary: "Add a markdown comment to a task",
           positionals: [KEY_POSITIONAL],

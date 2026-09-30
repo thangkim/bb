@@ -121,7 +121,13 @@ function ProjectSkeleton() {
   );
 }
 
-function ProjectDetail({ project }: { project: Project }) {
+function ProjectDetail({
+  project,
+  projects,
+}: {
+  project: Project;
+  projects: readonly Project[];
+}) {
   const rpc = useTasksRpc();
   const navigate = useBbNavigate();
   const { toasts, push, dismiss } = useDetailToasts();
@@ -232,6 +238,7 @@ function ProjectDetail({ project }: { project: Project }) {
             </h2>
             <TaskChecklist
               projectId={project.id}
+              projects={projects}
               labels={labels.data}
               presets={presets.data}
               onError={push}
@@ -295,5 +302,5 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
       </div>
     );
   }
-  return <ProjectDetail project={project} />;
+  return <ProjectDetail project={project} projects={projects.data} />;
 }

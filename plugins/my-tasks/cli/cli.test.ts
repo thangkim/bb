@@ -362,6 +362,33 @@ describe("bb my-tasks CLI", () => {
     await harness.dispose();
   });
 
+  it("moves a task into another project and records the move", async () => {
+    const { bb, harness } = createFakePluginHost({ pluginId: "tasks" });
+    await plugin(bb);
+    stdout(await harness.runCli(["project", "create", "--name", "One", "--prefix", "ONE"]));
+    stdout(await harness.runCli(["project", "create", "--name", "Two", "--prefix", "TWO"]));
+    stdout(await harness.runCli(["create", "--project", "ONE", "--title", "Wander"]));
+
+    expect(
+      stdout(await harness.runCli(["move", "ONE-1", "--project", "two"])),
+    ).toBe("Moved ONE-1 to TWO-1  Wander");
+    const shown = JSON.parse(
+      stdout(await harness.runCli(["show", "TWO-1", "--json"])),
+    );
+    expect(shown.project.prefix).toBe("TWO");
+    expect(shown.comments).toContainEqual(
+      expect.objectContaining({
+        kind: "system",
+        body: "Moved from ONE-1 to TWO-1 by cli",
+      }),
+    );
+    await expect(
+      harness.runCli(["move", "TWO-1"]),
+    ).resolves.toMatchObject({ exitCode: 1 });
+
+    await harness.dispose();
+  });
+
   it("sorts list output by priority or due date and rejects unknown sorts", async () => {
     const { bb, harness } = createFakePluginHost({ pluginId: "tasks" });
     await plugin(bb);

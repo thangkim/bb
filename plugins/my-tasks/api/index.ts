@@ -725,6 +725,29 @@ export function registerHandlers(
         throw error;
       }
     },
+    moveTaskToProject(input) {
+      const current = store.tasks.getTask(input.taskId);
+      if (!current) throw new Error(`Task not found: ${input.taskId}`);
+      if (current.projectId === input.projectId) {
+        return { ok: true, task: apiTask(store, current) };
+      }
+      const task = store.transaction(() => {
+        const moved = store.tasks.moveTaskToProject(
+          current.id,
+          input.projectId,
+        );
+        writeSystemComments(store, moved.id, input.authorName, [
+          `Moved from ${current.key} to ${moved.key} by ${input.authorName}`,
+        ]);
+        return apiTask(store, moved);
+      });
+      publishTasksChanged(bb, task.id, current.projectId);
+      publishTasksChanged(bb, task.id, task.projectId);
+      publishProjectsChanged(bb, current.projectId);
+      publishProjectsChanged(bb, task.projectId);
+      publishCommentsChanged(bb, task.id);
+      return { ok: true, task };
+    },
     async deleteTask(input) {
       const task = store.tasks.getTask(input.taskId);
       const attachments = attachmentsForTasks(store.tasks, [input.taskId]);

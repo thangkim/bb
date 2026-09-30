@@ -1216,6 +1216,56 @@ export function createTasksStore(db: PluginDatabase) {
     return updateTaskTransaction(id, input);
   }
 
+  const moveTaskToProjectTransaction = db.transaction(
+    (id: string, projectId: string): Task => {
+      const task = requireTask(id);
+      if (task.projectId === projectId) return task;
+      const project = requireProject(projectId);
+      const allocated = db
+        .prepare<[string, number]>(
+          `
+        UPDATE projects
+        SET next_task_number = next_task_number + 1
+        WHERE id = ? AND next_task_number = ?
+      `,
+        )
+        .run(project.id, project.nextTaskNumber);
+      if (allocated.changes !== 1) {
+        throw new Error(
+          `Could not allocate the next task number for ${project.id}`,
+        );
+      }
+      const position =
+        db
+          .prepare<[string], { position: number }>(
+            `
+          SELECT COALESCE(MAX(position), 0) + ${POSITION_STEP} AS position
+          FROM tasks WHERE project_id = ?
+        `,
+          )
+          .get(project.id)?.position ?? POSITION_STEP;
+      db.prepare<[string, string]>(
+        `
+        DELETE FROM task_labels
+        WHERE task_id = ?
+          AND label_id IN (SELECT id FROM labels WHERE project_id <> ?)
+      `,
+      ).run(id, project.id);
+      db.prepare<[string, number, number, string, string]>(
+        `
+        UPDATE tasks
+        SET project_id = ?, number = ?, position = ?, updated_at = ?
+        WHERE id = ?
+      `,
+      ).run(project.id, project.nextTaskNumber, position, nowIso(), id);
+      return requireTask(id);
+    },
+  );
+
+  function moveTaskToProject(id: string, projectId: string): Task {
+    return moveTaskToProjectTransaction(id, projectId);
+  }
+
   function deleteTask(id: string): boolean {
     return (
       db.prepare<[string]>("DELETE FROM tasks WHERE id = ?").run(id).changes > 0
@@ -1831,6 +1881,7 @@ export function createTasksStore(db: PluginDatabase) {
     listTasksPage,
     listTasks,
     updateTask,
+    moveTaskToProject,
     deleteTask,
     createLabel,
     getLabel,

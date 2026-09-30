@@ -462,12 +462,16 @@ export function TaskContextMenu({
   onEdit,
   onDelete,
   projectLabels,
+  otherProjects,
+  onMoveToProject,
   children,
 }: {
   task: Task;
   onEdit: TaskEditFn;
   onDelete: () => void;
   projectLabels: readonly Label[];
+  otherProjects: readonly Project[];
+  onMoveToProject: (projectId: string) => void;
   children: ReactNode;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -515,6 +519,30 @@ export function TaskContextMenu({
                   />
                   {label.name}
                 </ContextMenuCheckboxItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        ) : null}
+
+        {otherProjects.length > 0 ? (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <Icon name="ArrowRight" className="size-3.5" />
+              <span>Move to project</span>
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="min-w-48">
+              {otherProjects.map((project) => (
+                <ContextMenuItem
+                  key={project.id}
+                  onSelect={() => onMoveToProject(project.id)}
+                >
+                  <span
+                    aria-hidden
+                    className="size-2.5 shrink-0 rounded-sm"
+                    style={{ backgroundColor: project.color }}
+                  />
+                  <span className="truncate">{project.name}</span>
+                </ContextMenuItem>
               ))}
             </ContextMenuSubContent>
           </ContextMenuSub>

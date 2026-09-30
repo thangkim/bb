@@ -90,6 +90,7 @@ machine; pass `--machine <id-or-name>` to target another enrolled machine.
 | `bb my-tasks list`                                | Page/filter tasks by project, done state, priority, label, active agents, or search text; supports `--sort`, `--limit`, and `--cursor`.    |
 | `bb my-tasks show <key-or-id>`                    | Show the complete task record, including comments, attachments, and attached threads.                                                      |
 | `bb my-tasks update <key-or-id>`                  | Mark done (`--status done`) or reopen (`--status todo`), or update priority, title, description, due date, or labels.                     |
+| `bb my-tasks move <key-or-id> --project <prefix>` | Move a task into another project. It gets the next key there and keeps comments, attachments, and threads; labels from the old project are removed. |
 | `bb my-tasks comment <key-or-id>`                 | Add a Markdown comment from inline text or a file; optionally notify the latest responding task agent.                                     |
 | `bb my-tasks attachment add\|get\|list\|remove`   | Add, fetch, list, or remove attachments. Referenced attachments require `remove --remove-references`.                                      |
 | `bb my-tasks preset list\|create\|update\|delete` | Manage reusable agent execution presets.                                                                                                   |
@@ -127,6 +128,9 @@ context and other tasks, attachments, recent comments, preset instructions,
 and a report-back contract. Its installed skill tells it to inspect the task,
 leave substantive milestone comments, attach artifacts, and mark the task done
 when its criteria are met.
+
+Drag a task onto another project in the list (or use **Move to project** in its
+right-click menu) to move it there.
 
 In the app, every task row has **New thread** (pick a preset) and **Attach
 thread** (search your bb threads). Clicking a thread opens it in a split pane.

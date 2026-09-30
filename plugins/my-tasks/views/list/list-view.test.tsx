@@ -135,6 +135,14 @@ function renderList(fixture: Fixture = {}) {
           const current = projects.find((p) => p.id === input.projectId)!;
           return { project: { ...current, status: input.status } };
         },
+        moveTaskToProject: (raw: unknown) => {
+          const input = rpcInput(raw);
+          const current = tasks.find((entry) => entry.id === input.taskId)!;
+          return {
+            ok: true,
+            task: { ...current, projectId: input.projectId },
+          };
+        },
         updateTask: (raw: unknown) => {
           const input = rpcInput(raw);
           const current = tasks.find((entry) => entry.id === input.taskId)!;
@@ -154,6 +162,19 @@ async function projectRow(
     if (row === null) throw new Error(`row ${projectId} not found`);
     return row as HTMLElement;
   });
+}
+
+function fakeDataTransfer() {
+  const data = new Map<string, string>();
+  return {
+    setData: (type: string, value: string) => data.set(type, value),
+    getData: (type: string) => data.get(type) ?? "",
+    get types() {
+      return [...data.keys()];
+    },
+    effectAllowed: "",
+    dropEffect: "",
+  };
 }
 
 function sectionOrder(slot: ReturnType<typeof renderList>) {
@@ -286,12 +307,7 @@ describe("projects list", () => {
     const slot = renderList();
     const row = await projectRow(slot, POLISH.id);
     const handle = row.querySelector("[draggable]") as HTMLElement;
-    const data = new Map<string, string>();
-    const dataTransfer = {
-      setData: (type: string, value: string) => data.set(type, value),
-      getData: (type: string) => data.get(type) ?? "",
-      effectAllowed: "",
-    };
+    const dataTransfer = fakeDataTransfer();
     fireEvent.dragStart(handle, { dataTransfer });
     const todo = slot.container.querySelector(
       '[data-status-section="todo"]',
@@ -367,5 +383,49 @@ describe("projects list", () => {
     expect(
       reopened.container.querySelector(`[data-project-id="${PLANNED.id}"]`),
     ).toBeNull();
+  });
+
+  it("moves a task dragged onto another project", async () => {
+    const slot = renderList();
+    const source = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(source).getByRole("button", { name: "Show tasks" }));
+    const taskRow = (await within(source).findByText("Task 1")).closest(
+      "[data-task-key]",
+    ) as HTMLElement;
+    const dataTransfer = fakeDataTransfer();
+    fireEvent.dragStart(taskRow, { dataTransfer });
+
+    const target = await projectRow(slot, PLANNED.id);
+    fireEvent.dragOver(target, { dataTransfer });
+    expect(target.getAttribute("data-task-drop-target")).toBe("true");
+    fireEvent.drop(target, { dataTransfer });
+
+    await waitFor(() =>
+      expect(
+        slot.rpcCalls
+          .filter((call) => call.method === "moveTaskToProject")
+          .map((call) => rpcInput(call.input)),
+      ).toEqual([{ taskId: task(1).id, projectId: PLANNED.id }]),
+    );
+    expect(target.getAttribute("data-task-drop-target")).toBeNull();
+    expect(slot.rpcCalls.some((call) => call.method === "moveProject")).toBe(
+      false,
+    );
+  });
+
+  it("ignores a task dropped back on its own project", async () => {
+    const slot = renderList();
+    const source = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(source).getByRole("button", { name: "Show tasks" }));
+    const taskRow = (await within(source).findByText("Task 1")).closest(
+      "[data-task-key]",
+    ) as HTMLElement;
+    const dataTransfer = fakeDataTransfer();
+    fireEvent.dragStart(taskRow, { dataTransfer });
+    fireEvent.drop(source, { dataTransfer });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(
+      slot.rpcCalls.some((call) => call.method === "moveTaskToProject"),
+    ).toBe(false);
   });
 });

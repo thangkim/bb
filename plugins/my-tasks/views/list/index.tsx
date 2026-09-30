@@ -30,6 +30,10 @@ import {
 import { groupProjectsByStatus, STATUS_LABELS } from "./lib.js";
 import { useProjectEdits } from "./use-project-edits.js";
 import { ProjectRow } from "./row.js";
+import {
+  PROJECT_DRAG_TYPE,
+  useMoveTaskToProject,
+} from "../tasks/move-task.js";
 
 interface ListViewProps {
   activeOnly?: boolean;
@@ -97,6 +101,7 @@ export function ListView({ activeOnly = false }: ListViewProps) {
   );
   const labels = useLabels(projectIds);
   const edits = useProjectEdits(projects.data, push);
+  const moveTask = useMoveTaskToProject(push);
 
   const visibleProjects = useMemo(() => {
     if (edits.projects === undefined) return undefined;
@@ -127,7 +132,7 @@ export function ListView({ activeOnly = false }: ListViewProps) {
 
   const handleDrop = (status: ProjectStatus) => (event: React.DragEvent) => {
     event.preventDefault();
-    const projectId = event.dataTransfer.getData("text/plain");
+    const projectId = event.dataTransfer.getData(PROJECT_DRAG_TYPE);
     const dragged = visibleProjects?.find((entry) => entry.id === projectId);
     if (!dragged || dragged.status === status) return;
     const column = sortItems(
@@ -216,6 +221,7 @@ export function ListView({ activeOnly = false }: ListViewProps) {
                 <ProjectRow
                   key={project.id}
                   project={project}
+                  projects={projects.data}
                   summary={summaries.get(project.id)}
                   labels={labels.data}
                   presets={presets.data}
@@ -224,6 +230,7 @@ export function ListView({ activeOnly = false }: ListViewProps) {
                   onOpen={() =>
                     navigation.go({ kind: "project", projectId: project.id })
                   }
+                  onMoveTaskHere={(taskId) => moveTask(taskId, project.id)}
                   onError={push}
                   isLastInSection={index === group.projects.length - 1}
                 />
