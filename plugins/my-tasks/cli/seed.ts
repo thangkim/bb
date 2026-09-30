@@ -23,7 +23,6 @@ async function createTask(
     status?: Task["status"];
     priority?: Task["priority"];
     dueDate?: string | null;
-    parentTaskId?: string | null;
     labelIds?: string[];
   },
 ): Promise<Task> {
@@ -72,6 +71,10 @@ export async function seedDemo(
       color: "blue",
       folderId: productFolder.id,
       linkedBbProjectId: linkedBbProjectId ?? null,
+      status: "in_progress",
+      priority: "high",
+      dueDate: "2026-07-31",
+      description: "Ship the task tracker plugin.",
     },
     {
       name: "Operations",
@@ -79,6 +82,8 @@ export async function seedDemo(
       color: "orange",
       folderId: productFolder.id,
       linkedBbProjectId: null,
+      status: "todo",
+      priority: "medium",
     },
     {
       name: "Personal",
@@ -125,7 +130,7 @@ export async function seedDemo(
     projectId: projects[0]!.id,
     title: "Polish the task detail panel",
     description: "Finish the detail view and verify markdown rendering.",
-    status: "in_progress",
+    status: "todo",
     priority: "urgent",
     dueDate: "2026-07-18",
     labelIds: [labels[1]!.id],
@@ -136,7 +141,7 @@ export async function seedDemo(
       projectId: projects[0]!.id,
       title: "Add CLI smoke coverage",
       description: "Cover the canonical create, list, show, and update flow.",
-      status: "in_review",
+      status: "todo",
       priority: "high",
       labelIds: [labels[0]!.id],
     }),
@@ -147,7 +152,6 @@ export async function seedDemo(
       title: "Document project linking",
       status: "todo",
       priority: "medium",
-      parentTaskId: taskOne.id,
       labelIds: [labels[0]!.id, labels[1]!.id],
     }),
   );
@@ -164,7 +168,7 @@ export async function seedDemo(
     projectId: projects[1]!.id,
     title: "Prepare the weekly release",
     description: "Coordinate checks, notes, and the rollout window.",
-    status: "in_progress",
+    status: "todo",
     priority: "high",
     dueDate: "2026-07-19",
     labelIds: [labels[2]!.id],
@@ -176,7 +180,6 @@ export async function seedDemo(
       title: "Confirm CI is green",
       status: "todo",
       priority: "urgent",
-      parentTaskId: opsParent.id,
       labelIds: [labels[2]!.id],
     }),
   );
@@ -184,7 +187,7 @@ export async function seedDemo(
     await createTask(domain, {
       projectId: projects[1]!.id,
       title: "Rotate staging credentials",
-      status: "backlog",
+      status: "todo",
       priority: "medium",
       labelIds: [labels[3]!.id],
     }),
@@ -215,7 +218,6 @@ export async function seedDemo(
       status: "todo",
       priority: "high",
       dueDate: "2026-07-17",
-      parentTaskId: homeParent.id,
       labelIds: [labels[5]!.id],
     }),
   );
@@ -223,7 +225,7 @@ export async function seedDemo(
     await createTask(domain, {
       projectId: projects[2]!.id,
       title: "Repair the hallway shelf",
-      status: "backlog",
+      status: "todo",
       priority: "low",
       labelIds: [labels[4]!.id],
     }),
@@ -232,7 +234,7 @@ export async function seedDemo(
     await createTask(domain, {
       projectId: projects[2]!.id,
       title: "Book a dentist appointment",
-      status: "canceled",
+      status: "done",
       priority: "none",
       labelIds: [labels[5]!.id],
     }),

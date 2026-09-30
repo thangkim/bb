@@ -1,16 +1,16 @@
 import {
-  TASK_PRIORITIES,
-  TASK_STATUSES,
-  type TaskPriority,
-  type TaskStatus,
+  PRIORITIES,
+  PROJECT_STATUSES,
+  type Priority,
+  type ProjectStatus,
 } from "../../shared/contract.js";
 import { TASK_SORTS, type TaskSort } from "../../shared/pagination.js";
 import { EMPTY_FILTERS, type ListFilterState } from "./filter-bar.js";
 
-export const LIST_PREFERENCE_STORAGE_KEY = "bb-tasks:list-preferences";
+export const LIST_PREFERENCE_STORAGE_KEY = "bb-my-tasks:project-list-preferences";
 export const LIST_PREFERENCE_VERSION = 1 as const;
 
-type ListPreferenceScope = "all" | "active" | `project:${string}`;
+export type ListPreferenceScope = "all" | "active";
 
 export interface ListPreference {
   filters: ListFilterState;
@@ -27,17 +27,8 @@ interface StoredDocumentV1 {
   scopes: Record<string, unknown>;
 }
 
-export function listPreferenceScope(
-  projectId: string | null,
-  activeOnly: boolean,
-): ListPreferenceScope {
-  if (activeOnly) return "active";
-  if (projectId !== null) return `project:${projectId}`;
-  return "all";
-}
-
-const STATUS_SET = new Set<string>(TASK_STATUSES);
-const PRIORITY_SET = new Set<string>(TASK_PRIORITIES);
+const STATUS_SET = new Set<string>(PROJECT_STATUSES);
+const PRIORITY_SET = new Set<string>(PRIORITIES);
 const SORT_SET = new Set<string>(TASK_SORTS);
 
 function uniqueValidValues<T extends string>(
@@ -56,20 +47,6 @@ function uniqueValidValues<T extends string>(
   return result;
 }
 
-function uniqueLabelNames(values: unknown): string[] {
-  if (!Array.isArray(values)) return [];
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const value of values) {
-    if (typeof value !== "string") continue;
-    const name = value.trim();
-    if (name.length === 0 || seen.has(name)) continue;
-    seen.add(name);
-    result.push(name);
-  }
-  return result;
-}
-
 function sanitizeSort(value: unknown): TaskSort {
   if (typeof value === "string" && SORT_SET.has(value)) {
     return value as TaskSort;
@@ -77,31 +54,27 @@ function sanitizeSort(value: unknown): TaskSort {
   return DEFAULT_LIST_PREFERENCE.sort;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 export function sanitizeListPreference(raw: unknown): ListPreference {
-  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
-    return {
-      filters: { ...EMPTY_FILTERS },
-      sort: DEFAULT_LIST_PREFERENCE.sort,
-    };
+  if (!isRecord(raw)) {
+    return { filters: { ...EMPTY_FILTERS }, sort: DEFAULT_LIST_PREFERENCE.sort };
   }
-  const record = raw as Record<string, unknown>;
-  const filtersRaw =
-    record.filters !== undefined &&
-    record.filters !== null &&
-    typeof record.filters === "object" &&
-    !Array.isArray(record.filters)
-      ? (record.filters as Record<string, unknown>)
-      : record;
+  const filtersRaw = isRecord(raw.filters) ? raw.filters : {};
   return {
     filters: {
-      statuses: uniqueValidValues<TaskStatus>(filtersRaw.statuses, STATUS_SET),
-      priorities: uniqueValidValues<TaskPriority>(
+      statuses: uniqueValidValues<ProjectStatus>(
+        filtersRaw.statuses,
+        STATUS_SET,
+      ),
+      priorities: uniqueValidValues<Priority>(
         filtersRaw.priorities,
         PRIORITY_SET,
       ),
-      labelNames: uniqueLabelNames(filtersRaw.labelNames),
     },
-    sort: sanitizeSort(record.sort),
+    sort: sanitizeSort(raw.sort),
   };
 }
 
@@ -115,33 +88,15 @@ function readStorage(): ParsedStorage | null {
     const raw = window.localStorage.getItem(LIST_PREFERENCE_STORAGE_KEY);
     if (raw === null) return null;
     const parsed: unknown = JSON.parse(raw);
-    if (
-      parsed === null ||
-      typeof parsed !== "object" ||
-      Array.isArray(parsed)
-    ) {
-      return null;
-    }
-    const record = parsed as Record<string, unknown>;
-    if (
-      record.scopes === null ||
-      typeof record.scopes !== "object" ||
-      Array.isArray(record.scopes)
-    ) {
-      return null;
-    }
+    if (!isRecord(parsed) || !isRecord(parsed.scopes)) return null;
     const version =
-      typeof record.version === "number" && Number.isFinite(record.version)
-        ? record.version
+      typeof parsed.version === "number" && Number.isFinite(parsed.version)
+        ? parsed.version
         : null;
-    const isFutureVersion =
-      version !== null && version > LIST_PREFERENCE_VERSION;
-    if (version !== null && version < LIST_PREFERENCE_VERSION) {
-      return null;
-    }
+    if (version !== null && version < LIST_PREFERENCE_VERSION) return null;
     return {
-      scopes: record.scopes as Record<string, unknown>,
-      isFutureVersion,
+      scopes: parsed.scopes,
+      isFutureVersion: version !== null && version > LIST_PREFERENCE_VERSION,
     };
   } catch {
     return null;
@@ -150,13 +105,7 @@ function readStorage(): ParsedStorage | null {
 
 export function loadListPreference(scope: ListPreferenceScope): ListPreference {
   const document = readStorage();
-  if (document === null) {
-    return {
-      filters: { ...EMPTY_FILTERS },
-      sort: DEFAULT_LIST_PREFERENCE.sort,
-    };
-  }
-  return sanitizeListPreference(document.scopes[scope]);
+  return sanitizeListPreference(document?.scopes[scope]);
 }
 
 export function storeListPreference(
@@ -166,14 +115,10 @@ export function storeListPreference(
   const sanitized = sanitizeListPreference(preference);
   try {
     const existing = readStorage();
-    if (existing?.isFutureVersion) {
-      return;
-    }
-    const scopes = { ...(existing?.scopes ?? {}) };
-    scopes[scope] = sanitized;
+    if (existing?.isFutureVersion) return;
     const document: StoredDocumentV1 = {
       version: LIST_PREFERENCE_VERSION,
-      scopes,
+      scopes: { ...(existing?.scopes ?? {}), [scope]: sanitized },
     };
     window.localStorage.setItem(
       LIST_PREFERENCE_STORAGE_KEY,

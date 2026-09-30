@@ -30,7 +30,7 @@ const task = makeTask({
   number: 4,
   key: "TSK-4",
   title: "Ship task embeds",
-  status: "in_progress",
+  status: "todo",
   priority: "high",
   position: 100,
 });
@@ -86,7 +86,7 @@ describe("Task directive card", () => {
     );
 
     const main = await slot.findByRole("button", {
-      name: "TSK-4 — Ship task embeds, in progress, high priority — open in side panel",
+      name: "TSK-4 — Ship task embeds, not done, high priority — open in side panel",
     });
     expect(main).toBeTruthy();
     expect(slot.rpcCalls).toContainEqual({
@@ -105,7 +105,7 @@ describe("Task directive card", () => {
       },
     );
     const main = await slot.findByRole("button", {
-      name: "TSK-4 — Ship task embeds, in progress — open in side panel",
+      name: "TSK-4 — Ship task embeds, not done — open in side panel",
     });
     expect(main.querySelectorAll("svg")).toHaveLength(1);
   });

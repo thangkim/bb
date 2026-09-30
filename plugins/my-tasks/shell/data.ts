@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
 import type { z } from "zod";
 import { tasksRpcContract, type TasksRpcContract } from "../shared/contract.js";
-import type { Task, TaskPriority, TaskStatus } from "../shared/contract.js";
+import type { Task, Priority, TaskStatus } from "../shared/contract.js";
 import { errorMessage } from "../shared/errors.js";
 import { TASKS_PAGE_MAX_LIMIT, type TaskSort } from "../shared/pagination.js";
 import type { MentionItem } from "../editor/extensions.js";
@@ -22,10 +22,9 @@ export type TasksRpc = ReturnType<typeof useTasksRpc>;
 interface TaskListQuery {
   projectId?: string;
   statuses?: TaskStatus[];
-  priorities?: TaskPriority[];
+  priorities?: Priority[];
   labelIds?: string[];
   activeOnly?: boolean;
-  parentTaskId?: string | null;
   search?: string;
   sort?: TaskSort;
 }
@@ -238,12 +237,5 @@ export function useMentionItems() {
       ];
     },
     [rpc],
-  );
-}
-
-export function useActiveTasks() {
-  return useTasksQuery(
-    async (rpc) => listAllTasks(rpc, { activeOnly: true }),
-    ["tasks:changed", "threads:changed"],
   );
 }

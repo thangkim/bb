@@ -6,6 +6,7 @@ import {
   type CreatePresetInput,
   TasksPageCursorError,
 } from "./db";
+import { TASKS_SCHEMA_MIGRATIONS } from "./db/schema";
 
 function setup() {
   const { bb, harness } = createFakePluginHost({ pluginId: "tasks-db-test" });
@@ -41,7 +42,6 @@ function cursorForEmptyArrayFilter(
     priorities: filter === "priorities" ? [] : null,
     labelIds: filter === "labelIds" ? [] : null,
     activeOnly: false,
-    parentTaskId: { specified: false, value: null },
     search: null,
     sort: "manual",
   });
@@ -62,7 +62,7 @@ describe("tasks storage", () => {
             "SELECT COUNT(*) AS count FROM schema_version",
           )
           .get()?.count,
-      ).toBe(6);
+      ).toBe(TASKS_SCHEMA_MIGRATIONS.length);
     } finally {
       await harness.dispose();
     }
@@ -239,37 +239,107 @@ describe("tasks storage", () => {
     }
   });
 
-  it("enforces one level of sub-tasks in both directions", async () => {
+  it("turns sub-tasks into checklist tasks and derives project status on upgrade", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "tasks-db-migration-test",
+    });
+    const db = bb.storage.database();
+    try {
+      db.pragma("foreign_keys = ON");
+      db.exec(`
+        CREATE TABLE schema_version (
+          version INTEGER PRIMARY KEY,
+          applied_at TEXT NOT NULL
+        )
+      `);
+      const record = db.prepare<[number]>(
+        "INSERT INTO schema_version (version, applied_at) VALUES (?, '2026-07-15')",
+      );
+      TASKS_SCHEMA_MIGRATIONS.slice(0, 6).forEach((sql, index) => {
+        db.exec(sql);
+        record.run(index + 1);
+      });
+      db.exec(`
+        INSERT INTO projects (id, name, prefix, next_task_number, color, created_at) VALUES
+          ('01J0000000000000000000000A', 'Active', 'ACT', 6, 'blue', '2026-07-15'),
+          ('01J0000000000000000000000B', 'Finished', 'FIN', 3, 'blue', '2026-07-15'),
+          ('01J0000000000000000000000C', 'Planned', 'PLN', 2, 'blue', '2026-07-15'),
+          ('01J0000000000000000000000D', 'Empty', 'EMP', 1, 'blue', '2026-07-15');
+        INSERT INTO tasks (id, project_id, number, title, status, priority, parent_task_id, position, created_at, updated_at) VALUES
+          ('01J000000000000000000000A1', '01J0000000000000000000000A', 1, 'Parent', 'in_progress', 'high', NULL, 1024, '2026-07-15', '2026-07-15'),
+          ('01J000000000000000000000A2', '01J0000000000000000000000A', 2, 'Child', 'todo', 'none', '01J000000000000000000000A1', 1024, '2026-07-15', '2026-07-15'),
+          ('01J000000000000000000000A3', '01J0000000000000000000000A', 3, 'Shipped', 'done', 'none', NULL, 1024, '2026-07-15', '2026-07-15'),
+          ('01J000000000000000000000A4', '01J0000000000000000000000A', 4, 'Dropped', 'canceled', 'none', NULL, 1024, '2026-07-15', '2026-07-15'),
+          ('01J000000000000000000000A5', '01J0000000000000000000000A', 5, 'Someday', 'backlog', 'none', NULL, 1024, '2026-07-15', '2026-07-15'),
+          ('01J000000000000000000000B1', '01J0000000000000000000000B', 1, 'Done', 'done', 'none', NULL, 1024, '2026-07-15', '2026-07-15'),
+          ('01J000000000000000000000B2', '01J0000000000000000000000B', 2, 'Canceled', 'canceled', 'none', NULL, 1024, '2026-07-15', '2026-07-15'),
+          ('01J000000000000000000000C1', '01J0000000000000000000000C', 1, 'Open', 'todo', 'none', NULL, 1024, '2026-07-15', '2026-07-15');
+      `);
+
+      const store = createTasksStore(db);
+
+      expect(
+        store.listProjects().map((project) => [project.prefix, project.status]),
+      ).toEqual([
+        ["ACT", "in_progress"],
+        ["EMP", "todo"],
+        ["FIN", "done"],
+        ["PLN", "todo"],
+      ]);
+      expect(
+        store
+          .listTasks({ projectId: "01J0000000000000000000000A" })
+          .map((task) => [task.title, task.status]),
+      ).toEqual([
+        ["Parent", "todo"],
+        ["Child", "todo"],
+        ["Someday", "todo"],
+        ["Shipped", "done"],
+        ["Dropped", "done"],
+      ]);
+      expect(
+        db
+          .prepare<[], { count: number }>(
+            "SELECT COUNT(*) AS count FROM tasks WHERE parent_task_id IS NOT NULL",
+          )
+          .get()?.count,
+      ).toBe(0);
+      expect(() =>
+        db
+          .prepare(
+            "UPDATE tasks SET status = 'in_review' WHERE id = '01J000000000000000000000C1'",
+          )
+          .run(),
+      ).toThrow("tasks are todo or done and have no parent");
+    } finally {
+      await harness.dispose();
+    }
+  });
+
+  it("keeps a task's place when it is checked off", async () => {
     const { harness, store } = setup();
     try {
-      const project = createProject(store, "SUB");
-      const root = store.createTask({ projectId: project.id, title: "Root" });
-      const child = store.createTask({
+      const project = createProject(store, "CHK");
+      const first = store.createTask({ projectId: project.id, title: "First" });
+      const second = store.createTask({
         projectId: project.id,
-        title: "Child",
-        parentTaskId: root.id,
+        title: "Second",
       });
+      const third = store.createTask({ projectId: project.id, title: "Third" });
 
-      expect(() =>
-        store.createTask({
-          projectId: project.id,
-          title: "Grandchild",
-          parentTaskId: child.id,
-        }),
-      ).toThrow("Tasks support at most one level of sub-tasks");
+      store.updateTask(second.id, { status: "done" });
 
-      const secondRoot = store.createTask({
-        projectId: project.id,
-        title: "Second root",
-      });
-      store.createTask({
-        projectId: project.id,
-        title: "Second child",
-        parentTaskId: secondRoot.id,
-      });
-      expect(() =>
-        store.updateTask(secondRoot.id, { parentTaskId: root.id }),
-      ).toThrow("A task with sub-tasks cannot itself become a sub-task");
+      expect(
+        store
+          .listTasks({ projectId: project.id })
+          .map((task) => [task.title, task.status]),
+      ).toEqual([
+        ["First", "todo"],
+        ["Second", "done"],
+        ["Third", "todo"],
+      ]);
+      expect(store.getTask(second.id)?.position).toBe(second.position);
+      expect(first.position < third.position).toBe(true);
     } finally {
       await harness.dispose();
     }
@@ -469,11 +539,7 @@ describe("tasks storage", () => {
       expectStale(cursor);
 
       cursor = firstCursor();
-      store.updatePosition(tasks[3]!.id, {
-        status: "in_progress",
-        beforeTaskId: null,
-        afterTaskId: null,
-      });
+      store.updateTask(tasks[3]!.id, { status: "done" });
       expectStale(cursor);
 
       cursor = firstCursor();
@@ -600,48 +666,82 @@ describe("tasks storage", () => {
     }
   });
 
-  it("uses fractional midpoints and renormalizes exhausted gaps", async () => {
+  it("orders projects within a status by fractional midpoints and renormalizes exhausted gaps", async () => {
     const { db, harness, store } = setup();
     try {
-      const project = createProject(store, "ORD");
-      const first = store.createTask({
-        projectId: project.id,
-        title: "First",
-        status: "todo",
-      });
-      const second = store.createTask({
-        projectId: project.id,
-        title: "Second",
-        status: "todo",
-      });
-      const moved = store.createTask({
-        projectId: project.id,
-        title: "Moved",
-        status: "todo",
+      const first = createProject(store, "ONE");
+      const second = createProject(store, "TWO");
+      const moved = store.createProject({
+        name: "Moved",
+        prefix: "MOV",
+        color: "blue",
+        status: "in_progress",
       });
       const setPosition = db.prepare<[number, string]>(
-        "UPDATE tasks SET position = ? WHERE id = ?",
+        "UPDATE projects SET position = ? WHERE id = ?",
       );
       setPosition.run(1, first.id);
       setPosition.run(1 + 1e-12, second.id);
 
-      const reordered = store.updatePosition(moved.id, {
+      const reordered = store.moveProject(moved.id, {
         status: "todo",
-        beforeTaskId: first.id,
-        afterTaskId: second.id,
+        beforeProjectId: first.id,
+        afterProjectId: second.id,
       });
-      const tasks = store.listTasks({
-        projectId: project.id,
-        statuses: ["todo"],
-      });
+      const column = store
+        .listProjects()
+        .filter((project) => project.status === "todo")
+        .sort((left, right) => left.position - right.position);
 
-      expect(tasks.map((task) => task.id)).toEqual([
+      expect(column.map((project) => project.id)).toEqual([
         first.id,
         moved.id,
         second.id,
       ]);
-      expect(tasks.map((task) => task.position)).toEqual([1024, 1536, 2048]);
+      expect(column.map((project) => project.position)).toEqual([
+        1024, 1536, 2048,
+      ]);
       expect(reordered.position).toBe(1536);
+      expect(() =>
+        store.moveProject(first.id, {
+          status: "done",
+          beforeProjectId: second.id,
+          afterProjectId: null,
+        }),
+      ).toThrow("Reorder neighbors must be in the destination status");
+    } finally {
+      await harness.dispose();
+    }
+  });
+
+  it("appends a project to the end of its new status column", async () => {
+    const { harness, store } = setup();
+    try {
+      const done = store.createProject({
+        name: "Done already",
+        prefix: "DNE",
+        color: "blue",
+        status: "done",
+      });
+      const project = createProject(store, "UPD");
+
+      const updated = store.updateProject(project.id, {
+        status: "done",
+        priority: "high",
+        dueDate: "2026-10-01",
+        description: "Ship it",
+      });
+
+      expect(updated).toMatchObject({
+        status: "done",
+        priority: "high",
+        dueDate: "2026-10-01",
+        description: "Ship it",
+      });
+      expect(updated.position).toBeGreaterThan(done.position);
+      expect(() =>
+        store.updateProject(project.id, { dueDate: "2026-02-30" }),
+      ).toThrow("dueDate must be a valid calendar date");
     } finally {
       await harness.dispose();
     }
@@ -724,94 +824,39 @@ describe("tasks storage", () => {
     }
   });
 
-  it("batches thread and sub-task progress across tasks in one call", async () => {
-    const { db, harness, store } = setup();
+  it("batches attached threads across tasks in one call", async () => {
+    const { harness, store } = setup();
     try {
       const project = createProject(store, "RM");
       const withThreads = store.createTask({
         projectId: project.id,
-        title: "Has threads only",
-      });
-      const withSubtasks = store.createTask({
-        projectId: project.id,
-        title: "Has sub-tasks only",
-      });
-      const withBoth = store.createTask({
-        projectId: project.id,
-        title: "Has threads and sub-tasks",
+        title: "Has threads",
       });
       const bare = store.createTask({
         projectId: project.id,
-        title: "Has neither",
+        title: "Has none",
       });
-
       store.upsertTaskThread({
         taskId: withThreads.id,
-        threadId: "thr_a",
+        threadId: "thr_done",
         presetName: "Attached",
-        title: "Worker A",
-        liveStatus: "working",
-      });
-      store.upsertTaskThread({
-        taskId: withBoth.id,
-        threadId: "thr_b",
-        presetName: "Attached",
-        title: "Worker B",
+        title: "Finished worker",
         liveStatus: "completed",
       });
+      store.upsertTaskThread({
+        taskId: withThreads.id,
+        threadId: "thr_live",
+        presetName: "Attached",
+        title: "Live worker",
+        liveStatus: "working",
+      });
 
-      const sub1 = store.createTask({
-        projectId: project.id,
-        title: "Sub 1",
-        parentTaskId: withSubtasks.id,
-      });
-      store.updateTask(sub1.id, { status: "done" });
-      store.createTask({
-        projectId: project.id,
-        title: "Sub 2",
-        parentTaskId: withSubtasks.id,
-      });
-      const bothSub = store.createTask({
-        projectId: project.id,
-        title: "Sub of both",
-        parentTaskId: withBoth.id,
-      });
-      store.updateTask(bothSub.id, { status: "done" });
-
-      const meta = store.taskRowMeta([
-        withThreads.id,
-        withSubtasks.id,
-        withBoth.id,
-        bare.id,
-      ]);
+      const meta = store.taskRowMeta([withThreads.id, bare.id]);
 
       expect(
         meta.get(withThreads.id)?.threads.map((thread) => thread.threadId),
-      ).toEqual(["thr_a"]);
-      expect(meta.get(withThreads.id)).toMatchObject({
-        subtaskDone: 0,
-        subtaskTotal: 0,
-      });
-
-      expect(meta.get(withSubtasks.id)).toMatchObject({
-        threads: [],
-        subtaskDone: 1,
-        subtaskTotal: 2,
-      });
-
-      expect(
-        meta.get(withBoth.id)?.threads.map((thread) => thread.threadId),
-      ).toEqual(["thr_b"]);
-      expect(meta.get(withBoth.id)).toMatchObject({
-        subtaskDone: 1,
-        subtaskTotal: 1,
-      });
-
-      expect(meta.get(bare.id)).toEqual({
-        threads: [],
-        subtaskDone: 0,
-        subtaskTotal: 0,
-      });
+      ).toEqual(["thr_live", "thr_done"]);
+      expect(meta.get(bare.id)).toEqual({ threads: [] });
     } finally {
       await harness.dispose();
     }

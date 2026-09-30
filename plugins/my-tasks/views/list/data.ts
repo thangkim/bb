@@ -1,48 +1,34 @@
-import { listAllTasks, useTasksQuery } from "../../shell/data.js";
+import { useMemo } from "react";
+import {
+  listAllTasks,
+  useSidebarSummary,
+  useTasksQuery,
+} from "../../shell/data.js";
 import type {
   Label,
+  SidebarProjectSummary,
   Task,
-  TaskPriority,
-  TaskStatus,
   TaskThread,
 } from "../../shared/contract.js";
+import { sortItems } from "../../shared/sort.js";
 import { isActiveThread } from "../detail/meta.js";
 
-interface ListTaskFilters {
-  statuses: readonly TaskStatus[];
-  priorities: readonly TaskPriority[];
-  labelIds: readonly string[] | null;
+export function useProjectSummaries(): Map<string, SidebarProjectSummary> {
+  const summaries = useSidebarSummary();
+  return useMemo(
+    () =>
+      new Map(
+        (summaries.data ?? []).map((summary) => [summary.projectId, summary]),
+      ),
+    [summaries.data],
+  );
 }
 
-export function useListTasks(
-  projectId: string | null,
-  activeOnly: boolean,
-  filters: ListTaskFilters,
-) {
-  return useTasksQuery(
-    async (rpc) =>
-      listAllTasks(rpc, {
-        ...(projectId === null ? {} : { projectId }),
-        ...(filters.statuses.length > 0
-          ? { statuses: [...filters.statuses] }
-          : {}),
-        ...(filters.priorities.length > 0
-          ? { priorities: [...filters.priorities] }
-          : {}),
-        ...(filters.labelIds !== null
-          ? { labelIds: [...filters.labelIds] }
-          : {}),
-        activeOnly,
-        parentTaskId: null,
-      }),
+export function useProjectTasks(projectId: string) {
+  return useTasksQuery<Task[]>(
+    async (rpc) => sortItems(await listAllTasks(rpc, { projectId }), "manual"),
     ["tasks:changed", "threads:changed"],
-    [
-      projectId,
-      activeOnly,
-      filters.statuses.join(),
-      filters.priorities.join(),
-      filters.labelIds === null ? "" : `active:${filters.labelIds.join()}`,
-    ],
+    [projectId],
   );
 }
 
@@ -62,8 +48,6 @@ export function useLabels(projectIds: readonly string[]) {
 export interface TaskRowMeta {
   threads: TaskThread[];
   activeThreads: TaskThread[];
-  subtaskDone: number;
-  subtaskTotal: number;
 }
 
 const ROW_META_BATCH_SIZE = 500;
@@ -86,8 +70,6 @@ export function useTaskListMeta(tasks: readonly Task[] | undefined) {
           map.set(entry.taskId, {
             threads: entry.threads,
             activeThreads: entry.threads.filter(isActiveThread),
-            subtaskDone: entry.subtaskDone,
-            subtaskTotal: entry.subtaskTotal,
           });
         }
       }

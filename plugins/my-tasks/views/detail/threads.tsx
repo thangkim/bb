@@ -16,6 +16,11 @@ import {
 import { PresetDialog, savePresetDraft } from "../manage/preset-dialog.js";
 import { ConfirmDialog } from "../../components/confirm-dialog.js";
 import { useOpenThreadInSplit } from "../../components/use-open-thread-in-split.js";
+import {
+  defaultPreset,
+  loadLastPresetId,
+  storeLastPresetId,
+} from "./last-preset.js";
 import { useTasksRpc } from "../../shell/data.js";
 import { Button } from "@/components/ui/button";
 import {
@@ -125,22 +130,6 @@ function ThreadCard({
   );
 }
 
-const LAST_PRESET_STORAGE_KEY = "bb-tasks:last-dispatch-preset";
-
-function loadLastPresetId(): string | null {
-  try {
-    return window.localStorage.getItem(LAST_PRESET_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function storeLastPresetId(presetId: string): void {
-  try {
-    window.localStorage.setItem(LAST_PRESET_STORAGE_KEY, presetId);
-  } catch {}
-}
-
 interface DispatchControlProps {
   taskId: string;
   presets: Preset[] | undefined;
@@ -208,11 +197,7 @@ export function DispatchControl({
     );
   }
 
-  const current =
-    presets?.find((preset) => preset.id === lastPresetId) ??
-    (presets
-      ? [...presets].sort((a, b) => a.name.localeCompare(b.name))[0]
-      : undefined);
+  const current = defaultPreset(presets, lastPresetId);
 
   return (
     <>

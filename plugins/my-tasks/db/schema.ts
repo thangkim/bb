@@ -2,7 +2,7 @@ import type { BbPluginApi } from "@get-bb/plugin-sdk";
 
 type PluginDatabase = ReturnType<BbPluginApi["storage"]["database"]>;
 
-const MIGRATIONS = [
+export const TASKS_SCHEMA_MIGRATIONS = [
   `
     CREATE TABLE IF NOT EXISTS folders (
       id TEXT PRIMARY KEY,
@@ -239,6 +239,77 @@ const MIGRATIONS = [
     ALTER TABLE presets ADD COLUMN service_tier TEXT
       CHECK (service_tier IN ('default', 'fast'));
   `,
+  `
+    ALTER TABLE projects ADD COLUMN status TEXT NOT NULL DEFAULT 'todo'
+      CHECK (status IN ('backlog', 'todo', 'in_progress', 'in_review', 'done', 'canceled'));
+    ALTER TABLE projects ADD COLUMN priority TEXT NOT NULL DEFAULT 'none'
+      CHECK (priority IN ('urgent', 'high', 'medium', 'low', 'none'));
+    ALTER TABLE projects ADD COLUMN due_date TEXT
+      CHECK (due_date IS NULL OR due_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]');
+    ALTER TABLE projects ADD COLUMN description TEXT NOT NULL DEFAULT '';
+    ALTER TABLE projects ADD COLUMN position REAL NOT NULL DEFAULT 0;
+
+    UPDATE projects SET position = (
+      SELECT ranked.rank * 1024 FROM (
+        SELECT id, ROW_NUMBER() OVER (ORDER BY name COLLATE NOCASE, id) AS rank
+        FROM projects
+      ) ranked
+      WHERE ranked.id = projects.id
+    );
+
+    UPDATE projects SET status = CASE
+      WHEN EXISTS (
+        SELECT 1 FROM tasks t
+        WHERE t.project_id = projects.id AND t.status IN ('in_progress', 'in_review')
+      ) THEN 'in_progress'
+      WHEN EXISTS (SELECT 1 FROM tasks t WHERE t.project_id = projects.id)
+        AND NOT EXISTS (
+          SELECT 1 FROM tasks t
+          WHERE t.project_id = projects.id AND t.status NOT IN ('done', 'canceled')
+        ) THEN 'done'
+      ELSE 'todo'
+    END;
+
+    UPDATE tasks SET position = (
+      SELECT ranked.rank * 1024 FROM (
+        SELECT id, ROW_NUMBER() OVER (
+          PARTITION BY project_id
+          ORDER BY
+            CASE status
+              WHEN 'in_progress' THEN 0
+              WHEN 'in_review' THEN 1
+              WHEN 'todo' THEN 2
+              WHEN 'backlog' THEN 3
+              WHEN 'done' THEN 4
+              ELSE 5
+            END,
+            position,
+            id
+        ) AS rank
+        FROM tasks
+      ) ranked
+      WHERE ranked.id = tasks.id
+    );
+
+    UPDATE tasks SET parent_task_id = NULL WHERE parent_task_id IS NOT NULL;
+    UPDATE tasks
+    SET status = CASE WHEN status IN ('done', 'canceled') THEN 'done' ELSE 'todo' END
+    WHERE status NOT IN ('todo', 'done');
+
+    CREATE TRIGGER tasks_status_checklist_insert
+    BEFORE INSERT ON tasks
+    WHEN NEW.status NOT IN ('todo', 'done') OR NEW.parent_task_id IS NOT NULL BEGIN
+      SELECT RAISE(ABORT, 'tasks are todo or done and have no parent');
+    END;
+    CREATE TRIGGER tasks_status_checklist_update
+    BEFORE UPDATE OF status, parent_task_id ON tasks
+    WHEN NEW.status NOT IN ('todo', 'done') OR NEW.parent_task_id IS NOT NULL BEGIN
+      SELECT RAISE(ABORT, 'tasks are todo or done and have no parent');
+    END;
+
+    CREATE INDEX idx_projects_status_position ON projects(status, position, id);
+    CREATE INDEX idx_tasks_project_position ON tasks(project_id, position, id);
+  `,
 ] as const;
 
 export function initializeTasksSchema(db: PluginDatabase): void {
@@ -258,7 +329,7 @@ export function initializeTasksSchema(db: PluginDatabase): void {
   );
 
   const migrate = db.transaction(() => {
-    for (const [index, sql] of MIGRATIONS.entries()) {
+    for (const [index, sql] of TASKS_SCHEMA_MIGRATIONS.entries()) {
       const version = index + 1;
       if (hasVersion.get(version)) continue;
       db.exec(sql);

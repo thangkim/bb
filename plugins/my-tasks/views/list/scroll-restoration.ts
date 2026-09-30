@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import type { ListFilterState } from "./filter-bar.js";
 import type { TaskSort } from "../../shared/pagination.js";
 
-const STORAGE_PREFIX = "bb-tasks:list-scroll:";
+const STORAGE_PREFIX = "bb-my-tasks:project-list-scroll:";
 
 const memoryFallback = new Map<string, number>();
 
@@ -15,21 +15,14 @@ function storage(): Storage | null {
 }
 
 export function listScrollScopeKey(params: {
-  projectId: string | null;
   activeOnly: boolean;
   filters: ListFilterState;
   sort: TaskSort;
 }): string {
-  const list =
-    params.projectId !== null
-      ? `project:${params.projectId}`
-      : params.activeOnly
-        ? "active"
-        : "all";
+  const list = params.activeOnly ? "active" : "all";
   const statuses = JSON.stringify([...params.filters.statuses].sort());
   const priorities = JSON.stringify([...params.filters.priorities].sort());
-  const labels = JSON.stringify([...params.filters.labelNames].sort());
-  return `${list}|s=${statuses}|p=${priorities}|l=${labels}|sort=${params.sort}`;
+  return `${list}|s=${statuses}|p=${priorities}|sort=${params.sort}`;
 }
 
 export function readListScroll(scopeKey: string): number | null {

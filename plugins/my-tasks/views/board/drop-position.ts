@@ -1,4 +1,7 @@
-import { TASK_STATUSES, type TaskStatus } from "../../shared/contract.js";
+import {
+  PROJECT_STATUSES,
+  type ProjectStatus,
+} from "../../shared/contract.js";
 
 export const BOARD_STATUSES = [
   "backlog",
@@ -6,11 +9,11 @@ export const BOARD_STATUSES = [
   "in_progress",
   "in_review",
   "done",
-] as const satisfies readonly TaskStatus[];
+] as const satisfies readonly ProjectStatus[];
 
 export function visibleBoardStatuses(
-  columns: Readonly<Record<TaskStatus, readonly unknown[]>>,
-): TaskStatus[] {
+  columns: Readonly<Record<ProjectStatus, readonly unknown[]>>,
+): ProjectStatus[] {
   return [
     ...BOARD_STATUSES,
     ...(columns.canceled.length > 0 ? (["canceled"] as const) : []),
@@ -18,20 +21,20 @@ export function visibleBoardStatuses(
 }
 
 interface BoardDropNeighbors {
-  beforeTaskId: string | null;
-  afterTaskId: string | null;
+  beforeId: string | null;
+  afterId: string | null;
 }
 
 export function dropNeighborsForIndex(
-  columnTaskIds: readonly string[],
-  draggedTaskId: string,
+  columnIds: readonly string[],
+  draggedId: string,
   dropIndex: number,
 ): BoardDropNeighbors {
-  const ids = columnTaskIds.filter((id) => id !== draggedTaskId);
+  const ids = columnIds.filter((id) => id !== draggedId);
   const index = Math.max(0, Math.min(dropIndex, ids.length));
   return {
-    beforeTaskId: ids[index - 1] ?? null,
-    afterTaskId: ids[index] ?? null,
+    beforeId: ids[index - 1] ?? null,
+    afterId: ids[index] ?? null,
   };
 }
 
@@ -46,14 +49,10 @@ export function dropIndexForPointer(
   return index;
 }
 
-export function applyBoardMove<T extends { id: string; status: TaskStatus }>(
-  columns: Readonly<Record<TaskStatus, readonly T[]>>,
-  taskId: string,
-  toStatus: TaskStatus,
-  dropIndex: number,
-): Record<TaskStatus, T[]> {
-  let moved: T | undefined;
-  const next: Record<TaskStatus, T[]> = {
+export type BoardColumns<T> = Record<ProjectStatus, T[]>;
+
+export function emptyColumns<T>(): BoardColumns<T> {
+  return {
     backlog: [],
     todo: [],
     in_progress: [],
@@ -61,10 +60,20 @@ export function applyBoardMove<T extends { id: string; status: TaskStatus }>(
     done: [],
     canceled: [],
   };
-  for (const status of TASK_STATUSES) {
-    next[status] = columns[status].filter((task) => {
-      if (task.id !== taskId) return true;
-      moved = task;
+}
+
+export function applyBoardMove<T extends { id: string; status: ProjectStatus }>(
+  columns: Readonly<Record<ProjectStatus, readonly T[]>>,
+  itemId: string,
+  toStatus: ProjectStatus,
+  dropIndex: number,
+): BoardColumns<T> {
+  let moved: T | undefined;
+  const next = emptyColumns<T>();
+  for (const status of PROJECT_STATUSES) {
+    next[status] = columns[status].filter((item) => {
+      if (item.id !== itemId) return true;
+      moved = item;
       return false;
     });
   }

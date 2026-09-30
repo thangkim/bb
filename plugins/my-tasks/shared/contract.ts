@@ -6,7 +6,7 @@ import {
   TASKS_PAGE_MAX_LIMIT,
 } from "./pagination.js";
 
-export const TASK_STATUSES = [
+export const PROJECT_STATUSES = [
   "backlog",
   "todo",
   "in_progress",
@@ -15,7 +15,9 @@ export const TASK_STATUSES = [
   "canceled",
 ] as const;
 
-export const TASK_PRIORITIES = [
+export const TASK_STATUSES = ["todo", "done"] as const;
+
+export const PRIORITIES = [
   "urgent",
   "high",
   "medium",
@@ -80,8 +82,9 @@ const dueDateSchema = z
       parsed.toISOString().slice(0, 10) === value
     );
   }, "must be a valid calendar date in YYYY-MM-DD format");
+const projectStatusSchema = z.enum(PROJECT_STATUSES);
 const taskStatusSchema = z.enum(TASK_STATUSES);
-const taskPrioritySchema = z.enum(TASK_PRIORITIES);
+const prioritySchema = z.enum(PRIORITIES);
 const taskSortSchema = z.enum(TASK_SORTS);
 const threadSearchStatusSchema = z.enum([
   "pending",
@@ -110,6 +113,11 @@ const projectSchema = z
     color: z.string(),
     folderId: idSchema.nullable(),
     linkedBbProjectId: z.string().startsWith("proj_").nullable(),
+    status: projectStatusSchema,
+    priority: prioritySchema,
+    dueDate: dueDateSchema.nullable(),
+    description: z.string(),
+    position: z.number(),
     createdAt: z.string(),
   })
   .strict();
@@ -123,9 +131,8 @@ const taskSchema = z
     title: z.string(),
     description: z.string(),
     status: taskStatusSchema,
-    priority: taskPrioritySchema,
+    priority: prioritySchema,
     dueDate: dueDateSchema.nullable(),
-    parentTaskId: idSchema.nullable(),
     position: z.number(),
     createdAt: z.string(),
     updatedAt: z.string(),
@@ -210,8 +217,6 @@ const taskRowMetaSchema = z
   .object({
     taskId: idSchema,
     threads: z.array(taskThreadSchema),
-    subtaskDone: z.number().int().nonnegative(),
-    subtaskTotal: z.number().int().nonnegative(),
   })
   .strict();
 
@@ -247,9 +252,6 @@ const presetSchema = z
 const tasksDomainErrorSchema = z
   .object({
     code: z.enum([
-      "task_parent_invalid",
-      "subtask_depth_exceeded",
-      "subtask_project_mismatch",
       "label_project_mismatch",
       "project_not_empty",
       "project_prefix_conflict",
@@ -306,9 +308,8 @@ const updateTaskInputSchema = z
     title: nonBlankStringSchema.optional(),
     description: z.string().optional(),
     status: taskStatusSchema.optional(),
-    priority: taskPrioritySchema.optional(),
+    priority: prioritySchema.optional(),
     dueDate: dueDateSchema.nullable().optional(),
-    parentTaskId: idSchema.nullable().optional(),
     labelIds: taskLabelsSchema.optional(),
     authorName: nonBlankStringSchema.default("You"),
   })
@@ -320,7 +321,6 @@ const updateTaskInputSchema = z
       input.status !== undefined ||
       input.priority !== undefined ||
       input.dueDate !== undefined ||
-      input.parentTaskId !== undefined ||
       input.labelIds !== undefined,
     { message: "at least one task field must be updated" },
   );
@@ -332,6 +332,10 @@ const updateProjectInputSchema = z
     color: nonBlankStringSchema.optional(),
     folderId: idSchema.nullable().optional(),
     linkedBbProjectId: z.string().startsWith("proj_").nullable().optional(),
+    status: projectStatusSchema.optional(),
+    priority: prioritySchema.optional(),
+    dueDate: dueDateSchema.nullable().optional(),
+    description: z.string().optional(),
   })
   .strict()
   .refine(
@@ -339,7 +343,11 @@ const updateProjectInputSchema = z
       input.name !== undefined ||
       input.color !== undefined ||
       input.folderId !== undefined ||
-      input.linkedBbProjectId !== undefined,
+      input.linkedBbProjectId !== undefined ||
+      input.status !== undefined ||
+      input.priority !== undefined ||
+      input.dueDate !== undefined ||
+      input.description !== undefined,
     { message: "at least one project field must be updated" },
   );
 
@@ -456,12 +464,27 @@ export const tasksRpcContract = defineRpcContract({
           .startsWith("proj_")
           .nullable()
           .default(null),
+        status: projectStatusSchema.default("todo"),
+        priority: prioritySchema.default("none"),
+        dueDate: dueDateSchema.nullable().default(null),
+        description: z.string().default(""),
       })
       .strict(),
     output: z.object({ project: projectSchema }).strict(),
   },
   updateProject: {
     input: updateProjectInputSchema,
+    output: z.object({ project: projectSchema }).strict(),
+  },
+  moveProject: {
+    input: z
+      .object({
+        projectId: idSchema,
+        status: projectStatusSchema,
+        beforeProjectId: idSchema.nullable().default(null),
+        afterProjectId: idSchema.nullable().default(null),
+      })
+      .strict(),
     output: z.object({ project: projectSchema }).strict(),
   },
   renameProjectPrefix: {
@@ -486,10 +509,9 @@ export const tasksRpcContract = defineRpcContract({
         projectId: idSchema,
         title: nonBlankStringSchema,
         description: z.string().default(""),
-        status: taskStatusSchema.default("backlog"),
-        priority: taskPrioritySchema.default("none"),
+        status: taskStatusSchema.default("todo"),
+        priority: prioritySchema.default("none"),
         dueDate: dueDateSchema.nullable().default(null),
-        parentTaskId: idSchema.nullable().default(null),
         labelIds: taskLabelsSchema.default([]),
       })
       .strict(),
@@ -516,10 +538,9 @@ export const tasksRpcContract = defineRpcContract({
       .object({
         projectId: idSchema.optional(),
         statuses: z.array(taskStatusSchema).optional(),
-        priorities: z.array(taskPrioritySchema).optional(),
+        priorities: z.array(prioritySchema).optional(),
         labelIds: z.array(idSchema).optional(),
         activeOnly: z.boolean().default(false),
-        parentTaskId: idSchema.nullable().optional(),
         search: z.string().optional(),
         sort: taskSortSchema.default("manual"),
         limit: z
@@ -537,18 +558,6 @@ export const tasksRpcContract = defineRpcContract({
         nextCursor: z.string().nullable(),
       })
       .strict(),
-  },
-  boardMove: {
-    input: z
-      .object({
-        taskId: idSchema,
-        status: taskStatusSchema,
-        beforeTaskId: idSchema.nullable().optional(),
-        afterTaskId: idSchema.nullable().optional(),
-        authorName: nonBlankStringSchema.default("You"),
-      })
-      .strict(),
-    output: taskMutationResultSchema,
   },
   createLabel: {
     input: z
@@ -733,6 +742,7 @@ export const tasksRpcContract = defineRpcContract({
             .object({
               projectId: idSchema,
               taskCount: z.number().int().nonnegative(),
+              doneTaskCount: z.number().int().nonnegative(),
               activeAgentCount: z.number().int().nonnegative(),
             })
             .strict(),
@@ -746,8 +756,9 @@ export type TasksRpcContract = typeof tasksRpcContract;
 export type Folder = z.infer<typeof folderSchema>;
 export type Project = z.infer<typeof projectSchema>;
 export type Task = z.infer<typeof taskSchema>;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 export type TaskStatus = (typeof TASK_STATUSES)[number];
-export type TaskPriority = (typeof TASK_PRIORITIES)[number];
+export type Priority = (typeof PRIORITIES)[number];
 export type Label = z.infer<typeof labelSchema>;
 export type Comment = z.infer<typeof commentSchema>;
 export type CommentProvider = z.infer<typeof commentProviderSchema>;

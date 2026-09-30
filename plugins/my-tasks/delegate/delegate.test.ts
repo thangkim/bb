@@ -33,7 +33,7 @@ function createTestPreset(
 }
 
 describe("task delegation", () => {
-  it("spawns from a preset, attaches the thread, advances status, comments, and invalidates", async () => {
+  it("spawns from a preset, attaches the thread, starts the project, comments, and invalidates", async () => {
     const { bb, harness } = createFakePluginHost({
       pluginId: "tasks",
       sdk: {
@@ -97,16 +97,10 @@ describe("task delegation", () => {
         liveStatus: "starting",
       }),
     ]);
-    expect(store.tasks.getTask(task.id)?.status).toBe("in_progress");
+    expect(store.tasks.getTask(task.id)?.status).toBe("todo");
+    expect(store.tasks.getProject(project.id)?.status).toBe("in_progress");
     expect(store.tasks.listComments(task.id)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          kind: "system",
-          authorName: "My Tasks",
-          presetName: "Test worker",
-          threadId: "thr_delegated",
-          body: "Status changed to In Progress · dispatched to Test worker",
-        }),
         expect.objectContaining({
           kind: "system",
           authorName: "My Tasks",
@@ -122,9 +116,42 @@ describe("task delegation", () => {
         channel: "tasks:changed",
         payload: { taskId: task.id, projectId: project.id },
       },
+      { channel: "projects:changed", payload: { projectId: project.id } },
       { channel: "comments:changed", payload: { taskId: task.id } },
     ]);
 
+    await harness.dispose();
+  });
+
+  it("leaves a project that is already past planning at its status", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "tasks",
+      sdk: {
+        threads: {
+          spawn: async () => ({ id: "thr_delegated" }),
+          get: async () =>
+            makeThreadResponse({ id: "thr_delegated", status: "starting" }),
+        },
+      },
+    });
+    const store = createStore(bb);
+    const project = store.tasks.createProject({
+      name: "Under review",
+      prefix: "REV",
+      color: "blue",
+      linkedBbProjectId: "proj_bb",
+      status: "in_review",
+    });
+    const task = store.tasks.createTask({
+      projectId: project.id,
+      title: "Address review",
+    });
+    registerDelegation(bb, store);
+    const preset = createTestPreset(store);
+
+    await harness.callRpc("delegate", { taskId: task.id, presetId: preset.id });
+
+    expect(store.tasks.getProject(project.id)?.status).toBe("in_review");
     await harness.dispose();
   });
 
@@ -540,6 +567,11 @@ describe("delegation seed prompt", () => {
       color: "blue",
       folderId: null,
       linkedBbProjectId: "proj_tasks",
+      status: "in_progress",
+      priority: "high",
+      dueDate: null,
+      description: "Make delegation feel native.",
+      position: 1_024,
       createdAt: "2026-07-15T17:00:00.000Z",
     };
     const task: Task = {
@@ -553,19 +585,17 @@ describe("delegation seed prompt", () => {
       status: "todo",
       priority: "high",
       dueDate: null,
-      parentTaskId: null,
       position: 1_024,
       createdAt: "2026-07-15T17:01:00.000Z",
       updatedAt: "2026-07-15T17:01:00.000Z",
     };
-    const subtask: Task = {
+    const sibling: Task = {
       ...task,
       id: "01J00000000000000000000003",
       number: 2,
       key: "TASK-2",
       title: "Add focused tests",
-      status: "in_progress",
-      parentTaskId: task.id,
+      status: "done",
     };
     const comments: Comment[] = [
       {
@@ -596,7 +626,7 @@ describe("delegation seed prompt", () => {
       buildSeedPrompt({
         task,
         project,
-        subtasks: [subtask],
+        projectTasks: [sibling],
         attachments: [
           {
             id: "01J00000000000000000000006",
@@ -619,11 +649,14 @@ describe("delegation seed prompt", () => {
       ## Project context
 
       - Name: Tasks plugin
+      - Status: In Progress
       - Linked bb project: proj_tasks
 
-      ## Sub-tasks
+      Make delegation feel native.
 
-      - TASK-2 · Add focused tests (in_progress)
+      ## Other tasks in this project
+
+      - [x] TASK-2 · Add focused tests
 
       ## Attachments
 
@@ -642,7 +675,7 @@ describe("delegation seed prompt", () => {
 
       ## Report-back contract
 
-      You are working on task TASK-1. Use the bb my-tasks CLI: comment substantive updates (bb my-tasks comment TASK-1 --body ...), attach result artifacts, set status when done (bb my-tasks update TASK-1 --status in_review) or explain blockage in a comment. Your thread is already attached to the task.
+      You are working on task TASK-1. Use the bb my-tasks CLI: comment substantive updates (bb my-tasks comment TASK-1 --body ...), attach result artifacts, mark the task done when the work is complete (bb my-tasks update TASK-1 --status done) or explain blockage in a comment. Your thread is already attached to the task.
 
       ## Preset instructions
 

@@ -1,7 +1,7 @@
-import type { TaskPriority, TaskStatus } from "../../shared/contract.js";
+import type { Priority, ProjectStatus } from "../../shared/contract.js";
 import { cn } from "@/lib/utils";
 
-const STATUS_COLOR_CLASS: Record<TaskStatus, string> = {
+const STATUS_COLOR_CLASS: Record<ProjectStatus, string> = {
   backlog: "text-subtle-foreground",
   todo: "text-subtle-foreground",
   in_progress: "text-attention",
@@ -14,7 +14,7 @@ export function StatusIcon({
   status,
   className,
 }: {
-  status: TaskStatus;
+  status: ProjectStatus;
   className?: string;
 }) {
   const ring = (dashed: boolean) => (
@@ -76,7 +76,7 @@ export function StatusIcon({
   );
 }
 
-const ACTIVE_BARS: Record<Exclude<TaskPriority, "urgent">, number> = {
+const ACTIVE_BARS: Record<Exclude<Priority, "urgent">, number> = {
   none: 0,
   low: 1,
   medium: 2,
@@ -87,7 +87,7 @@ export function PriorityIcon({
   priority,
   className,
 }: {
-  priority: TaskPriority;
+  priority: Priority;
   className?: string;
 }) {
   if (priority === "urgent") {
@@ -149,7 +149,7 @@ export function PriorityIcon({
 }
 
 const PRIORITY_TAG_META: Record<
-  TaskPriority,
+  Priority,
   { label: string; textClassName: string } | null
 > = {
   urgent: { label: "P1", textClassName: "text-destructive" },
@@ -163,7 +163,7 @@ export function PriorityTag({
   priority,
   className,
 }: {
-  priority: TaskPriority;
+  priority: Priority;
   className?: string;
 }) {
   const meta = PRIORITY_TAG_META[priority];
@@ -177,5 +177,50 @@ export function PriorityTag({
     >
       {meta ? meta.label : "–"}
     </span>
+  );
+}
+
+export function TaskCheckbox({
+  done,
+  className,
+}: {
+  done: boolean;
+  className?: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 14 14"
+      aria-hidden
+      className={cn(
+        "size-3.5 shrink-0",
+        done ? "text-success" : "text-subtle-foreground",
+        className,
+      )}
+    >
+      {done ? (
+        <>
+          <rect x="0.5" y="0.5" width="13" height="13" rx="3.5" fill="currentColor" />
+          <path
+            d="M4 7.2 l2 2 4-4.4"
+            fill="none"
+            stroke="var(--background)"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      ) : (
+        <rect
+          x="1.1"
+          y="1.1"
+          width="11.8"
+          height="11.8"
+          rx="3"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+        />
+      )}
+    </svg>
   );
 }

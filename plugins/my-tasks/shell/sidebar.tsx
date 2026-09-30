@@ -4,7 +4,6 @@ import type {
   Preset,
   Project,
   SidebarProjectSummary,
-  Task,
 } from "../shared/contract.js";
 import { useTasksRpc } from "./data.js";
 import type { TasksRoute } from "./routes.js";
@@ -161,7 +160,6 @@ interface TasksSidebarProps {
   projects: Project[] | undefined;
   summaries: SidebarProjectSummary[] | undefined;
   presets: Preset[] | undefined;
-  activeTasks: Task[] | undefined;
   isLoading: boolean;
   onNavigate: (route: TasksRoute) => void;
   onNewProject: () => void;
@@ -173,7 +171,6 @@ export function TasksSidebar({
   projects,
   summaries,
   presets,
-  activeTasks,
   isLoading,
   onNavigate,
   onNewProject,
@@ -190,13 +187,14 @@ export function TasksSidebar({
     () => new Map((summaries ?? []).map((entry) => [entry.projectId, entry])),
     [summaries],
   );
-  const totalTasks = useMemo(
-    () => (summaries ?? []).reduce((sum, entry) => sum + entry.taskCount, 0),
+  const activeProjectCount = useMemo(
+    () =>
+      (summaries ?? []).filter((entry) => entry.activeAgentCount > 0).length,
     [summaries],
   );
   const activeProjectId = route.kind === "project" ? route.projectId : null;
   const openProject = (projectId: string) =>
-    onNavigate({ kind: "project", projectId, view: null });
+    onNavigate({ kind: "project", projectId });
   const toggleFolder = (folderId: string) =>
     setCollapsedFolders((current) => {
       const next = new Set(current);
@@ -254,8 +252,8 @@ export function TasksSidebar({
             onClick={() => onNavigate({ kind: "all" })}
           >
             <Icon name="ListView" className="size-3.5 shrink-0" />
-            <span className="flex-1">All tasks</span>
-            {summaries ? <RowCount value={totalTasks} /> : null}
+            <span className="flex-1">All projects</span>
+            {projects ? <RowCount value={projects.length} /> : null}
           </SidebarRow>
           <SidebarRow
             active={route.kind === "active"}
@@ -263,8 +261,8 @@ export function TasksSidebar({
           >
             <Icon name="Zap" className="size-3.5 shrink-0" />
             <span className="flex-1">Active</span>
-            {activeTasks && activeTasks.length > 0 ? <WorkingDot /> : null}
-            {activeTasks ? <RowCount value={activeTasks.length} /> : null}
+            {activeProjectCount > 0 ? <WorkingDot /> : null}
+            {summaries ? <RowCount value={activeProjectCount} /> : null}
           </SidebarRow>
         </div>
         {isLoading ? (

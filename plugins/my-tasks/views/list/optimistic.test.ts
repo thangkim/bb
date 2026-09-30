@@ -4,7 +4,6 @@ import {
   applyEdit,
   beginEdit,
   editedTasks,
-  matchesFilters,
   pendingIds,
   reconcileEntries,
   settleFailure,
@@ -42,28 +41,6 @@ describe("applyEdit / editedTasks", () => {
     const result = editedTasks(tasks, entries);
     expect(result[0]?.status).toBe("done");
     expect(result[1]).toBe(tasks[1]);
-  });
-});
-
-describe("matchesFilters", () => {
-  const t = task({
-    id: "T1",
-    status: "in_progress",
-    priority: "high",
-    labelIds: ["A"],
-  });
-
-  it("passes with no filters", () => {
-    expect(matchesFilters(t, [], [], [])).toBe(true);
-  });
-
-  it("filters by status, priority, and label any-of", () => {
-    expect(matchesFilters(t, ["in_progress"], [], [])).toBe(true);
-    expect(matchesFilters(t, ["todo"], [], [])).toBe(false);
-    expect(matchesFilters(t, [], ["low"], [])).toBe(false);
-    expect(matchesFilters(t, [], [], ["A"])).toBe(true);
-    expect(matchesFilters(t, [], [], ["B"])).toBe(false);
-    expect(matchesFilters(t, [], [], ["B", "A"])).toBe(true);
   });
 });
 
@@ -115,23 +92,23 @@ describe("begin / settle lifecycle", () => {
 describe("concurrent / out-of-order edits to one task", () => {
   it("a stale failure never reverts a newer edit, and pending survives it", () => {
     let e = beginEdit(empty, "T1", { status: "done" }, 1);
-    e = beginEdit(e, "T1", { status: "canceled" }, 2);
-    expect(e.get("T1")?.edit.status).toBe("canceled");
+    e = beginEdit(e, "T1", { status: "todo" }, 2);
+    expect(e.get("T1")?.edit.status).toBe("todo");
     expect(e.get("T1")?.inFlight).toBe(2);
 
     e = settleFailure(e, "T1", { status: "done" }, 1);
-    expect(e.get("T1")?.edit.status).toBe("canceled");
+    expect(e.get("T1")?.edit.status).toBe("todo");
     expect(e.get("T1")?.inFlight).toBe(1);
     expect(pendingIds(e).has("T1")).toBe(true);
 
     e = settleSuccess(
       e,
       "T1",
-      { status: "canceled" },
+      { status: "todo" },
       2,
-      task({ id: "T1", status: "canceled", position: 900 }),
+      task({ id: "T1", status: "todo", position: 900 }),
     );
-    expect(e.get("T1")?.edit.status).toBe("canceled");
+    expect(e.get("T1")?.edit.status).toBe("todo");
     expect(e.get("T1")?.edit.position).toBe(900);
     expect(pendingIds(e).size).toBe(0);
   });

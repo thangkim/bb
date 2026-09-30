@@ -1,30 +1,26 @@
 import { cn } from "@/lib/utils";
+import { progressPercent } from "../views/list/lib.js";
 
-export function subtaskProgressPercent(done: number, total: number): number {
-  if (total <= 0) return 0;
-  return Math.round((done / total) * 100);
-}
-
-interface SubtaskProgressBarProps {
+interface ProgressBarProps {
   done: number;
   total: number;
   active?: boolean;
   className?: string;
 }
 
-export function SubtaskProgressBar({
+export function ProgressBar({
   done,
   total,
   active = false,
   className,
-}: SubtaskProgressBarProps) {
-  const percent = subtaskProgressPercent(done, total);
+}: ProgressBarProps) {
+  const percent = progressPercent(done, total);
   return (
     <span
       title={
         active
-          ? `${done}/${total} sub-tasks done · agent working`
-          : `${done}/${total} sub-tasks done`
+          ? `${done}/${total} tasks done · agent working`
+          : `${done}/${total} tasks done`
       }
       className={cn("inline-flex shrink-0 items-center gap-1.5", className)}
     >

@@ -173,10 +173,10 @@ describe("bb my-tasks CLI", () => {
 
     const listResult = await harness.runCli(["list", "--project", "CLI"]);
     expect(stdout(listResult)).toContain(
-      "KEY    STATUS   PRIORITY  DUE  TITLE                   LABELS   AGENTS",
+      "KEY    STATUS  PRIORITY  DUE  TITLE                   LABELS   AGENTS",
     );
     expect(listResult.stdout).toContain(
-      "CLI-1  backlog  medium    -    Ship the canonical CLI  Backend  0",
+      "CLI-1  todo    medium    -    Ship the canonical CLI  Backend  0",
     );
 
     const showResult = await harness.runCli(["show", "cli-1", "--json"]);
@@ -185,7 +185,6 @@ describe("bb my-tasks CLI", () => {
       task: { id: createPayload.task.id, key: "CLI-1" },
       project: { prefix: "CLI" },
       labels: [{ name: "Backend" }],
-      subtasks: [],
       attachments: [],
       taskThreads: [],
       comments: [],
@@ -195,7 +194,7 @@ describe("bb my-tasks CLI", () => {
       "update",
       "cli-1",
       "--status",
-      "in_progress",
+      "done",
       "--priority",
       "high",
       "--due",
@@ -205,7 +204,7 @@ describe("bb my-tasks CLI", () => {
     expect(JSON.parse(stdout(updateResult))).toMatchObject({
       task: {
         id: createPayload.task.id,
-        status: "in_progress",
+        status: "done",
         priority: "high",
         dueDate: "2026-07-20",
       },
@@ -233,7 +232,7 @@ describe("bb my-tasks CLI", () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: "system",
-          body: "Status changed to In Progress by cli",
+          body: "Marked done by cli",
         }),
         expect.objectContaining({
           kind: "system",
@@ -270,7 +269,7 @@ describe("bb my-tasks CLI", () => {
     await harness.dispose();
   });
 
-  it("assigns and promotes task parents by key or ID with stable JSON output", async () => {
+  it("sets project status, priority, due date, and description and reports progress", async () => {
     const { bb, harness } = createFakePluginHost({ pluginId: "tasks" });
     await plugin(bb);
 
@@ -279,191 +278,86 @@ describe("bb my-tasks CLI", () => {
         "project",
         "create",
         "--name",
-        "Hierarchy",
+        "Launch",
         "--prefix",
-        "HIER",
+        "LCH",
+        "--priority",
+        "high",
+        "--due",
+        "2026-10-15",
+        "--description",
+        "Ship the launch.",
       ]),
     );
-    const parent = JSON.parse(
-      stdout(
-        await harness.runCli([
-          "create",
-          "--project",
-          "HIER",
-          "--title",
-          "Parent",
-          "--json",
-        ]),
-      ),
-    ).task;
-    const child = JSON.parse(
-      stdout(
-        await harness.runCli([
-          "create",
-          "--project",
-          "HIER",
-          "--title",
-          "Child",
-          "--json",
-        ]),
-      ),
-    ).task;
-
-    const assignedByKey = JSON.parse(
-      stdout(
-        await harness.runCli([
-          "update",
-          child.key,
-          "--parent",
-          parent.key.toLowerCase(),
-          "--json",
-        ]),
-      ),
+    stdout(
+      await harness.runCli(["project", "create", "--name", "Next", "--prefix", "NXT"]),
     );
-    expect(assignedByKey).toEqual({
-      task: expect.objectContaining({
-        id: child.id,
-        parentTaskId: parent.id,
-      }),
-    });
-
-    const promoted = JSON.parse(
+    for (const title of ["Draft", "Review"]) {
       stdout(
-        await harness.runCli(["update", child.id, "--no-parent", "--json"]),
-      ),
-    );
-    expect(promoted).toEqual({
-      task: expect.objectContaining({
-        id: child.id,
-        parentTaskId: null,
-      }),
-    });
+        await harness.runCli(["create", "--project", "LCH", "--title", title]),
+      );
+    }
+    stdout(await harness.runCli(["update", "LCH-1", "--status", "done"]));
 
-    const assignedById = JSON.parse(
-      stdout(
-        await harness.runCli([
-          "update",
-          child.key,
-          "--parent",
-          parent.id,
-          "--json",
-        ]),
-      ),
-    );
-    expect(assignedById).toEqual({
-      task: expect.objectContaining({
-        id: child.id,
-        parentTaskId: parent.id,
-      }),
-    });
-
-    await harness.dispose();
-  });
-
-  it("rejects conflicting or invalid parent updates without mutation", async () => {
-    const { bb, harness } = createFakePluginHost({ pluginId: "tasks" });
-    await plugin(bb);
-
-    for (const project of [
-      { name: "Relationships", prefix: "REL" },
-      { name: "Other project", prefix: "OTH" },
-    ]) {
+    const updated = JSON.parse(
       stdout(
         await harness.runCli([
           "project",
-          "create",
-          "--name",
-          project.name,
-          "--prefix",
-          project.prefix,
+          "update",
+          "lch",
+          "--status",
+          "in_progress",
+          "--no-due",
+          "--json",
         ]),
-      );
-    }
-    const taskInputs: Array<{
-      project: string;
-      title: string;
-      parent?: string;
-    }> = [
-      { project: "REL", title: "Root" },
-      { project: "REL", title: "Nested child", parent: "REL-1" },
-      { project: "REL", title: "Movable root" },
-      { project: "REL", title: "Movable child", parent: "REL-3" },
-      { project: "OTH", title: "Other root" },
-    ];
-    for (const taskInput of taskInputs) {
-      stdout(
-        await harness.runCli([
-          "create",
-          "--project",
-          taskInput.project,
-          "--title",
-          taskInput.title,
-          ...(taskInput.parent ? ["--parent", taskInput.parent] : []),
-        ]),
-      );
-    }
-
-    const conflicting = await harness.runCli([
-      "update",
-      "REL-3",
-      "--parent",
-      "REL-1",
-      "--no-parent",
-    ]);
-    expect(conflicting).toMatchObject({ exitCode: 1, stdout: "" });
-    expect(conflicting.stderr).toContain(
-      "--parent and --no-parent cannot be combined",
+      ),
     );
-    expect(conflicting.stderr).toContain(
-      "Usage:\n  bb my-tasks update <key-or-id>",
-    );
-    await expect(harness.runCli(["update", "REL-3"])).resolves.toEqual({
-      exitCode: 1,
-      stdout: "",
-      stderr: "no task changes were provided\n",
-    });
-    await expect(
-      harness.runCli(["update", "REL-3", "--parent", "REL-3"]),
-    ).resolves.toEqual({
-      exitCode: 1,
-      stdout: "",
-      stderr: "A task cannot be its own parent\n",
-    });
-    await expect(
-      harness.runCli(["update", "REL-3", "--parent", "OTH-1"]),
-    ).resolves.toEqual({
-      exitCode: 1,
-      stdout: "",
-      stderr: "A sub-task must belong to the same project as its parent\n",
-    });
-    await expect(
-      harness.runCli(["update", "REL-3", "--parent", "REL-2"]),
-    ).resolves.toEqual({
-      exitCode: 1,
-      stdout: "",
-      stderr: "Tasks support at most one level of sub-tasks\n",
-    });
-    await expect(
-      harness.runCli(["update", "REL-3", "--parent", "REL-1"]),
-    ).resolves.toEqual({
-      exitCode: 1,
-      stdout: "",
-      stderr: "A task with sub-tasks cannot itself become a sub-task\n",
+    expect(updated.project).toMatchObject({
+      status: "in_progress",
+      priority: "high",
+      dueDate: null,
+      description: "Ship the launch.",
     });
 
-    const unchanged = JSON.parse(
-      stdout(await harness.runCli(["show", "REL-3", "--json"])),
+    const list = JSON.parse(
+      stdout(await harness.runCli(["project", "list", "--json"])),
     );
-    expect(unchanged.task).toMatchObject({
-      key: "REL-3",
-      parentTaskId: null,
-    });
-    expect(unchanged.subtasks).toEqual([
-      expect.objectContaining({
-        key: "REL-4",
-        parentTaskId: unchanged.task.id,
-      }),
+    expect(list.projects).toEqual([
+      expect.objectContaining({ prefix: "LCH", taskCount: 2, doneTaskCount: 1 }),
+      expect.objectContaining({ prefix: "NXT", taskCount: 0, doneTaskCount: 0 }),
     ]);
+    const show = stdout(await harness.runCli(["project", "show", "LCH"]));
+    expect(show).toContain("1/2 (50%)");
+    expect(show).toContain("Ship the launch.");
+    expect(show).toMatch(/x\s+LCH-1\s+-\s+Draft/);
+
+    stdout(
+      await harness.runCli([
+        "project",
+        "move",
+        "NXT",
+        "--status",
+        "in_progress",
+        "--before",
+        "LCH",
+      ]),
+    );
+    const column = JSON.parse(
+      stdout(await harness.runCli(["project", "list", "--json"])),
+    )
+      .projects.filter(
+        (project: { status: string }) => project.status === "in_progress",
+      )
+      .sort(
+        (left: { position: number }, right: { position: number }) =>
+          left.position - right.position,
+      )
+      .map((project: { prefix: string }) => project.prefix);
+    expect(column).toEqual(["NXT", "LCH"]);
+
+    await expect(
+      harness.runCli(["update", "LCH-2", "--status", "in_review"]),
+    ).resolves.toMatchObject({ exitCode: 1 });
 
     await harness.dispose();
   });
@@ -553,7 +447,7 @@ describe("bb my-tasks CLI", () => {
           "--priority",
           "high,urgent",
           "--status",
-          "backlog",
+          "todo",
           "--json",
         ]),
       ),
@@ -585,7 +479,7 @@ describe("bb my-tasks CLI", () => {
         projectId: project.id,
         title: `Large task ${String(index + 1).padStart(3, "0")}`,
         description: `Regression payload ${index} ${"x".repeat(512)}`,
-        status: index % 2 === 0 ? "todo" : "in_progress",
+        status: index % 2 === 0 ? "todo" : "done",
         priority: index % 3 === 0 ? "high" : "none",
       });
     }
@@ -733,7 +627,7 @@ describe("bb my-tasks CLI", () => {
     ]);
     expect(invalidStatus).toMatchObject({ exitCode: 1, stdout: "" });
     expect(invalidStatus.stderr).toContain(
-      "invalid value 'almost-done' for --status. Expected one of: backlog, todo, in_progress, in_review, done, canceled",
+      "invalid value 'almost-done' for --status. Expected one of: todo, done",
     );
 
     const invalidDueDate = await harness.runCli([
@@ -2111,13 +2005,15 @@ describe("bb my-tasks CLI", () => {
 
     const statusHelp = stdout(await harness.runCli(["status", "--help"]));
     expect(statusHelp).toContain("Plugin health only");
-    expect(statusHelp).toContain("bb my-tasks list --status <status>");
+    expect(statusHelp).toContain(
+      "bb my-tasks project update <prefix> --status <status>",
+    );
 
     const listHelp = stdout(await harness.runCli(["list", "-h"]));
     expect(listHelp).toContain("--limit <1-500>");
     expect(listHelp).toContain("default: 100");
     expect(listHelp).toContain(
-      "--status <backlog|todo|in_progress|in_review|done|canceled>",
+      "--status <todo|done>",
     );
 
     const createHelp = stdout(await harness.runCli(["create", "--help"]));

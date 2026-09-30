@@ -13,51 +13,31 @@ import {
 
 describe("listScrollScopeKey", () => {
   const base = {
-    projectId: null,
     activeOnly: false,
     filters: EMPTY_FILTERS,
     sort: "manual" as const,
   };
 
-  it("distinguishes the all/active/project lists", () => {
+  it("distinguishes the all and active lists", () => {
     const all = listScrollScopeKey(base);
     const active = listScrollScopeKey({ ...base, activeOnly: true });
-    const project = listScrollScopeKey({ ...base, projectId: "proj_1" });
-    expect(new Set([all, active, project]).size).toBe(3);
+    expect(all).not.toBe(active);
   });
 
   it("ignores filter member order but reflects filter content", () => {
     const a: ListFilterState = {
       statuses: ["todo", "done"],
-      priorities: [],
-      labelNames: ["b", "a"],
+      priorities: ["high", "low"],
     };
     const b: ListFilterState = {
       statuses: ["done", "todo"],
-      priorities: [],
-      labelNames: ["a", "b"],
+      priorities: ["low", "high"],
     };
     expect(listScrollScopeKey({ ...base, filters: a })).toBe(
       listScrollScopeKey({ ...base, filters: b }),
     );
     expect(listScrollScopeKey({ ...base, filters: a })).not.toBe(
       listScrollScopeKey(base),
-    );
-  });
-
-  it("does not collide distinct label filters that share a delimiter", () => {
-    const withComma: ListFilterState = {
-      statuses: [],
-      priorities: [],
-      labelNames: ["a,b"],
-    };
-    const twoLabels: ListFilterState = {
-      statuses: [],
-      priorities: [],
-      labelNames: ["a", "b"],
-    };
-    expect(listScrollScopeKey({ ...base, filters: withComma })).not.toBe(
-      listScrollScopeKey({ ...base, filters: twoLabels }),
     );
   });
 
@@ -78,7 +58,7 @@ describe("resolveRestoreTarget", () => {
 });
 
 describe("scroll store", () => {
-  const PREFIX = "bb-tasks:list-scroll:";
+  const PREFIX = "bb-my-tasks:project-list-scroll:";
   beforeEach(() => window.sessionStorage.clear());
   afterEach(() => window.sessionStorage.clear());
 

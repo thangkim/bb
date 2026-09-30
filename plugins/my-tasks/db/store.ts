@@ -30,6 +30,7 @@ import type {
   Label,
   ListTasksFilters,
   ListTasksPage,
+  MoveProjectInput,
   Preset,
   PresetEnvironmentKind,
   Project,
@@ -45,7 +46,6 @@ import type {
   UpdatePresetInput,
   UpdateProjectInput,
   UpdateTaskInput,
-  UpdateTaskPositionInput,
   UpsertTaskThreadInput,
 } from "./types";
 
@@ -71,6 +71,11 @@ interface ProjectRow {
   color: string;
   folder_id: string | null;
   linked_bb_project_id: string | null;
+  status: Project["status"];
+  priority: Project["priority"];
+  due_date: string | null;
+  description: string;
+  position: number;
   created_at: string;
 }
 
@@ -84,7 +89,6 @@ interface TaskRow {
   status: Task["status"];
   priority: Task["priority"];
   due_date: string | null;
-  parent_task_id: string | null;
   position: number;
   created_at: string;
   updated_at: string;
@@ -151,12 +155,6 @@ interface TaskThreadRow {
   updated_at: string;
 }
 
-interface SubtaskCountRow {
-  parent_task_id: string;
-  total: number;
-  done: number;
-}
-
 interface PresetRow {
   id: string;
   name: string;
@@ -219,10 +217,6 @@ function taskQueryFingerprint(
     priorities: normalizedFilterValues(filters.priorities),
     labelIds: normalizedFilterValues(filters.labelIds),
     activeOnly: filters.activeOnly === true,
-    parentTaskId:
-      filters.parentTaskId === undefined
-        ? { specified: false, value: null }
-        : { specified: true, value: filters.parentTaskId },
     search: filters.search?.trim() || null,
     sort,
   });
@@ -360,6 +354,11 @@ function projectFromRow(row: ProjectRow): Project {
     color: row.color,
     folderId: row.folder_id,
     linkedBbProjectId: row.linked_bb_project_id,
+    status: row.status,
+    priority: row.priority,
+    dueDate: row.due_date,
+    description: row.description,
+    position: row.position,
     createdAt: row.created_at,
   };
 }
@@ -375,7 +374,6 @@ function taskFromRow(row: TaskRow): Task {
     status: row.status,
     priority: row.priority,
     dueDate: row.due_date,
-    parentTaskId: row.parent_task_id,
     position: row.position,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -636,17 +634,53 @@ export function createTasksStore(db: PluginDatabase) {
     return project;
   }
 
+  const nextProjectPosition = db.prepare<
+    [Project["status"], string],
+    { position: number }
+  >(
+    `
+    SELECT COALESCE(MAX(position), 0) + ${POSITION_STEP} AS position
+    FROM projects WHERE status = ? AND id <> ?
+  `,
+  );
+
+  function projectPositionAtEnd(
+    status: Project["status"],
+    excludedProjectId: string,
+  ): number {
+    return (
+      nextProjectPosition.get(status, excludedProjectId)?.position ??
+      POSITION_STEP
+    );
+  }
+
   function createProject(input: CreateProjectInput): Project {
     const id = createOrValidateUlid(input.id);
     const folderId = input.folderId ?? null;
     if (folderId !== null) requireFolder(folderId);
+    const status = input.status ?? "todo";
     db.prepare<
-      [string, string, string, string, string | null, string | null, string]
+      [
+        string,
+        string,
+        string,
+        string,
+        string | null,
+        string | null,
+        Project["status"],
+        Project["priority"],
+        string | null,
+        string,
+        number,
+        string,
+      ]
     >(
       `
-      INSERT INTO projects
-        (id, name, prefix, next_task_number, color, folder_id, linked_bb_project_id, created_at)
-      VALUES (?, ?, ?, 1, ?, ?, ?, ?)
+      INSERT INTO projects (
+        id, name, prefix, next_task_number, color, folder_id, linked_bb_project_id,
+        status, priority, due_date, description, position, created_at
+      )
+      VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     ).run(
       id,
@@ -655,6 +689,11 @@ export function createTasksStore(db: PluginDatabase) {
       requireNonEmpty(input.color, "Project color"),
       folderId,
       validateLinkedBbProjectId(input.linkedBbProjectId ?? null),
+      status,
+      input.priority ?? "none",
+      validateDueDate(input.dueDate ?? null),
+      input.description ?? "",
+      projectPositionAtEnd(status, id),
       nowIso(),
     );
     return requireProject(id);
@@ -689,10 +728,30 @@ export function createTasksStore(db: PluginDatabase) {
     const folderId =
       input.folderId === undefined ? current.folderId : input.folderId;
     if (folderId !== null) requireFolder(folderId);
-    db.prepare<[string, string, string, string | null, string | null, string]>(
+    const status = input.status ?? current.status;
+    const position =
+      status === current.status
+        ? current.position
+        : projectPositionAtEnd(status, id);
+    db.prepare<
+      [
+        string,
+        string,
+        string,
+        string | null,
+        string | null,
+        Project["status"],
+        Project["priority"],
+        string | null,
+        string,
+        number,
+        string,
+      ]
+    >(
       `
       UPDATE projects
-      SET name = ?, prefix = ?, color = ?, folder_id = ?, linked_bb_project_id = ?
+      SET name = ?, prefix = ?, color = ?, folder_id = ?, linked_bb_project_id = ?,
+        status = ?, priority = ?, due_date = ?, description = ?, position = ?
       WHERE id = ?
     `,
     ).run(
@@ -709,9 +768,90 @@ export function createTasksStore(db: PluginDatabase) {
       input.linkedBbProjectId === undefined
         ? current.linkedBbProjectId
         : validateLinkedBbProjectId(input.linkedBbProjectId),
+      status,
+      input.priority ?? current.priority,
+      input.dueDate === undefined
+        ? current.dueDate
+        : validateDueDate(input.dueDate),
+      input.description ?? current.description,
+      position,
       id,
     );
     return requireProject(id);
+  }
+
+  function renormalizeProjectColumn(
+    status: Project["status"],
+    excludedProjectId: string,
+  ): void {
+    const rows = db
+      .prepare<[Project["status"], string], { id: string }>(
+        `
+        SELECT id FROM projects
+        WHERE status = ? AND id <> ?
+        ORDER BY position, id
+      `,
+      )
+      .all(status, excludedProjectId);
+    const update = db.prepare<[number, string]>(
+      "UPDATE projects SET position = ? WHERE id = ?",
+    );
+    rows.forEach((row, index) =>
+      update.run((index + 1) * POSITION_STEP, row.id),
+    );
+  }
+
+  const moveProjectTransaction = db.transaction(
+    (id: string, input: MoveProjectInput): Project => {
+      requireProject(id);
+      if (input.beforeProjectId === id || input.afterProjectId === id) {
+        throw new Error("A project cannot be its own reorder neighbor");
+      }
+
+      const readNeighbor = (neighborId: string | null): Project | undefined => {
+        if (neighborId === null) return undefined;
+        const neighbor = requireProject(neighborId);
+        if (neighbor.status !== input.status) {
+          throw new Error("Reorder neighbors must be in the destination status");
+        }
+        return neighbor;
+      };
+
+      let before = readNeighbor(input.beforeProjectId);
+      let after = readNeighbor(input.afterProjectId);
+      if (before && after && before.position >= after.position) {
+        throw new Error(
+          "The before neighbor must sort before the after neighbor",
+        );
+      }
+
+      const gapIsExhausted =
+        before && after
+          ? after.position - before.position <= MIN_POSITION_GAP
+          : !before && after
+            ? after.position <= MIN_POSITION_GAP
+            : false;
+      if (gapIsExhausted) {
+        renormalizeProjectColumn(input.status, id);
+        before = readNeighbor(input.beforeProjectId);
+        after = readNeighbor(input.afterProjectId);
+      }
+
+      let position: number;
+      if (before && after) position = (before.position + after.position) / 2;
+      else if (before) position = before.position + POSITION_STEP;
+      else if (after) position = after.position / 2;
+      else position = projectPositionAtEnd(input.status, id);
+
+      db.prepare<[Project["status"], number, string]>(
+        "UPDATE projects SET status = ?, position = ? WHERE id = ?",
+      ).run(input.status, position, id);
+      return requireProject(id);
+    },
+  );
+
+  function moveProject(id: string, input: MoveProjectInput): Project {
+    return moveProjectTransaction(id, input);
   }
 
   function deleteProject(id: string): boolean {
@@ -745,53 +885,20 @@ export function createTasksStore(db: PluginDatabase) {
     return task;
   }
 
-  function validateTaskParent(
-    projectId: string,
-    parentTaskId: string | null,
-    ownId?: string,
-  ): void {
-    if (parentTaskId === null) return;
-    if (parentTaskId === ownId)
-      throw new Error("A task cannot be its own parent");
-    const parent = requireTask(parentTaskId);
-    if (parent.projectId !== projectId) {
-      throw new Error(
-        "A sub-task must belong to the same project as its parent",
-      );
-    }
-    if (parent.parentTaskId !== null) {
-      throw new Error("Tasks support at most one level of sub-tasks");
-    }
-    if (ownId) {
-      const hasChildren = db
-        .prepare<[string], { found: number }>(
-          "SELECT 1 AS found FROM tasks WHERE parent_task_id = ? LIMIT 1",
-        )
-        .get(ownId);
-      if (hasChildren) {
-        throw new Error(
-          "A task with sub-tasks cannot itself become a sub-task",
-        );
-      }
-    }
-  }
-
   const createTaskTransaction = db.transaction(
     (input: CreateTaskInput): Task => {
       const project = requireProject(input.projectId);
       const id = createOrValidateUlid(input.id);
-      const status = input.status ?? "backlog";
-      const parentTaskId = input.parentTaskId ?? null;
-      validateTaskParent(project.id, parentTaskId, id);
+      const status = input.status ?? "todo";
       const position =
         db
-          .prepare<[string, Task["status"]], { position: number }>(
+          .prepare<[string], { position: number }>(
             `
           SELECT COALESCE(MAX(position), 0) + ${POSITION_STEP} AS position
-          FROM tasks WHERE project_id = ? AND status = ?
+          FROM tasks WHERE project_id = ?
         `,
           )
-          .get(project.id, status)?.position ?? POSITION_STEP;
+          .get(project.id)?.position ?? POSITION_STEP;
       const createdAt = nowIso();
 
       const allocated = db
@@ -819,7 +926,6 @@ export function createTasksStore(db: PluginDatabase) {
           Task["status"],
           Task["priority"],
           string | null,
-          string | null,
           number,
           string,
           string,
@@ -828,8 +934,8 @@ export function createTasksStore(db: PluginDatabase) {
         `
       INSERT INTO tasks (
         id, project_id, number, title, description, status, priority, due_date,
-        parent_task_id, position, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        position, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       ).run(
         id,
@@ -840,7 +946,6 @@ export function createTasksStore(db: PluginDatabase) {
         status,
         input.priority ?? "none",
         validateDueDate(input.dueDate ?? null),
-        parentTaskId,
         position,
         createdAt,
         createdAt,
@@ -906,14 +1011,6 @@ export function createTasksStore(db: PluginDatabase) {
         WHERE tt.task_id = t.id AND tt.live_status IN ('starting', 'working')
       )`);
     }
-    if (filters.parentTaskId !== undefined) {
-      if (filters.parentTaskId === null) {
-        clauses.push("t.parent_task_id IS NULL");
-      } else {
-        clauses.push("t.parent_task_id = @parentTaskId");
-        parameters.parentTaskId = filters.parentTaskId;
-      }
-    }
     const search = filters.search?.trim();
     if (search) {
       clauses.push(
@@ -957,7 +1054,7 @@ export function createTasksStore(db: PluginDatabase) {
 
     const orderBy =
       sort === "manual"
-        ? "cursor_project_id, cursor_status, cursor_position, cursor_id"
+        ? "cursor_project_id, cursor_position, cursor_id"
         : sort === "priority"
           ? "cursor_priority, cursor_due_null, cursor_due_date, cursor_project_id, cursor_status, cursor_position, cursor_id"
           : "cursor_due_null, cursor_due_date, cursor_priority, cursor_project_id, cursor_status, cursor_position, cursor_id";
@@ -965,7 +1062,7 @@ export function createTasksStore(db: PluginDatabase) {
       cursor === null
         ? ""
         : sort === "manual"
-          ? "WHERE (cursor_project_id, cursor_status, cursor_position, cursor_id) > (@cursorProjectId, @cursorStatus, @cursorPosition, @cursorId)"
+          ? "WHERE (cursor_project_id, cursor_position, cursor_id) > (@cursorProjectId, @cursorPosition, @cursorId)"
           : sort === "priority"
             ? "WHERE (cursor_priority, cursor_due_null, cursor_due_date, cursor_project_id, cursor_status, cursor_position, cursor_id) > (@cursorPriority, @cursorDueNull, @cursorDueDate, @cursorProjectId, @cursorStatus, @cursorPosition, @cursorId)"
             : "WHERE (cursor_due_null, cursor_due_date, cursor_priority, cursor_project_id, cursor_status, cursor_position, cursor_id) > (@cursorDueNull, @cursorDueDate, @cursorPriority, @cursorProjectId, @cursorStatus, @cursorPosition, @cursorId)";
@@ -1078,43 +1175,9 @@ export function createTasksStore(db: PluginDatabase) {
     return tasks;
   }
 
-  function listSubtasks(parentTaskId: string): Task[] {
-    requireTask(parentTaskId);
-    return db
-      .prepare<[string], TaskRow>(
-        `
-        ${taskSelect}
-        WHERE t.parent_task_id = ?
-        ORDER BY t.position, t.created_at, t.id
-      `,
-      )
-      .all(parentTaskId)
-      .map(taskFromRow);
-  }
-
   const updateTaskTransaction = db.transaction(
     (id: string, input: UpdateTaskInput): Task => {
       const current = requireTask(id);
-      const status = input.status ?? current.status;
-      const parentTaskId =
-        input.parentTaskId === undefined
-          ? current.parentTaskId
-          : input.parentTaskId;
-      validateTaskParent(current.projectId, parentTaskId, id);
-
-      let position = current.position;
-      if (status !== current.status) {
-        position =
-          db
-            .prepare<[string, Task["status"]], { position: number }>(
-              `
-              SELECT COALESCE(MAX(position), 0) + ${POSITION_STEP} AS position
-              FROM tasks WHERE project_id = ? AND status = ?
-            `,
-            )
-            .get(current.projectId, status)?.position ?? POSITION_STEP;
-      }
-
       db.prepare<
         [
           string,
@@ -1122,8 +1185,6 @@ export function createTasksStore(db: PluginDatabase) {
           Task["status"],
           Task["priority"],
           string | null,
-          string | null,
-          number,
           string,
           string,
         ]
@@ -1131,7 +1192,7 @@ export function createTasksStore(db: PluginDatabase) {
         `
         UPDATE tasks SET
           title = ?, description = ?, status = ?, priority = ?, due_date = ?,
-          parent_task_id = ?, position = ?, updated_at = ?
+          updated_at = ?
         WHERE id = ?
       `,
       ).run(
@@ -1139,13 +1200,11 @@ export function createTasksStore(db: PluginDatabase) {
           ? current.title
           : requireNonEmpty(input.title, "Task title"),
         input.description ?? current.description,
-        status,
+        input.status ?? current.status,
         input.priority ?? current.priority,
         input.dueDate === undefined
           ? current.dueDate
           : validateDueDate(input.dueDate),
-        parentTaskId,
-        position,
         nowIso(),
         id,
       );
@@ -1155,100 +1214,6 @@ export function createTasksStore(db: PluginDatabase) {
 
   function updateTask(id: string, input: UpdateTaskInput): Task {
     return updateTaskTransaction(id, input);
-  }
-
-  function renormalizeColumn(
-    projectId: string,
-    status: Task["status"],
-    excludedTaskId: string,
-  ): void {
-    const rows = db
-      .prepare<[string, Task["status"], string], { id: string }>(
-        `
-        SELECT id FROM tasks
-        WHERE project_id = ? AND status = ? AND id <> ?
-        ORDER BY position, id
-      `,
-      )
-      .all(projectId, status, excludedTaskId);
-    const update = db.prepare<[number, string]>(
-      "UPDATE tasks SET position = ? WHERE id = ?",
-    );
-    rows.forEach((row, index) =>
-      update.run((index + 1) * POSITION_STEP, row.id),
-    );
-  }
-
-  const updatePositionTransaction = db.transaction(
-    (id: string, input: UpdateTaskPositionInput): Task => {
-      const task = requireTask(id);
-      if (input.beforeTaskId === id || input.afterTaskId === id) {
-        throw new Error("A task cannot be its own reorder neighbor");
-      }
-
-      const readNeighbor = (
-        neighborId: string | null | undefined,
-      ): Task | undefined => {
-        if (neighborId == null) return undefined;
-        const neighbor = requireTask(neighborId);
-        if (
-          neighbor.projectId !== task.projectId ||
-          neighbor.status !== input.status
-        ) {
-          throw new Error(
-            "Reorder neighbors must be in the destination project and status",
-          );
-        }
-        return neighbor;
-      };
-
-      let before = readNeighbor(input.beforeTaskId);
-      let after = readNeighbor(input.afterTaskId);
-      if (before && after && before.position >= after.position) {
-        throw new Error(
-          "The before neighbor must sort before the after neighbor",
-        );
-      }
-
-      const gapIsExhausted =
-        before && after
-          ? after.position - before.position <= MIN_POSITION_GAP
-          : !before && after
-            ? after.position <= MIN_POSITION_GAP
-            : false;
-      if (gapIsExhausted) {
-        renormalizeColumn(task.projectId, input.status, id);
-        before = readNeighbor(input.beforeTaskId);
-        after = readNeighbor(input.afterTaskId);
-      }
-
-      let position: number;
-      if (before && after) position = (before.position + after.position) / 2;
-      else if (before) position = before.position + POSITION_STEP;
-      else if (after) position = after.position / 2;
-      else {
-        position =
-          db
-            .prepare<[string, Task["status"], string], { position: number }>(
-              `
-              SELECT COALESCE(MAX(position), 0) + ${POSITION_STEP} AS position
-              FROM tasks WHERE project_id = ? AND status = ? AND id <> ?
-            `,
-            )
-            .get(task.projectId, input.status, id)?.position ?? POSITION_STEP;
-      }
-
-      db.prepare<[Task["status"], number, string, string]>(
-        `
-        UPDATE tasks SET status = ?, position = ?, updated_at = ? WHERE id = ?
-      `,
-      ).run(input.status, position, nowIso(), id);
-      return requireTask(id);
-    },
-  );
-
-  function updatePosition(id: string, input: UpdateTaskPositionInput): Task {
-    return updatePositionTransaction(id, input);
   }
 
   function deleteTask(id: string): boolean {
@@ -1665,7 +1630,7 @@ export function createTasksStore(db: PluginDatabase) {
   function taskRowMeta(taskIds: readonly string[]): Map<string, TaskRowMeta> {
     const byTask = new Map<string, TaskRowMeta>();
     for (const taskId of taskIds) {
-      byTask.set(taskId, { threads: [], subtaskDone: 0, subtaskTotal: 0 });
+      byTask.set(taskId, { threads: [] });
     }
 
     for (let offset = 0; offset < taskIds.length; offset += 500) {
@@ -1688,27 +1653,6 @@ export function createTasksStore(db: PluginDatabase) {
         .all(...ids);
       for (const row of threadRows) {
         byTask.get(row.task_id)?.threads.push(taskThreadFromRow(row));
-      }
-
-      const subtaskRows = db
-        .prepare<string[], SubtaskCountRow>(
-          `
-          SELECT
-            parent_task_id,
-            COUNT(*) AS total,
-            SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done
-          FROM tasks
-          WHERE parent_task_id IN (${placeholders})
-          GROUP BY parent_task_id
-        `,
-        )
-        .all(...ids);
-      for (const row of subtaskRows) {
-        const meta = byTask.get(row.parent_task_id);
-        if (meta) {
-          meta.subtaskDone = row.done;
-          meta.subtaskTotal = row.total;
-        }
       }
     }
 
@@ -1879,15 +1823,14 @@ export function createTasksStore(db: PluginDatabase) {
     getProject,
     listProjects,
     updateProject,
+    moveProject,
     deleteProject,
     createTask,
     getTask,
     getTaskByKey,
     listTasksPage,
     listTasks,
-    listSubtasks,
     updateTask,
-    updatePosition,
     deleteTask,
     createLabel,
     getLabel,

@@ -59,10 +59,9 @@ function createdTask(input: Record<string, unknown>): Task {
     key: "TSK-5",
     title: String(input.title),
     description: String(input.description ?? ""),
-    status: (input.status as Task["status"]) ?? "backlog",
+    status: (input.status as Task["status"]) ?? "todo",
     priority: (input.priority as Task["priority"]) ?? "none",
     dueDate: (input.dueDate as string | null) ?? null,
-    parentTaskId: (input.parentTaskId as string | null) ?? null,
     position: 1,
     labelIds: (input.labelIds as string[]) ?? [],
   });
@@ -140,7 +139,7 @@ describe("NewTaskDialog", () => {
     expect(createCalls[0]).toMatchObject({ title: "Keyboard submission" });
   });
 
-  it("creates a task in the route's project with column defaults and navigates to it", async () => {
+  it("creates a task in the route's project with defaults and navigates to it", async () => {
     const createCalls: Array<Record<string, unknown>> = [];
     const slot = renderSlot(
       app.navPanels[0]!,
@@ -170,10 +169,8 @@ describe("NewTaskDialog", () => {
     expect(createCalls[0]).toMatchObject({
       projectId: PROJECT_ID,
       title: "Ship the dialog",
-      status: "todo",
       priority: "none",
       dueDate: null,
-      parentTaskId: null,
       labelIds: [],
     });
     await waitFor(() =>

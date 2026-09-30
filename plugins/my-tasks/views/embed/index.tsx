@@ -12,8 +12,8 @@ import { useTasksRpc } from "../../shell/data.js";
 import { TasksRefreshProvider } from "../../shell/refresh.js";
 import { PANEL_PATH, tasksRouteToSubPath } from "../../shell/routes.js";
 import { DetailView } from "../detail/index.js";
-import { PRIORITY_LABELS, STATUS_LABELS } from "../list/lib.js";
-import { PriorityIcon, StatusIcon } from "../list/icons.js";
+import { PRIORITY_LABELS } from "../list/lib.js";
+import { PriorityIcon, TaskCheckbox } from "../list/icons.js";
 
 const TASK_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9]{0,9}-\d+$/;
 
@@ -131,7 +131,7 @@ function CardShell({
 function embedAriaLabel(task: Task): string {
   const parts = [
     `${task.key} — ${task.title}`,
-    STATUS_LABELS[task.status].toLowerCase(),
+    task.status === "done" ? "done" : "not done",
   ];
   if (task.priority !== "none") {
     parts.push(`${PRIORITY_LABELS[task.priority].toLowerCase()} priority`);
@@ -182,7 +182,7 @@ export function TaskDirectiveCard({ attributes }: PluginMessageDirectiveProps) {
     return (
       <CardShell dashed>
         <div className="flex min-w-0 flex-1 items-center gap-2 px-1">
-          <StatusIcon status="backlog" />
+          <TaskCheckbox done={false} className="opacity-60" />
           <span className="shrink-0 font-mono text-xs text-muted-foreground">
             {taskKey}
           </span>
@@ -242,7 +242,7 @@ export function TaskDirectiveCard({ attributes }: PluginMessageDirectiveProps) {
         onClick={openInSidePanel}
       >
         <span aria-hidden>
-          <StatusIcon status={task.status} />
+          <TaskCheckbox done={task.status === "done"} />
         </span>
         <span
           aria-hidden

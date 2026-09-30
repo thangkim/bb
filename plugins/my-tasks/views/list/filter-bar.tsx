@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import {
-  TASK_PRIORITIES,
-  TASK_STATUSES,
-  type TaskPriority,
-  type TaskStatus,
+  PRIORITIES,
+  PROJECT_STATUSES,
+  type Priority,
+  type ProjectStatus,
 } from "../../shared/contract.js";
 import { TASK_SORTS, type TaskSort } from "../../shared/pagination.js";
 import {
@@ -15,12 +15,7 @@ import {
 import { Icon, type IconName } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { PriorityIcon, StatusIcon } from "./icons.js";
-import {
-  PRIORITY_LABELS,
-  SORT_LABELS,
-  STATUS_LABELS,
-  type LabelFilterOption,
-} from "./lib.js";
+import { PRIORITY_LABELS, SORT_LABELS, STATUS_LABELS } from "./lib.js";
 
 function toggled<T>(values: readonly T[], value: T, checked: boolean): T[] {
   if (checked) return values.includes(value) ? [...values] : [...values, value];
@@ -90,7 +85,7 @@ function SortChip({
       <DropdownMenuContent
         align="end"
         className="min-w-44"
-        mobileTitle="Sort tasks"
+        mobileTitle="Sort projects"
       >
         {TASK_SORTS.map((option) => (
           <DropdownMenuCheckboxItem
@@ -109,23 +104,17 @@ function SortChip({
 }
 
 export interface ListFilterState {
-  statuses: TaskStatus[];
-  priorities: TaskPriority[];
-  labelNames: string[];
+  statuses: ProjectStatus[];
+  priorities: Priority[];
 }
 
 export const EMPTY_FILTERS: ListFilterState = {
   statuses: [],
   priorities: [],
-  labelNames: [],
 };
 
 export function hasActiveFilters(filters: ListFilterState): boolean {
-  return (
-    filters.statuses.length > 0 ||
-    filters.priorities.length > 0 ||
-    filters.labelNames.length > 0
-  );
+  return filters.statuses.length > 0 || filters.priorities.length > 0;
 }
 
 export function ListFilterBar({
@@ -133,17 +122,13 @@ export function ListFilterBar({
   onChange,
   sort,
   onSortChange,
-  labelOptions,
 }: {
   filters: ListFilterState;
   onChange: (filters: ListFilterState) => void;
   sort: TaskSort;
   onSortChange: (sort: TaskSort) => void;
-  labelOptions: readonly LabelFilterOption[];
 }) {
   const keepOpen = (event: Event) => event.preventDefault();
-  const showLabelChip =
-    labelOptions.length > 0 || filters.labelNames.length > 0;
   return (
     <div className="flex shrink-0 items-center gap-1.5 border-b border-border-hairline px-3.5 py-1.5">
       <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
@@ -154,7 +139,7 @@ export function ListFilterBar({
             (status) => STATUS_LABELS[status],
           )}
         >
-          {TASK_STATUSES.map((status) => (
+          {PROJECT_STATUSES.map((status) => (
             <DropdownMenuCheckboxItem
               key={status}
               checked={filters.statuses.includes(status)}
@@ -180,7 +165,7 @@ export function ListFilterBar({
             (priority) => PRIORITY_LABELS[priority],
           )}
         >
-          {TASK_PRIORITIES.map((priority) => (
+          {PRIORITIES.map((priority) => (
             <DropdownMenuCheckboxItem
               key={priority}
               checked={filters.priorities.includes(priority)}
@@ -203,70 +188,6 @@ export function ListFilterBar({
             </DropdownMenuCheckboxItem>
           ))}
         </FilterChip>
-        {showLabelChip ? (
-          <FilterChip
-            icon="ListTodo"
-            label="Label"
-            selectedNames={filters.labelNames}
-          >
-            {labelOptions.map((option) => (
-              <DropdownMenuCheckboxItem
-                key={option.name}
-                checked={filters.labelNames.includes(option.name)}
-                onSelect={keepOpen}
-                onCheckedChange={(checked) =>
-                  onChange({
-                    ...filters,
-                    labelNames: toggled(
-                      filters.labelNames,
-                      option.name,
-                      checked === true,
-                    ),
-                  })
-                }
-              >
-                <span className="flex items-center gap-2">
-                  <span
-                    aria-hidden
-                    className="size-2 rounded-full"
-                    style={{ backgroundColor: option.color }}
-                  />
-                  {option.name}
-                </span>
-              </DropdownMenuCheckboxItem>
-            ))}
-            {filters.labelNames
-              .filter(
-                (name) => !labelOptions.some((option) => option.name === name),
-              )
-              .map((name) => (
-                <DropdownMenuCheckboxItem
-                  key={`stale:${name}`}
-                  checked
-                  onSelect={keepOpen}
-                  onCheckedChange={(checked) =>
-                    onChange({
-                      ...filters,
-                      labelNames: toggled(
-                        filters.labelNames,
-                        name,
-                        checked === true,
-                      ),
-                    })
-                  }
-                >
-                  <span className="flex items-center gap-2 text-muted-foreground">
-                    <span
-                      aria-hidden
-                      className="size-2 rounded-full bg-muted-foreground/40"
-                    />
-                    {name}
-                    <span className="text-xs">(unavailable)</span>
-                  </span>
-                </DropdownMenuCheckboxItem>
-              ))}
-          </FilterChip>
-        ) : null}
         {hasActiveFilters(filters) ? (
           <button
             type="button"

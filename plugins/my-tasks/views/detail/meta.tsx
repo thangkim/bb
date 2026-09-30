@@ -1,13 +1,13 @@
 import type {
-  TaskPriority,
+  Priority,
   TaskPullRequest,
-  TaskStatus,
+  ProjectStatus,
   TaskThread,
 } from "../../shared/contract.js";
 import type { IconName } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 
-const STATUS_COLORS: Record<TaskStatus, string> = {
+const STATUS_COLORS: Record<ProjectStatus, string> = {
   backlog: "var(--muted-foreground)",
   todo: "var(--muted-foreground)",
   in_progress: "var(--attention)",
@@ -20,7 +20,7 @@ export function StatusIcon({
   status,
   className,
 }: {
-  status: TaskStatus;
+  status: ProjectStatus;
   className?: string;
 }) {
   const color = STATUS_COLORS[status];
@@ -99,7 +99,7 @@ export function PriorityIcon({
   priority,
   className,
 }: {
-  priority: TaskPriority;
+  priority: Priority;
   className?: string;
 }) {
   if (priority === "urgent") {

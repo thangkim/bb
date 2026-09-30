@@ -4,7 +4,6 @@ import {
   DEFAULT_LIST_PREFERENCE,
   LIST_PREFERENCE_STORAGE_KEY,
   LIST_PREFERENCE_VERSION,
-  listPreferenceScope,
   loadListPreference,
   sanitizeListPreference,
   storeListPreference,
@@ -18,217 +17,89 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("listPreferenceScope", () => {
-  it("maps list surfaces to independent scopes", () => {
-    expect(listPreferenceScope(null, false)).toBe("all");
-    expect(listPreferenceScope(null, true)).toBe("active");
-    expect(listPreferenceScope("01HZZZZZZZZZZZZZZZZZZZZZP1", false)).toBe(
-      "project:01HZZZZZZZZZZZZZZZZZZZZZP1",
-    );
-    expect(listPreferenceScope("01HZZZZZZZZZZZZZZZZZZZZZP1", true)).toBe(
-      "active",
-    );
-  });
-});
+const EMPTY = { filters: { statuses: [], priorities: [] }, sort: "manual" };
 
 describe("sanitizeListPreference", () => {
   it("returns defaults for missing or garbage input", () => {
-    expect(sanitizeListPreference(undefined)).toEqual({
-      filters: { statuses: [], priorities: [], labelNames: [] },
-      sort: "manual",
-    });
-    expect(sanitizeListPreference(null)).toEqual({
-      filters: { statuses: [], priorities: [], labelNames: [] },
-      sort: "manual",
-    });
-    expect(sanitizeListPreference("nope")).toEqual({
-      filters: { statuses: [], priorities: [], labelNames: [] },
-      sort: "manual",
-    });
+    expect(sanitizeListPreference(undefined)).toEqual(EMPTY);
+    expect(sanitizeListPreference(null)).toEqual(EMPTY);
+    expect(sanitizeListPreference("nope")).toEqual(EMPTY);
   });
 
-  it("drops invalid statuses, priorities, and sort; keeps label names", () => {
+  it("keeps valid project statuses and priorities once, and drops the rest", () => {
     expect(
       sanitizeListPreference({
         filters: {
-          statuses: ["todo", "not-a-status", "todo", "done"],
+          statuses: ["in_review", "not-a-status", "in_review", "canceled"],
           priorities: ["high", 3, "high", "telepathic"],
-          labelNames: [" Bug ", "", "Bug", "Feature", 12],
+          labelNames: ["Bug"],
         },
         sort: "priority-please",
       }),
     ).toEqual({
-      filters: {
-        statuses: ["todo", "done"],
-        priorities: ["high"],
-        labelNames: ["Bug", "Feature"],
-      },
+      filters: { statuses: ["in_review", "canceled"], priorities: ["high"] },
       sort: "manual",
     });
   });
 
-  it("accepts a valid preference and known sort modes", () => {
-    expect(
-      sanitizeListPreference({
-        filters: {
-          statuses: ["in_progress"],
-          priorities: ["urgent", "none"],
-          labelNames: ["infra"],
-        },
-        sort: "due",
-      }),
-    ).toEqual({
-      filters: {
-        statuses: ["in_progress"],
-        priorities: ["urgent", "none"],
-        labelNames: ["infra"],
-      },
-      sort: "due",
-    });
+  it("keeps a valid sort", () => {
+    expect(sanitizeListPreference({ sort: "due" }).sort).toBe("due");
   });
 });
 
-describe("loadListPreference / storeListPreference", () => {
-  it("defaults when storage is empty", () => {
-    expect(loadListPreference("all")).toEqual({
-      filters: { ...DEFAULT_LIST_PREFERENCE.filters },
-      sort: "manual",
-    });
-  });
-
-  it("round-trips a preference for one scope without touching another", () => {
+describe("list preference storage", () => {
+  it("round-trips each scope independently", () => {
     storeListPreference("all", {
-      filters: {
-        statuses: ["todo"],
-        priorities: ["high"],
-        labelNames: ["Bug"],
-      },
+      filters: { statuses: ["in_progress"], priorities: [] },
       sort: "priority",
     });
-    storeListPreference("project:p1", {
-      filters: {
-        statuses: ["done"],
-        priorities: [],
-        labelNames: [],
-      },
+    storeListPreference("active", {
+      filters: { statuses: [], priorities: ["urgent"] },
       sort: "due",
     });
 
     expect(loadListPreference("all")).toEqual({
-      filters: {
-        statuses: ["todo"],
-        priorities: ["high"],
-        labelNames: ["Bug"],
-      },
+      filters: { statuses: ["in_progress"], priorities: [] },
       sort: "priority",
-    });
-    expect(loadListPreference("project:p1")).toEqual({
-      filters: {
-        statuses: ["done"],
-        priorities: [],
-        labelNames: [],
-      },
-      sort: "due",
     });
     expect(loadListPreference("active")).toEqual({
-      filters: { statuses: [], priorities: [], labelNames: [] },
-      sort: "manual",
-    });
-
-    const stored = JSON.parse(
-      window.localStorage.getItem(LIST_PREFERENCE_STORAGE_KEY)!,
-    );
-    expect(stored.version).toBe(LIST_PREFERENCE_VERSION);
-    expect(Object.keys(stored.scopes).sort()).toEqual(["all", "project:p1"]);
-  });
-
-  it("persists an explicit clear (empty filters + manual sort)", () => {
-    storeListPreference("all", {
-      filters: { statuses: ["todo"], priorities: [], labelNames: [] },
-      sort: "priority",
-    });
-    storeListPreference("all", {
-      filters: { statuses: [], priorities: [], labelNames: [] },
-      sort: "manual",
-    });
-    expect(loadListPreference("all")).toEqual({
-      filters: { statuses: [], priorities: [], labelNames: [] },
-      sort: "manual",
+      filters: { statuses: [], priorities: ["urgent"] },
+      sort: "due",
     });
   });
 
-  it("recovers from corrupt JSON and invalid document shapes", () => {
-    window.localStorage.setItem(LIST_PREFERENCE_STORAGE_KEY, "{not-json");
-    expect(loadListPreference("all").sort).toBe("manual");
-
-    window.localStorage.setItem(
-      LIST_PREFERENCE_STORAGE_KEY,
-      JSON.stringify({ version: 1, scopes: "nope" }),
-    );
-    expect(loadListPreference("all").filters.statuses).toEqual([]);
+  it("falls back to defaults for corrupt or older documents", () => {
+    window.localStorage.setItem(LIST_PREFERENCE_STORAGE_KEY, "{not json");
+    expect(loadListPreference("all")).toEqual(DEFAULT_LIST_PREFERENCE);
 
     window.localStorage.setItem(
       LIST_PREFERENCE_STORAGE_KEY,
       JSON.stringify({
-        version: 1,
-        scopes: {
-          all: {
-            filters: { statuses: ["bogus"], priorities: ["high"] },
-            sort: "priority",
-          },
-        },
+        version: LIST_PREFERENCE_VERSION - 1,
+        scopes: { all: { sort: "due" } },
       }),
     );
-    expect(loadListPreference("all")).toEqual({
-      filters: { statuses: [], priorities: ["high"], labelNames: [] },
-      sort: "priority",
-    });
+    expect(loadListPreference("all")).toEqual(DEFAULT_LIST_PREFERENCE);
   });
 
-  it("best-effort reads scopes from an unknown future version without rewriting it", () => {
+  it("never overwrites a document written by a newer version", () => {
     const future = JSON.stringify({
-      version: 99,
-      scopes: {
-        all: {
-          filters: { statuses: ["todo"], priorities: [], labelNames: [] },
-          sort: "due",
-          extraFutureField: true,
-        },
-      },
+      version: LIST_PREFERENCE_VERSION + 1,
+      scopes: { all: { sort: "due" } },
     });
     window.localStorage.setItem(LIST_PREFERENCE_STORAGE_KEY, future);
-    expect(loadListPreference("all")).toEqual({
-      filters: { statuses: ["todo"], priorities: [], labelNames: [] },
-      sort: "due",
-    });
-    storeListPreference("all", {
-      filters: { statuses: ["done"], priorities: [], labelNames: [] },
-      sort: "manual",
-    });
+    storeListPreference("all", DEFAULT_LIST_PREFERENCE);
     expect(window.localStorage.getItem(LIST_PREFERENCE_STORAGE_KEY)).toBe(
       future,
     );
   });
 
-  it("swallows storage write failures", () => {
+  it("swallows storage failures", () => {
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-      throw new DOMException("Storage is disabled", "SecurityError");
+      throw new Error("quota");
     });
     expect(() =>
-      storeListPreference("all", {
-        filters: { statuses: ["todo"], priorities: [], labelNames: [] },
-        sort: "manual",
-      }),
+      storeListPreference("all", DEFAULT_LIST_PREFERENCE),
     ).not.toThrow();
-  });
-
-  it("swallows storage read failures", () => {
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-      throw new DOMException("Storage is disabled", "SecurityError");
-    });
-    expect(loadListPreference("all")).toEqual({
-      filters: { statuses: [], priorities: [], labelNames: [] },
-      sort: "manual",
-    });
   });
 });

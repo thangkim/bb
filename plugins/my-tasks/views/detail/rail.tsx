@@ -2,12 +2,13 @@ import { useState } from "react";
 import type {
   Label,
   Project,
+  ProjectStatus,
   Task,
-  TaskPriority,
+  Priority,
   TaskStatus,
   TaskThread,
 } from "../../shared/contract.js";
-import { TASK_PRIORITIES, TASK_STATUSES } from "../../shared/contract.js";
+import { PRIORITIES, PROJECT_STATUSES } from "../../shared/contract.js";
 import type { Preset } from "../../shared/contract.js";
 import { errorMessage } from "../../shared/errors.js";
 import { useTasksQuery, useTasksRpc } from "../../shell/data.js";
@@ -17,6 +18,7 @@ import {
   formatDueDate,
   isActiveThread,
 } from "./meta.js";
+import { TaskCheckbox } from "../list/icons.js";
 import {
   DUE_DATE_PRESETS,
   localIsoDate,
@@ -52,7 +54,7 @@ import { cn } from "@/lib/utils";
 
 export interface TaskPropertyUpdate {
   status?: TaskStatus;
-  priority?: TaskPriority;
+  priority?: Priority;
   dueDate?: string | null;
   labelIds?: string[];
 }
@@ -78,29 +80,33 @@ function LabelChip({ label }: { label: Label }) {
   );
 }
 
-function StatusMenu({
-  task,
-  onUpdate,
+export function ProjectStatusMenu({
+  status,
+  onChange,
   triggerClassName,
 }: {
-  task: Task;
-  onUpdate: (update: TaskPropertyUpdate) => void;
+  status: ProjectStatus;
+  onChange: (status: ProjectStatus) => void;
   triggerClassName: string;
 }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" className={triggerClassName}>
-          <StatusIcon status={task.status} />
-          {STATUS_LABELS[task.status]}
+        <button
+          type="button"
+          aria-label={`Status: ${STATUS_LABELS[status]}`}
+          className={triggerClassName}
+        >
+          <StatusIcon status={status} />
+          {STATUS_LABELS[status]}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        {TASK_STATUSES.map((status) => (
-          <DropdownMenuItem key={status} onSelect={() => onUpdate({ status })}>
-            <StatusIcon status={status} />
-            {STATUS_LABELS[status]}
-            {status === task.status ? (
+        {PROJECT_STATUSES.map((option) => (
+          <DropdownMenuItem key={option} onSelect={() => onChange(option)}>
+            <StatusIcon status={option} />
+            {STATUS_LABELS[option]}
+            {option === status ? (
               <Icon name="Check" className="ml-auto size-3.5" />
             ) : null}
           </DropdownMenuItem>
@@ -110,32 +116,57 @@ function StatusMenu({
   );
 }
 
-function PriorityMenu({
-  task,
-  onUpdate,
+function DoneToggle({
+  status,
+  onChange,
   triggerClassName,
 }: {
-  task: Task;
-  onUpdate: (update: TaskPropertyUpdate) => void;
+  status: TaskStatus;
+  onChange: (status: TaskStatus) => void;
+  triggerClassName: string;
+}) {
+  const done = status === "done";
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={done}
+      onClick={() => onChange(done ? "todo" : "done")}
+      className={triggerClassName}
+    >
+      <TaskCheckbox done={done} />
+      {done ? "Done" : "Not done"}
+    </button>
+  );
+}
+
+export function PriorityMenu({
+  priority,
+  onChange,
+  triggerClassName,
+}: {
+  priority: Priority;
+  onChange: (priority: Priority) => void;
   triggerClassName: string;
 }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" className={triggerClassName}>
-          <PriorityIcon priority={task.priority} />
-          {PRIORITY_LABELS[task.priority]}
+        <button
+          type="button"
+          aria-label={`Priority: ${PRIORITY_LABELS[priority]}`}
+          className={triggerClassName}
+        >
+          <PriorityIcon priority={priority} />
+          {PRIORITY_LABELS[priority]}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        {TASK_PRIORITIES.map((priority) => (
-          <DropdownMenuItem
-            key={priority}
-            onSelect={() => onUpdate({ priority })}
-          >
-            <PriorityIcon priority={priority} />
-            {PRIORITY_LABELS[priority]}
-            {priority === task.priority ? (
+        {PRIORITIES.map((option) => (
+          <DropdownMenuItem key={option} onSelect={() => onChange(option)}>
+            <PriorityIcon priority={option} />
+            {PRIORITY_LABELS[option]}
+            {option === priority ? (
               <Icon name="Check" className="ml-auto size-3.5" />
             ) : null}
           </DropdownMenuItem>
@@ -145,18 +176,18 @@ function PriorityMenu({
   );
 }
 
-function DueDateMenu({
-  task,
-  onUpdate,
+export function DueDateMenu({
+  dueDate,
+  onChange,
   triggerClassName,
 }: {
-  task: Task;
-  onUpdate: (update: TaskPropertyUpdate) => void;
+  dueDate: string | null;
+  onChange: (dueDate: string | null) => void;
   triggerClassName: string;
 }) {
   const [open, setOpen] = useState(false);
-  const pick = (dueDate: string | null) => {
-    onUpdate({ dueDate });
+  const pick = (next: string | null) => {
+    onChange(next);
     setOpen(false);
   };
   return (
@@ -164,7 +195,7 @@ function DueDateMenu({
       <PopoverTrigger asChild>
         <button type="button" className={triggerClassName}>
           <Icon name="Clock" className="size-3.5 shrink-0" />
-          {task.dueDate ? formatDueDate(task.dueDate) : "Set due date"}
+          {dueDate ? formatDueDate(dueDate) : "Set due date"}
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-52 p-2">
@@ -186,12 +217,12 @@ function DueDateMenu({
             type="date"
             aria-label="Due date"
             className="mt-1 h-7 rounded-md border border-input bg-transparent px-2 text-sm text-foreground"
-            value={task.dueDate ?? ""}
+            value={dueDate ?? ""}
             onChange={(event) => {
               if (event.target.value) pick(event.target.value);
             }}
           />
-          {task.dueDate ? (
+          {dueDate ? (
             <button
               type="button"
               className="mt-1 flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
@@ -316,7 +347,7 @@ function LabelsMenu({
   );
 }
 
-function DispatchTargetMenu({
+export function DispatchTargetMenu({
   project,
   bbProjects,
   onError,
@@ -414,7 +445,7 @@ function DispatchTargetMenu({
   );
 }
 
-const RAIL_ROW_CLASS =
+export const RAIL_ROW_CLASS =
   "-mx-1.5 flex w-[calc(100%+0.75rem)] items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm hover:bg-state-hover";
 
 export function PropertiesRail({
@@ -444,19 +475,19 @@ export function PropertiesRail({
       <h2 className="mb-1.5 text-xs font-semibold text-muted-foreground">
         Properties
       </h2>
-      <StatusMenu
-        task={task}
-        onUpdate={onUpdate}
+      <DoneToggle
+        status={task.status}
+        onChange={(status) => onUpdate({ status })}
         triggerClassName={RAIL_ROW_CLASS}
       />
       <PriorityMenu
-        task={task}
-        onUpdate={onUpdate}
+        priority={task.priority}
+        onChange={(priority) => onUpdate({ priority })}
         triggerClassName={RAIL_ROW_CLASS}
       />
       <DueDateMenu
-        task={task}
-        onUpdate={onUpdate}
+        dueDate={task.dueDate}
+        onChange={(dueDate) => onUpdate({ dueDate })}
         triggerClassName={RAIL_ROW_CLASS}
       />
 
@@ -542,7 +573,7 @@ export function PropertiesRail({
   );
 }
 
-const CHIP_CLASS =
+export const CHIP_CLASS =
   "inline-flex items-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 py-0.5 text-xs text-foreground hover:border-input";
 
 export function InlineProperties({
@@ -562,19 +593,19 @@ export function InlineProperties({
   );
   return (
     <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
-      <StatusMenu
-        task={task}
-        onUpdate={onUpdate}
+      <DoneToggle
+        status={task.status}
+        onChange={(status) => onUpdate({ status })}
         triggerClassName={CHIP_CLASS}
       />
       <PriorityMenu
-        task={task}
-        onUpdate={onUpdate}
+        priority={task.priority}
+        onChange={(priority) => onUpdate({ priority })}
         triggerClassName={CHIP_CLASS}
       />
       <DueDateMenu
-        task={task}
-        onUpdate={onUpdate}
+        dueDate={task.dueDate}
+        onChange={(dueDate) => onUpdate({ dueDate })}
         triggerClassName={CHIP_CLASS}
       />
       {taskLabels.map((label) => (

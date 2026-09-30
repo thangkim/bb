@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TaskStatus } from "../../shared/contract.js";
+import type { ProjectStatus } from "../../shared/contract.js";
 import {
   applyBoardMove,
   dropIndexForPointer,
@@ -8,7 +8,7 @@ import {
 } from "./drop-position.js";
 
 describe("visibleBoardStatuses", () => {
-  const columns = (canceled: number): Record<TaskStatus, unknown[]> => ({
+  const columns = (canceled: number): Record<ProjectStatus, unknown[]> => ({
     backlog: [],
     todo: ["t1"],
     in_progress: [],
@@ -44,47 +44,47 @@ describe("dropNeighborsForIndex", () => {
 
   it("returns both neighbors for a drop between cards in another column", () => {
     expect(dropNeighborsForIndex(column, "dragged", 1)).toEqual({
-      beforeTaskId: "a",
-      afterTaskId: "b",
+      beforeId: "a",
+      afterId: "b",
     });
   });
 
   it("returns only an after neighbor at the top of a column", () => {
     expect(dropNeighborsForIndex(column, "dragged", 0)).toEqual({
-      beforeTaskId: null,
-      afterTaskId: "a",
+      beforeId: null,
+      afterId: "a",
     });
   });
 
   it("returns only a before neighbor at the bottom of a column", () => {
     expect(dropNeighborsForIndex(column, "dragged", 3)).toEqual({
-      beforeTaskId: "c",
-      afterTaskId: null,
+      beforeId: "c",
+      afterId: null,
     });
   });
 
   it("returns no neighbors for an empty column", () => {
     expect(dropNeighborsForIndex([], "dragged", 0)).toEqual({
-      beforeTaskId: null,
-      afterTaskId: null,
+      beforeId: null,
+      afterId: null,
     });
   });
 
   it("excludes the dragged card on a same-column reorder", () => {
     expect(dropNeighborsForIndex(column, "a", 1)).toEqual({
-      beforeTaskId: "b",
-      afterTaskId: "c",
+      beforeId: "b",
+      afterId: "c",
     });
   });
 
   it("clamps out-of-range indexes into the column", () => {
     expect(dropNeighborsForIndex(column, "dragged", 99)).toEqual({
-      beforeTaskId: "c",
-      afterTaskId: null,
+      beforeId: "c",
+      afterId: null,
     });
     expect(dropNeighborsForIndex(column, "dragged", -1)).toEqual({
-      beforeTaskId: null,
-      afterTaskId: "a",
+      beforeId: null,
+      afterId: "a",
     });
   });
 });
@@ -111,7 +111,7 @@ describe("dropIndexForPointer", () => {
 });
 
 describe("applyBoardMove", () => {
-  const task = (id: string, status: TaskStatus) => ({ id, status });
+  const task = (id: string, status: ProjectStatus) => ({ id, status });
   const columns = () => ({
     backlog: [task("a", "backlog"), task("b", "backlog")],
     todo: [task("c", "todo")],

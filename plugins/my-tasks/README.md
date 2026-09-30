@@ -2,8 +2,11 @@
 
 My Tasks is a personal fork of bb's Tasks plugin: a Linear-style tracker inside bb for planning work, delegating it to
 agents, and keeping the task record connected to the threads doing the work.
-It provides projects and folders, task keys, statuses and priorities, labels,
-subtasks, Markdown comments, attachments, agent presets, and a full CLI.
+Work is organized as project → task → thread. Projects carry the workflow
+status, priority, due date, description, and a progress bar (done tasks over
+all tasks). Tasks are a checklist inside a project, done or not done, with
+labels, due dates, Markdown comments, attachments, and the agent threads
+working on them. There is also a full CLI.
 
 ## Install
 
@@ -79,13 +82,14 @@ machine; pass `--machine <id-or-name>` to target another enrolled machine.
 
 | Command                                        | Purpose                                                                                                                                    |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `bb my-tasks status`                              | Show the installed My Tasks plugin name and version. Task workflow status lives on `bb my-tasks list --status` and `bb my-tasks update --status`.   |
-| `bb my-tasks project create\|list\|show\|update`  | Manage tracker projects, folders, colors, prefixes, and bb-project links.                                                                  |
+| `bb my-tasks status`                              | Show the installed My Tasks plugin name and version.                                                                                       |
+| `bb my-tasks project create\|list\|show\|update`  | Manage projects: status, priority, due date, description, folder, color, prefix, and bb-project link. `list`/`show` report progress.      |
+| `bb my-tasks project move <prefix>`               | Move a project to a status column, optionally `--after`/`--before` another project in that column.                                         |
 | `bb my-tasks folder create\|list\|update\|delete` | Organize tracker projects into nested folders. Deleting a folder moves its projects and subfolders to the top level; no tasks are deleted. |
-| `bb my-tasks create`                              | Create a task with description, priority, labels, due date, optional parent, and file attachments (repeatable `--attach <path>`).          |
-| `bb my-tasks list`                                | Page/filter tasks by project, status, priority, label, active agents, or search text; supports `--sort`, `--limit`, and `--cursor`.        |
-| `bb my-tasks show <key-or-id>`                    | Show the complete task record, including comments, attachments, subtasks, and attached threads.                                            |
-| `bb my-tasks update <key-or-id>`                  | Update status, priority, title, description, due date, or labels.                                                                          |
+| `bb my-tasks create`                              | Create a task with description, priority, labels, due date, and file attachments (repeatable `--attach <path>`).                          |
+| `bb my-tasks list`                                | Page/filter tasks by project, done state, priority, label, active agents, or search text; supports `--sort`, `--limit`, and `--cursor`.    |
+| `bb my-tasks show <key-or-id>`                    | Show the complete task record, including comments, attachments, and attached threads.                                                      |
+| `bb my-tasks update <key-or-id>`                  | Mark done (`--status done`) or reopen (`--status todo`), or update priority, title, description, due date, or labels.                     |
 | `bb my-tasks comment <key-or-id>`                 | Add a Markdown comment from inline text or a file; optionally notify the latest responding task agent.                                     |
 | `bb my-tasks attachment add\|get\|list\|remove`   | Add, fetch, list, or remove attachments. Referenced attachments require `remove --remove-references`.                                      |
 | `bb my-tasks preset list\|create\|update\|delete` | Manage reusable agent execution presets.                                                                                                   |
@@ -96,8 +100,9 @@ machine; pass `--machine <id-or-name>` to target another enrolled machine.
 | `bb my-tasks label create\|list\|delete`          | Manage project-scoped labels.                                                                                                              |
 | `bb my-tasks seed-demo --yes`                     | Create sample folders, projects, labels, tasks, and comments for evaluation.                                                               |
 
-Statuses are `backlog`, `todo`, `in_progress`, `in_review`, `done`, and
-`canceled`. Priorities are `urgent`, `high`, `medium`, `low`, and `none`.
+Project statuses are `backlog`, `todo`, `in_progress`, `in_review`, `done`,
+and `canceled`. Task statuses are `todo` and `done`. Priorities are `urgent`,
+`high`, `medium`, `low`, and `none`.
 
 Task lists default to 100 rows and accept `--limit 1-500`. JSON output is
 `{ tasks, nextCursor, limit }`; human output prints the continuation option
@@ -116,11 +121,15 @@ mode, and reusable instructions. Presets are user-defined, so create the worker 
 uses repeatedly before dispatching work.
 
 Delegation creates a worker thread in the linked bb project, attaches that
-thread to the task, and advances a `backlog` or `todo` task to `in_progress`.
-The worker receives the task description, subtasks, attachments, recent
-comments, preset instructions, and a report-back contract. Its installed Tasks
-skill tells it to inspect the task, leave substantive milestone comments,
-attach artifacts, and move completed work to `in_review`.
+thread to the task, and advances a `backlog` or `todo` project to
+`in_progress`. The worker receives the task description, the project's
+context and other tasks, attachments, recent comments, preset instructions,
+and a report-back contract. Its installed skill tells it to inspect the task,
+leave substantive milestone comments, attach artifacts, and mark the task done
+when its criteria are met.
+
+In the app, every task row has **New thread** (pick a preset) and **Attach
+thread** (search your bb threads). Clicking a thread opens it in a split pane.
 
 If work begins outside the Delegate action, the agent can associate its current
 thread with `bb my-tasks attach KEY`. The inverse is `bb my-tasks detach KEY
@@ -132,8 +141,8 @@ newest first.
 ## Task mentions
 
 Type `@` in the bb composer and select **Tasks** to search by task key or title.
-Sending the mention gives the agent the task's description, status, priority,
-labels, subtasks, attachments, recent comments, attached threads, and CLI
+Sending the mention gives the agent the task's description, done state,
+priority, labels, the project's other tasks, attachments, recent comments, attached threads, and CLI
 action contract as context. Tasks linked to the current bb project rank first.
 
 Inside a task description or comment, `@` also inserts a task pill. These

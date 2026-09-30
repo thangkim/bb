@@ -214,7 +214,7 @@ describe("lifecycle SQL scope", () => {
                   comment.presetName === "Default",
               ),
             ).toBe(true);
-            expect(f.store.tasks.getTask(task.id)!.status).toBe("backlog");
+            expect(f.store.tasks.getTask(task.id)!.status).toBe("todo");
           }
           expect(
             f.store.tasks.getTaskThread(f.mappings[count]!.id)?.liveStatus,
@@ -267,20 +267,14 @@ describe("lifecycle SQL scope", () => {
     const f = fixture(1, 1);
     try {
       await registerLifecycle(f.bb, f.store);
-      for (const status of [
-        "todo",
-        "in_progress",
-        "in_review",
-        "done",
-        "canceled",
-      ] as const) {
+      for (const [index, status] of (["todo", "done", "todo"] as const).entries()) {
         f.store.tasks.updateTask(f.tasks[0]!.id, { status });
         f.queries.length = 0;
         await f.harness.emitThreadEvent("thread.idle", {
           thread: makeThreadResponse({ id: "thr_worker_0", status: "idle" }),
           lastAssistantText: null,
         });
-        expect(f.queries).toHaveLength(status === "todo" ? 4 : 1);
+        expect(f.queries).toHaveLength(index === 0 ? 4 : 1);
         expect(f.store.tasks.getTaskThread(f.mappings[0]!.id)?.liveStatus).toBe(
           "idle",
         );

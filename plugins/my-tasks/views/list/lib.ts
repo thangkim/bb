@@ -1,13 +1,13 @@
 import {
-  TASK_STATUSES,
+  PROJECT_STATUSES,
   type Label,
-  type Task,
-  type TaskPriority,
-  type TaskStatus,
+  type Priority,
+  type Project,
+  type ProjectStatus,
 } from "../../shared/contract.js";
 import type { TaskSort } from "../../shared/pagination.js";
 
-export const STATUS_LABELS: Record<TaskStatus, string> = {
+export const STATUS_LABELS: Record<ProjectStatus, string> = {
   backlog: "Backlog",
   todo: "Todo",
   in_progress: "In Progress",
@@ -16,7 +16,7 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
   canceled: "Canceled",
 };
 
-export const PRIORITY_LABELS: Record<TaskPriority, string> = {
+export const PRIORITY_LABELS: Record<Priority, string> = {
   urgent: "Urgent",
   high: "High",
   medium: "Medium",
@@ -31,54 +31,27 @@ export const SORT_LABELS: Record<TaskSort, string> = {
 };
 
 interface StatusGroup {
-  status: TaskStatus;
-  tasks: Task[];
+  status: ProjectStatus;
+  projects: Project[];
 }
 
-export function groupTasksByStatus(tasks: readonly Task[]): StatusGroup[] {
-  const byStatus = new Map<TaskStatus, Task[]>();
-  for (const task of tasks) {
-    const bucket = byStatus.get(task.status);
-    if (bucket) bucket.push(task);
-    else byStatus.set(task.status, [task]);
+export function groupProjectsByStatus(
+  projects: readonly Project[],
+): StatusGroup[] {
+  const byStatus = new Map<ProjectStatus, Project[]>();
+  for (const project of projects) {
+    const bucket = byStatus.get(project.status);
+    if (bucket) bucket.push(project);
+    else byStatus.set(project.status, [project]);
   }
-  return TASK_STATUSES.flatMap((status) => {
+  return PROJECT_STATUSES.flatMap((status) => {
     const bucket = byStatus.get(status);
-    return bucket ? [{ status, tasks: bucket }] : [];
+    return bucket ? [{ status, projects: bucket }] : [];
   });
 }
 
-export interface LabelFilterOption {
-  name: string;
-  color: string;
-  labelIds: string[];
-}
-
-export function labelFilterOptions(
-  labels: readonly Label[],
-): LabelFilterOption[] {
-  const byName = new Map<string, LabelFilterOption>();
-  for (const label of labels) {
-    const existing = byName.get(label.name);
-    if (existing) existing.labelIds.push(label.id);
-    else
-      byName.set(label.name, {
-        name: label.name,
-        color: label.color,
-        labelIds: [label.id],
-      });
-  }
-  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
-}
-
-export function selectedLabelIds(
-  options: readonly LabelFilterOption[],
-  selectedNames: readonly string[],
-): string[] {
-  const selected = new Set(selectedNames);
-  return options
-    .filter((option) => selected.has(option.name))
-    .flatMap((option) => option.labelIds);
+export function progressPercent(done: number, total: number): number {
+  return total === 0 ? 0 : Math.round((done / total) * 100);
 }
 
 export function formatDueDate(dueDate: string, today = new Date()): string {
@@ -88,17 +61,6 @@ export function formatDueDate(dueDate: string, today = new Date()): string {
     day: "numeric",
     ...(date.getFullYear() === today.getFullYear() ? {} : { year: "numeric" }),
   });
-}
-
-export function activeWorkLabel(
-  threads: readonly { liveStatus: string }[],
-): string {
-  if (threads.length === 1) {
-    return threads[0]?.liveStatus === "starting"
-      ? "Agent starting"
-      : "Agent working";
-  }
-  return `${threads.length} agents working`;
 }
 
 interface LabelOverflow {

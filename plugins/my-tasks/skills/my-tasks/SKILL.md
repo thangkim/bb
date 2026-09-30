@@ -8,6 +8,12 @@ description: "Work on or manage records in My Tasks, including task keys such as
 Use the `bb my-tasks` CLI to understand the assigned task, keep its record useful,
 and report the outcome where the work is tracked.
 
+My Tasks is organized as project → task → thread. Projects carry the workflow
+status (`backlog`, `todo`, `in_progress`, `in_review`, `done`, `canceled`),
+priority, due date, and description, and show progress as done tasks over all
+tasks. Tasks are a checklist inside a project: each one is `todo` (not done) or
+`done`. Threads are attached to tasks.
+
 For task dispatch and execution presets, read
 [references/delegation.md](references/delegation.md).
 
@@ -19,7 +25,7 @@ For task dispatch and execution presets, read
    bb my-tasks show ABC-12
    ```
 
-   The detail includes the description, status, priority, labels, subtasks,
+   The detail includes the description, done state, priority, labels,
    comments, attachments, attached worker threads, and the GitHub pull
    requests those threads produced (from environment metadata, with state
    open/draft/merged/closed). Use
@@ -62,21 +68,20 @@ For task dispatch and execution presets, read
    Read `references/attachments.md` for comment attachments, initial files,
    removal rules, and machine selection.
 
-5. Set the status to match the completion criteria. Use `done` when they are
-   met, or `in_review` when required review remains:
+5. Mark the task done when its completion criteria are met:
 
    ```sh
-   bb my-tasks update ABC-12 --status in_review
+   bb my-tasks update ABC-12 --status done
    ```
 
-   Change task hierarchy with `bb my-tasks update ABC-12 --parent ABC-10`, using
-   either a task key or ID for the parent. Promote a subtask to the top level
-   with `bb my-tasks update ABC-12 --no-parent`; the two parent flags cannot be
-   combined.
+   Reopen it with `--status todo`. When review is still required, leave the
+   task open and say so in a comment; review state belongs to the project
+   (`bb my-tasks project update ABC --status in_review`), and only change it
+   when you were asked to manage the project.
 
-   If the work cannot proceed, leave the status accurate and comment with the
+   If the work cannot proceed, leave the task open and comment with the
    specific blocker, what you tried, and what would unblock it. Do not mark a
-   blocked task complete.
+   blocked task done.
 
 6. Delegated threads are attached automatically. If this thread was not
    delegated from Tasks, attach it yourself so the task shows the active work:
@@ -105,7 +110,7 @@ key as plain text:
 
 `key` is required. Optionally add `title="…"` as a display fallback shown
 while the card loads and when the key no longer resolves. The rendered card
-shows the live status, title, and priority, opens the task in the thread
+shows the live done state, title, and priority, opens the task in the thread
 side panel, and links to the full Tasks app. Emit one directive per line;
 each renders its own card.
 
@@ -115,9 +120,12 @@ each renders its own card.
   that command's arguments, accepted values, and limits. Both exit 0.
 - `--project` takes a tracker project prefix or id such as `ABC`, never a bb
   project id (`proj_...`). `bb my-tasks project list` shows both columns.
-- `bb my-tasks status` reports the plugin's name and version. A task's workflow
-  status is `bb my-tasks list --status <status>` and
-  `bb my-tasks update ABC-12 --status <status>`.
+- `bb my-tasks status` reports the plugin's name and version. A project's
+  workflow status is set with `bb my-tasks project update ABC --status <status>`
+  or `bb my-tasks project move ABC --status <status> [--after XYZ | --before XYZ]`;
+  `bb my-tasks project list` and `project show` report status, priority, due
+  date, and progress. A task's done state is `bb my-tasks update ABC-12
+  --status done|todo`.
 - Repeatable options (`--label`, `--status`, `--priority`, `--add-label`,
   `--remove-label`) accept a repeated flag or one comma-separated list.
 - Unknown options and stray arguments are errors, never ignored, and every
@@ -126,10 +134,11 @@ each renders its own card.
 
 ## Invariants
 
-- Valid task statuses are `backlog`, `todo`, `in_progress`, `in_review`,
-  `done`, and `canceled`.
-- Use `in_review` when implementation is complete but still needs human or
-  agent review. Use `done` only when the task's completion criteria are met.
+- Task statuses are `todo` and `done`. Project statuses are `backlog`, `todo`,
+  `in_progress`, `in_review`, `done`, and `canceled`.
+- Use `done` only when the task's completion criteria are met.
+- Tasks have no sub-tasks; split larger work into more tasks in the same
+  project.
 - Write one comment per meaningful milestone. Combine related facts into a
   useful update; never spam progress pings, command-by-command narration, or
   repeated status messages.

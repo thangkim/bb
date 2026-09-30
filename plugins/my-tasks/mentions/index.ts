@@ -87,12 +87,12 @@ function attachmentManifest(
     .all(taskId, taskId);
 }
 
-function formatSubtasks(subtasks: readonly Task[]): string {
-  if (subtasks.length === 0) return "None.";
-  return subtasks
+function formatProjectTasks(tasks: readonly Task[]): string {
+  if (tasks.length === 0) return "None.";
+  return tasks
     .map(
-      (subtask) =>
-        `- ${subtask.key} · ${subtask.title} — ${displayName(subtask.status)}`,
+      (task) =>
+        `- [${task.status === "done" ? "x" : " "}] ${task.key} · ${task.title}`,
     )
     .join("\n");
 }
@@ -160,15 +160,19 @@ function buildTaskContext(
 - Priority: ${displayName(task.priority)}
 - Labels: ${labels.length > 0 ? labels.map((label) => label.name).join(", ") : "None"}
 - Due: ${task.dueDate ?? "None"}
-- Project: ${project.name}
+- Project: ${project.name} (${displayName(project.status)})
 
 ## Description
 
 ${task.description.trim() || "No description provided."}
 
-## Sub-tasks
+## Other tasks in this project
 
-${formatSubtasks(store.tasks.listSubtasks(task.id))}
+${formatProjectTasks(
+  store.tasks
+    .listTasks({ projectId: project.id })
+    .filter((candidate) => candidate.id !== task.id),
+)}
 
 ## Attachments
 
@@ -184,7 +188,7 @@ ${formatThreads(store.tasks.listTaskThreads(task.id))}
 
 ## Action contract
 
-You can act on this task with the bb my-tasks CLI. If you begin working on it, first run: bb my-tasks attach ${task.key} (attaches THIS thread so the task shows you as working). Comment substantive updates via bb my-tasks comment ${task.key} --body ... and set status via bb my-tasks update ${task.key} --status ...
+You can act on this task with the bb my-tasks CLI. If you begin working on it, first run: bb my-tasks attach ${task.key} (attaches THIS thread so the task shows you as working). Comment substantive updates via bb my-tasks comment ${task.key} --body ... and mark it done via bb my-tasks update ${task.key} --status done
 `;
 }
 

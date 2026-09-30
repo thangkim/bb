@@ -31,7 +31,7 @@ describe("@task mention provider", () => {
       const linkedTask = store.tasks.createTask({
         projectId: linked.id,
         title: "Ship keyboard navigation",
-        status: "in_progress",
+        status: "todo",
       });
       const otherTask = store.tasks.createTask({
         projectId: other.id,
@@ -62,7 +62,7 @@ describe("@task mention provider", () => {
         expect.objectContaining({
           id: linkedTask.id,
           title: "TSK-1 · Ship keyboard navigation",
-          subtitle: "Linked project · In Progress",
+          subtitle: "Linked project · Todo",
         }),
       ]);
       expect(
@@ -127,13 +127,11 @@ describe("@task mention provider", () => {
         projectId: project.id,
         title: "Resolve rich context",
         description: "The full task description belongs in agent context.",
-        status: "in_review",
         priority: "urgent",
         dueDate: "2026-07-20",
       });
       store.tasks.createTask({
         projectId: project.id,
-        parentTaskId: task.id,
         title: "Verify mention output",
         status: "done",
       });
@@ -170,7 +168,8 @@ describe("@task mention provider", () => {
       expect(context).toContain(
         "The full task description belongs in agent context.",
       );
-      expect(context).toContain("MEN-2 · Verify mention output — Done");
+      expect(context).toContain("- [x] MEN-2 · Verify mention output");
+      expect(context).toContain("- Project: Mentions (Todo)");
       expect(context).toMatch(/- 01[0-9A-HJKMNP-TV-Z]{24} · acceptance\.md/);
       expect(context).toContain("Fetch with: bb my-tasks attachment get ");
       expect(context).toContain("Sawyer · User");
@@ -182,7 +181,7 @@ describe("@task mention provider", () => {
         "first run: bb my-tasks attach MEN-1 (attaches THIS thread so the task shows you as working)",
       );
       expect(context).toContain("bb my-tasks comment MEN-1 --body ...");
-      expect(context).toContain("bb my-tasks update MEN-1 --status ...");
+      expect(context).toContain("bb my-tasks update MEN-1 --status done");
     } finally {
       await harness.dispose();
     }

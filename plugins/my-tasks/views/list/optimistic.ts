@@ -1,8 +1,8 @@
-import type { Task, TaskPriority, TaskStatus } from "../../shared/contract.js";
+import type { Task, Priority, TaskStatus } from "../../shared/contract.js";
 
 export interface TaskEdit {
   status?: TaskStatus;
-  priority?: TaskPriority;
+  priority?: Priority;
   dueDate?: string | null;
   labelIds?: string[];
   position?: number;
@@ -63,19 +63,6 @@ export function editedTasks(
 ): Task[] {
   if (entries.size === 0) return [...serverTasks];
   return serverTasks.map((task) => applyEdit(task, entries.get(task.id)?.edit));
-}
-
-export function matchesFilters(
-  task: Task,
-  statuses: readonly TaskStatus[],
-  priorities: readonly TaskPriority[],
-  labelIds: readonly string[],
-): boolean {
-  return (
-    (statuses.length === 0 || statuses.includes(task.status)) &&
-    (priorities.length === 0 || priorities.includes(task.priority)) &&
-    (labelIds.length === 0 || task.labelIds.some((id) => labelIds.includes(id)))
-  );
 }
 
 function makeEntry(prev: TaskEntry | undefined): {

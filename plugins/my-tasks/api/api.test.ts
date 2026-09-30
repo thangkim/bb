@@ -852,7 +852,7 @@ describe("Tasks RPC domain API", () => {
     const updateResult = tasksRpcContract.updateTask.output.parse(
       await harness.callRpc("updateTask", {
         taskId: createResult.task.id,
-        status: "in_review",
+        status: "done",
         priority: "high",
         dueDate: "2026-07-20",
         labelIds: [labelResult.label.id],
@@ -861,14 +861,14 @@ describe("Tasks RPC domain API", () => {
     );
     expect(updateResult).toMatchObject({
       ok: true,
-      task: { status: "in_review" },
+      task: { status: "done" },
     });
     expect(store.tasks.listComments(createResult.task.id)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           kind: "system",
           authorName: "Sawyer",
-          body: "Status changed to In Review by Sawyer",
+          body: "Marked done by Sawyer",
           notifiedCount: 0,
         }),
         expect.objectContaining({
@@ -886,14 +886,13 @@ describe("Tasks RPC domain API", () => {
       ]),
     );
 
-    const moveResult = tasksRpcContract.boardMove.output.parse(
-      await harness.callRpc("boardMove", {
-        taskId: createResult.task.id,
-        status: "done",
-        authorName: "Sawyer",
+    const moveResult = tasksRpcContract.moveProject.output.parse(
+      await harness.callRpc("moveProject", {
+        projectId: project.id,
+        status: "in_progress",
       }),
     );
-    expect(moveResult).toMatchObject({ ok: true, task: { status: "done" } });
+    expect(moveResult.project).toMatchObject({ status: "in_progress" });
 
     store.tasks.upsertTaskThread({
       taskId: createResult.task.id,
@@ -918,14 +917,13 @@ describe("Tasks RPC domain API", () => {
       }),
     ]);
 
-    const subtask = store.tasks.createTask({
+    const followUp = store.tasks.createTask({
       projectId: project.id,
-      parentTaskId: createResult.task.id,
-      title: "Nested implementation detail",
+      title: "Implementation follow-up",
     });
     store.tasks.upsertTaskThread({
-      taskId: subtask.id,
-      threadId: "thr_subtask_worker",
+      taskId: followUp.id,
+      threadId: "thr_follow_up_worker",
       presetName: "Default",
       title: "Implement nested detail",
       liveStatus: "working",
@@ -937,8 +935,8 @@ describe("Tasks RPC domain API", () => {
     });
     store.tasks.createTask({
       projectId: project.id,
-      title: "Canceled top-level follow-up",
-      status: "canceled",
+      title: "Finished follow-up",
+      status: "done",
     });
 
     const openCount = tasksRpcContract.sidebarOpenTaskCount.output.parse(
@@ -953,8 +951,9 @@ describe("Tasks RPC domain API", () => {
       projects: [
         {
           projectId: project.id,
-          taskCount: 3,
-          activeAgentCount: 1,
+          taskCount: 4,
+          doneTaskCount: 2,
+          activeAgentCount: 2,
         },
       ],
     });
@@ -1037,50 +1036,6 @@ describe("Tasks RPC domain API", () => {
       );
       expect(missing.task).toBeNull();
     }
-  });
-
-  it("returns a typed error when a task would exceed one sub-task level", async () => {
-    const { bb, harness } = createFakePluginHost({ pluginId: "tasks" });
-    registerTasksApi(bb, createStore(bb));
-
-    const projectResult = tasksRpcContract.createProject.output.parse(
-      await harness.callRpc("createProject", {
-        name: "Depth",
-        prefix: "DEP",
-        color: "purple",
-      }),
-    );
-    const parentResult = tasksRpcContract.createTask.output.parse(
-      await harness.callRpc("createTask", {
-        projectId: projectResult.project.id,
-        title: "Parent",
-      }),
-    );
-    if (!parentResult.ok) throw new Error(parentResult.error.message);
-    const childResult = tasksRpcContract.createTask.output.parse(
-      await harness.callRpc("createTask", {
-        projectId: projectResult.project.id,
-        title: "Child",
-        parentTaskId: parentResult.task.id,
-      }),
-    );
-    if (!childResult.ok) throw new Error(childResult.error.message);
-
-    await expect(
-      harness.callRpc("createTask", {
-        projectId: projectResult.project.id,
-        title: "Grandchild",
-        parentTaskId: childResult.task.id,
-      }),
-    ).resolves.toEqual({
-      ok: false,
-      error: {
-        code: "subtask_depth_exceeded",
-        message: "Tasks support at most one level of sub-tasks",
-      },
-    });
-
-    await harness.dispose();
   });
 
   it("allows legacy built-in rows to be renamed and deleted", async () => {

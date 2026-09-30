@@ -43,6 +43,7 @@ interface PrefixRow {
 interface SummaryRow {
   project_id: string;
   task_count: number;
+  done_task_count: number;
   active_agent_count: number;
 }
 
@@ -119,7 +120,7 @@ export function createStore(bb: BbPluginApi): TasksApiStore {
             `
               SELECT COUNT(*) AS count
               FROM tasks
-              WHERE status NOT IN ('done', 'canceled')
+              WHERE status <> 'done'
             `,
           )
           .get()?.count ?? 0
@@ -132,13 +133,12 @@ export function createStore(bb: BbPluginApi): TasksApiStore {
             SELECT
               p.id AS project_id,
               COUNT(DISTINCT t.id) AS task_count,
+              COUNT(DISTINCT CASE WHEN t.status = 'done' THEN t.id END) AS done_task_count,
               COUNT(DISTINCT CASE
                 WHEN tt.live_status IN ('starting', 'working') THEN tt.thread_id
               END) AS active_agent_count
             FROM projects p
-            LEFT JOIN tasks t
-              ON t.project_id = p.id
-              AND t.parent_task_id IS NULL
+            LEFT JOIN tasks t ON t.project_id = p.id
             LEFT JOIN task_threads tt ON tt.task_id = t.id
             GROUP BY p.id
             ORDER BY p.name COLLATE NOCASE, p.id
@@ -148,6 +148,7 @@ export function createStore(bb: BbPluginApi): TasksApiStore {
         .map((row) => ({
           projectId: row.project_id,
           taskCount: row.task_count,
+          doneTaskCount: row.done_task_count,
           activeAgentCount: row.active_agent_count,
         }));
     },
@@ -204,39 +205,6 @@ function apiTasks(store: TasksApiStore, tasks: StoredTask[]): Task[] {
     ...task,
     labelIds: labelsByTask.get(task.id) ?? [],
   }));
-}
-
-function validateTaskParent(
-  store: TasksApiStore,
-  projectId: string,
-  parentTaskId: string | null,
-  ownTaskId?: string,
-): void {
-  if (parentTaskId === null) return;
-  if (parentTaskId === ownTaskId) {
-    fail("task_parent_invalid", "A task cannot be its own parent");
-  }
-
-  const parent = store.tasks.getTask(parentTaskId);
-  if (!parent) throw new Error(`Task not found: ${parentTaskId}`);
-  if (parent.projectId !== projectId) {
-    fail(
-      "subtask_project_mismatch",
-      "A sub-task must belong to the same project as its parent",
-    );
-  }
-  if (parent.parentTaskId !== null) {
-    fail(
-      "subtask_depth_exceeded",
-      "Tasks support at most one level of sub-tasks",
-    );
-  }
-  if (ownTaskId && store.tasks.listSubtasks(ownTaskId).length > 0) {
-    fail(
-      "subtask_depth_exceeded",
-      "A task with sub-tasks cannot itself become a sub-task",
-    );
-  }
 }
 
 function validateTaskLabels(
@@ -611,6 +579,15 @@ export function registerHandlers(
       publishProjectsChanged(bb, project.id);
       return { project };
     },
+    moveProject(input) {
+      const project = store.tasks.moveProject(input.projectId, {
+        status: input.status,
+        beforeProjectId: input.beforeProjectId,
+        afterProjectId: input.afterProjectId,
+      });
+      publishProjectsChanged(bb, project.id);
+      return { project };
+    },
     renameProjectPrefix(input) {
       try {
         if (store.projectPrefixExists(input.prefix, input.projectId)) {
@@ -657,7 +634,6 @@ export function registerHandlers(
     },
     createTask(input) {
       try {
-        validateTaskParent(store, input.projectId, input.parentTaskId);
         validateTaskLabels(store, input.projectId, input.labelIds);
         const task = store.transaction(() => {
           const created = store.tasks.createTask({
@@ -667,7 +643,6 @@ export function registerHandlers(
             status: input.status,
             priority: input.priority,
             dueDate: input.dueDate,
-            parentTaskId: input.parentTaskId,
           });
           replaceTaskLabels(store, created.id, input.labelIds);
           return apiTask(store, created);
@@ -691,11 +666,6 @@ export function registerHandlers(
       try {
         const current = store.tasks.getTask(input.taskId);
         if (!current) throw new Error(`Task not found: ${input.taskId}`);
-        const parentTaskId =
-          input.parentTaskId === undefined
-            ? current.parentTaskId
-            : input.parentTaskId;
-        validateTaskParent(store, current.projectId, parentTaskId, current.id);
         if (input.labelIds) {
           validateTaskLabels(store, current.projectId, input.labelIds);
         }
@@ -710,7 +680,6 @@ export function registerHandlers(
             status: input.status,
             priority: input.priority,
             dueDate: input.dueDate,
-            parentTaskId: input.parentTaskId,
           });
           if (input.labelIds) {
             replaceTaskLabels(store, current.id, input.labelIds);
@@ -719,7 +688,9 @@ export function registerHandlers(
           const bodies: string[] = [];
           if (updated.status !== current.status) {
             bodies.push(
-              `Status changed to ${displayName(updated.status)} by ${input.authorName}`,
+              updated.status === "done"
+                ? `Marked done by ${input.authorName}`
+                : `Reopened by ${input.authorName}`,
             );
           }
           if (updated.priority !== current.priority) {
@@ -771,7 +742,6 @@ export function registerHandlers(
         priorities: input.priorities,
         labelIds: input.labelIds,
         activeOnly: input.activeOnly,
-        parentTaskId: input.parentTaskId,
         search: input.search,
         sort: input.sort,
         limit: input.limit,
@@ -781,27 +751,6 @@ export function registerHandlers(
         tasks: apiTasks(store, page.tasks),
         nextCursor: page.nextCursor,
       };
-    },
-    boardMove(input) {
-      const current = store.tasks.getTask(input.taskId);
-      if (!current) throw new Error(`Task not found: ${input.taskId}`);
-      const result = store.transaction(() => {
-        const moved = store.tasks.updatePosition(current.id, {
-          status: input.status,
-          beforeTaskId: input.beforeTaskId,
-          afterTaskId: input.afterTaskId,
-        });
-        const statusChanged = moved.status !== current.status;
-        if (statusChanged) {
-          writeSystemComments(store, current.id, input.authorName, [
-            `Status changed to ${displayName(moved.status)} by ${input.authorName}`,
-          ]);
-        }
-        return { task: apiTask(store, moved), statusChanged };
-      });
-      publishTasksChanged(bb, result.task.id, result.task.projectId);
-      if (result.statusChanged) publishCommentsChanged(bb, result.task.id);
-      return { ok: true, task: result.task };
     },
     createLabel(input) {
       const label = store.tasks.createLabel(input);
@@ -911,11 +860,7 @@ export function registerHandlers(
       return {
         rowMeta: input.taskIds.map((taskId) => ({
           taskId,
-          ...(meta.get(taskId) ?? {
-            threads: [],
-            subtaskDone: 0,
-            subtaskTotal: 0,
-          }),
+          threads: meta.get(taskId)?.threads ?? [],
         })),
       };
     },

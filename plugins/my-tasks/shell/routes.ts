@@ -5,16 +5,22 @@ export const PANEL_PATH = "tasks";
 
 export type TaskViewMode = "list" | "board";
 
+export type ProjectsRouteKind = "all" | "active";
+
 export type TasksRoute =
-  | { kind: "all" }
-  | { kind: "active" }
+  | { kind: ProjectsRouteKind; view?: TaskViewMode }
   | { kind: "manage" }
-  | { kind: "project"; projectId: string; view: TaskViewMode | null }
+  | { kind: "project"; projectId: string }
   | { kind: "task"; taskKey: string };
 
 export type ResolvedTasksRoute =
-  | Exclude<TasksRoute, { kind: "project" }>
-  | { kind: "project"; projectId: string; view: TaskViewMode };
+  | Exclude<TasksRoute, { kind: ProjectsRouteKind }>
+  | { kind: ProjectsRouteKind; view: TaskViewMode };
+
+function parseView(query: string): TaskViewMode | undefined {
+  const view = new URLSearchParams(query).get("view");
+  return view === "board" || view === "list" ? view : undefined;
+}
 
 function decodeSegment(segment: string): string {
   try {
@@ -31,36 +37,35 @@ export function parseTasksRoute(rawSubPath: string): TasksRoute {
   const query = queryIndex === -1 ? "" : subPath.slice(queryIndex + 1);
   const segments = path.split("/").filter((segment) => segment.length > 0);
   const head = segments[0];
-  if (head === undefined || head === "all") return { kind: "all" };
-  if (head === "active") return { kind: "active" };
+  const view = parseView(query);
+  if (head === undefined || head === "all") {
+    return view === undefined ? { kind: "all" } : { kind: "all", view };
+  }
+  if (head === "active") {
+    return view === undefined ? { kind: "active" } : { kind: "active", view };
+  }
   if (head === "manage") return { kind: "manage" };
   if (head === "task") {
     const taskKey = segments[1];
     if (taskKey !== undefined) return { kind: "task", taskKey };
     return { kind: "all" };
   }
-  const view = new URLSearchParams(query).get("view");
-  return {
-    kind: "project",
-    projectId: head,
-    view: view === "board" || view === "list" ? view : null,
-  };
+  return { kind: "project", projectId: head };
 }
 
 export function tasksRouteToSubPath(route: TasksRoute): string {
   switch (route.kind) {
     case "all":
-      return "all";
     case "active":
-      return "active";
+      return route.view === undefined
+        ? route.kind
+        : `${route.kind}?view=${route.view}`;
     case "manage":
       return "manage";
     case "task":
       return `task/${route.taskKey}`;
     case "project":
-      return route.view === null
-        ? route.projectId
-        : `${route.projectId}?view=${route.view}`;
+      return route.projectId;
   }
 }
 

@@ -1,5 +1,5 @@
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import type { Task } from "./shared/contract.js";
+import type { Project, Task } from "./shared/contract.js";
 
 export function makeTask(overrides: Partial<Task> = {}): Task {
   return {
@@ -12,11 +12,29 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
     status: "todo",
     priority: "none",
     dueDate: null,
-    parentTaskId: null,
     position: 0,
     createdAt: "2026-07-15T00:00:00.000Z",
     updatedAt: "2026-07-15T00:00:00.000Z",
     labelIds: [],
+    ...overrides,
+  };
+}
+
+export function makeProject(overrides: Partial<Project> = {}): Project {
+  return {
+    id: "01HZZZZZZZZZZZZZZZZZZZZZP1",
+    name: "Test project",
+    prefix: "TSK",
+    nextTaskNumber: 1,
+    color: "blue",
+    folderId: null,
+    linkedBbProjectId: null,
+    status: "todo",
+    priority: "none",
+    dueDate: null,
+    description: "",
+    position: 1024,
+    createdAt: "2026-07-15T00:00:00.000Z",
     ...overrides,
   };
 }

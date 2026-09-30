@@ -1,10 +1,11 @@
 import { useState, type ReactNode } from "react";
 import {
-  TASK_STATUSES,
+  PROJECT_STATUSES,
   type Label,
+  type Priority,
+  type Project,
+  type ProjectStatus,
   type Task,
-  type TaskPriority,
-  type TaskStatus,
 } from "../../shared/contract.js";
 import { ConfirmDialog } from "../../components/confirm-dialog.js";
 import {
@@ -12,6 +13,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -29,7 +31,7 @@ import {
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import type { TaskEdit } from "./optimistic.js";
-import { PriorityIcon, PriorityTag, StatusIcon } from "./icons.js";
+import { PriorityIcon, PriorityTag, StatusIcon, TaskCheckbox } from "./icons.js";
 import {
   DUE_DATE_PRESETS,
   formatDueDate,
@@ -38,9 +40,16 @@ import {
   STATUS_LABELS,
 } from "./lib.js";
 
-export type EditFn = (task: Task, patch: TaskEdit) => void;
+export interface ProjectEdit {
+  status?: ProjectStatus;
+  priority?: Priority;
+  dueDate?: string | null;
+}
 
-export const PRIORITY_MENU_ORDER: readonly TaskPriority[] = [
+export type ProjectEditFn = (project: Project, patch: ProjectEdit) => void;
+export type TaskEditFn = (task: Task, patch: TaskEdit) => void;
+
+export const PRIORITY_MENU_ORDER: readonly Priority[] = [
   "none",
   "urgent",
   "high",
@@ -48,15 +57,15 @@ export const PRIORITY_MENU_ORDER: readonly TaskPriority[] = [
   "low",
 ];
 
-export function statusForShortcut(key: string): TaskStatus | null {
+export function statusForShortcut(key: string): ProjectStatus | null {
   if (!/^[0-9]$/.test(key)) return null;
   const index = Number(key) - 1;
-  return index >= 0 && index < TASK_STATUSES.length
-    ? (TASK_STATUSES[index] ?? null)
+  return index >= 0 && index < PROJECT_STATUSES.length
+    ? (PROJECT_STATUSES[index] ?? null)
     : null;
 }
 
-export function priorityForShortcut(key: string): TaskPriority | null {
+export function priorityForShortcut(key: string): Priority | null {
   if (!/^[0-9]$/.test(key)) return null;
   const index = Number(key);
   return index >= 0 && index < PRIORITY_MENU_ORDER.length
@@ -124,31 +133,34 @@ const TRIGGER_CLASS =
 const PRIORITY_TRIGGER_CLASS =
   "relative z-10 inline-flex h-5 shrink-0 items-center rounded-md hover:opacity-75 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:opacity-75 max-md:pointer-coarse:h-8";
 
+export const CHIP_TRIGGER_CLASS =
+  "relative z-10 flex h-5 shrink-0 items-center gap-1 rounded-md border border-border px-1.5 text-xs text-subtle-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:text-foreground";
+
 export function StatusEditor({
-  task,
-  onEdit,
+  status,
+  onChange,
   open,
   onOpenChange,
   className,
 }: {
-  task: Task;
-  onEdit: EditFn;
+  status: ProjectStatus;
+  onChange: (status: ProjectStatus) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   className?: string;
 }) {
-  const select = (status: TaskStatus) => {
-    if (status !== task.status) onEdit(task, { status });
+  const select = (next: ProjectStatus) => {
+    if (next !== status) onChange(next);
   };
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label={`Change status, currently ${STATUS_LABELS[task.status]}`}
+          aria-label={`Change status, currently ${STATUS_LABELS[status]}`}
           className={cn(TRIGGER_CLASS, className)}
         >
-          <StatusIcon status={task.status} />
+          <StatusIcon status={status} />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -156,25 +168,25 @@ export function StatusEditor({
         className="min-w-56"
         mobileTitle="Change status"
         onKeyDown={(event) => {
-          const status = statusForShortcut(event.key);
-          if (status !== null && isBareKey(event)) {
+          const shortcut = statusForShortcut(event.key);
+          if (shortcut !== null && isBareKey(event)) {
             event.preventDefault();
-            select(status);
+            select(shortcut);
             onOpenChange(false);
           }
         }}
       >
         <MenuHeading label="Change status…" shortcut="S" />
-        {TASK_STATUSES.map((status, index) => (
+        {PROJECT_STATUSES.map((option, index) => (
           <DropdownMenuItem
-            key={status}
-            aria-current={status === task.status ? "true" : undefined}
-            onSelect={() => select(status)}
+            key={option}
+            aria-current={option === status ? "true" : undefined}
+            onSelect={() => select(option)}
           >
             <PickerOption
-              icon={<StatusIcon status={status} />}
-              label={STATUS_LABELS[status]}
-              active={status === task.status}
+              icon={<StatusIcon status={option} />}
+              label={STATUS_LABELS[option]}
+              active={option === status}
               shortcut={index + 1}
             />
           </DropdownMenuItem>
@@ -185,30 +197,30 @@ export function StatusEditor({
 }
 
 export function PriorityEditor({
-  task,
-  onEdit,
+  priority,
+  onChange,
   open,
   onOpenChange,
   className,
 }: {
-  task: Task;
-  onEdit: EditFn;
+  priority: Priority;
+  onChange: (priority: Priority) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   className?: string;
 }) {
-  const select = (priority: TaskPriority) => {
-    if (priority !== task.priority) onEdit(task, { priority });
+  const select = (next: Priority) => {
+    if (next !== priority) onChange(next);
   };
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label={`Set priority, currently ${PRIORITY_LABELS[task.priority]}`}
+          aria-label={`Set priority, currently ${PRIORITY_LABELS[priority]}`}
           className={cn(PRIORITY_TRIGGER_CLASS, className)}
         >
-          <PriorityTag priority={task.priority} />
+          <PriorityTag priority={priority} />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -216,31 +228,232 @@ export function PriorityEditor({
         className="min-w-52"
         mobileTitle="Set priority"
         onKeyDown={(event) => {
-          const priority = priorityForShortcut(event.key);
-          if (priority !== null && isBareKey(event)) {
+          const shortcut = priorityForShortcut(event.key);
+          if (shortcut !== null && isBareKey(event)) {
             event.preventDefault();
-            select(priority);
+            select(shortcut);
             onOpenChange(false);
           }
         }}
       >
         <MenuHeading label="Set priority to…" shortcut="P" />
-        {PRIORITY_MENU_ORDER.map((priority, index) => (
+        {PRIORITY_MENU_ORDER.map((option, index) => (
           <DropdownMenuItem
-            key={priority}
-            aria-current={priority === task.priority ? "true" : undefined}
-            onSelect={() => select(priority)}
+            key={option}
+            aria-current={option === priority ? "true" : undefined}
+            onSelect={() => select(option)}
           >
             <PickerOption
-              icon={<PriorityIcon priority={priority} />}
-              label={PRIORITY_LABELS[priority]}
-              active={priority === task.priority}
+              icon={<PriorityIcon priority={option} />}
+              label={PRIORITY_LABELS[option]}
+              active={option === priority}
               shortcut={index}
             />
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+export function DueDateChip({
+  dueDate,
+  onChange,
+  open,
+  onOpenChange,
+  className,
+}: {
+  dueDate: string | null;
+  onChange: (dueDate: string | null) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  className?: string;
+}) {
+  return (
+    <DropdownMenu
+      {...(open === undefined ? {} : { open })}
+      {...(onOpenChange === undefined ? {} : { onOpenChange })}
+    >
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={
+            dueDate === null
+              ? "Set due date"
+              : `Change due date, currently ${formatDueDate(dueDate)}`
+          }
+          className={cn(CHIP_TRIGGER_CLASS, "tabular-nums", className)}
+        >
+          <Icon name="Clock" className="size-3 shrink-0" />
+          {dueDate === null ? null : formatDueDate(dueDate)}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className="min-w-44"
+        mobileTitle="Due date"
+      >
+        {DUE_DATE_PRESETS.map(([label, days]) => {
+          const value = localIsoDate(days);
+          return (
+            <DropdownMenuItem key={label} onSelect={() => onChange(value)}>
+              <span>{label}</span>
+              <span className="ml-auto text-2xs text-subtle-foreground">
+                {formatDueDate(value)}
+              </span>
+            </DropdownMenuItem>
+          );
+        })}
+        {dueDate !== null ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => onChange(null)}>
+              <Icon name="X" className="size-3.5" />
+              <span>No due date</span>
+            </DropdownMenuItem>
+          </>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function DueDateSubmenu({
+  dueDate,
+  onChange,
+}: {
+  dueDate: string | null;
+  onChange: (dueDate: string | null) => void;
+}) {
+  return (
+    <ContextMenuSub>
+      <ContextMenuSubTrigger>
+        <Icon name="Clock" className="size-3.5" />
+        <span>Due date</span>
+      </ContextMenuSubTrigger>
+      <ContextMenuSubContent className="min-w-44">
+        {DUE_DATE_PRESETS.map(([label, days]) => {
+          const value = localIsoDate(days);
+          return (
+            <ContextMenuItem key={label} onSelect={() => onChange(value)}>
+              <span>{label}</span>
+              <span className="ml-auto text-2xs text-subtle-foreground">
+                {formatDueDate(value)}
+              </span>
+            </ContextMenuItem>
+          );
+        })}
+        {dueDate !== null ? (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={() => onChange(null)}>
+              <Icon name="X" className="size-3.5" />
+              <span>No due date</span>
+            </ContextMenuItem>
+          </>
+        ) : null}
+      </ContextMenuSubContent>
+    </ContextMenuSub>
+  );
+}
+
+export function ProjectContextMenu({
+  project,
+  onEdit,
+  onDelete,
+  children,
+}: {
+  project: Project;
+  onEdit: ProjectEditFn;
+  onDelete: () => void;
+  children: ReactNode;
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="min-w-44">
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <StatusIcon status={project.status} />
+            <span>Status</span>
+            <ContextMenuShortcut>S</ContextMenuShortcut>
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent className="min-w-48">
+            {PROJECT_STATUSES.map((status) => (
+              <ContextMenuItem
+                key={status}
+                aria-current={status === project.status ? "true" : undefined}
+                onSelect={() => {
+                  if (status !== project.status) onEdit(project, { status });
+                }}
+              >
+                <span className="flex flex-1 items-center gap-2">
+                  <StatusIcon status={status} />
+                  {STATUS_LABELS[status]}
+                </span>
+                {status === project.status ? (
+                  <Icon name="Check" aria-hidden className="size-3.5" />
+                ) : null}
+              </ContextMenuItem>
+            ))}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <PriorityIcon priority={project.priority} />
+            <span>Priority</span>
+            <ContextMenuShortcut>P</ContextMenuShortcut>
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent className="min-w-44">
+            {PRIORITY_MENU_ORDER.map((priority) => (
+              <ContextMenuItem
+                key={priority}
+                aria-current={
+                  priority === project.priority ? "true" : undefined
+                }
+                onSelect={() => {
+                  if (priority !== project.priority) {
+                    onEdit(project, { priority });
+                  }
+                }}
+              >
+                <span className="flex flex-1 items-center gap-2">
+                  <PriorityIcon priority={priority} />
+                  {PRIORITY_LABELS[priority]}
+                </span>
+                {priority === project.priority ? (
+                  <Icon name="Check" aria-hidden className="size-3.5" />
+                ) : null}
+              </ContextMenuItem>
+            ))}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+
+        <DueDateSubmenu
+          dueDate={project.dueDate}
+          onChange={(dueDate) => onEdit(project, { dueDate })}
+        />
+
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          className="text-destructive focus:text-destructive"
+          onSelect={() => setConfirmDelete(true)}
+        >
+          <Icon name="Trash2" className="size-3.5" />
+          <span>Delete project</span>
+        </ContextMenuItem>
+      </ContextMenuContent>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete project?"
+        description={`"${project.name}" and all of its tasks will be permanently deleted, including their attachments and comments. This can't be undone.`}
+        confirmLabel="Delete"
+        onConfirm={onDelete}
+      />
+    </ContextMenu>
   );
 }
 
@@ -252,12 +465,13 @@ export function TaskContextMenu({
   children,
 }: {
   task: Task;
-  onEdit: EditFn;
+  onEdit: TaskEditFn;
   onDelete: () => void;
   projectLabels: readonly Label[];
   children: ReactNode;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const done = task.status === "done";
   const toggleLabel = (labelId: string) => {
     const labelIds = task.labelIds.includes(labelId)
       ? task.labelIds.filter((id) => id !== labelId)
@@ -268,99 +482,17 @@ export function TaskContextMenu({
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent className="min-w-44">
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <StatusIcon status={task.status} />
-            <span>Status</span>
-            <ContextMenuShortcut>S</ContextMenuShortcut>
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="min-w-48">
-            {TASK_STATUSES.map((status) => (
-              <ContextMenuItem
-                key={status}
-                aria-current={status === task.status ? "true" : undefined}
-                onSelect={() => {
-                  if (status !== task.status) onEdit(task, { status });
-                }}
-              >
-                <span className="flex flex-1 items-center gap-2">
-                  <StatusIcon status={status} />
-                  {STATUS_LABELS[status]}
-                  {status === task.status ? (
-                    <span className="sr-only"> (current)</span>
-                  ) : null}
-                </span>
-                {status === task.status ? (
-                  <Icon name="Check" aria-hidden className="size-3.5" />
-                ) : null}
-              </ContextMenuItem>
-            ))}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
+        <ContextMenuItem
+          onSelect={() => onEdit(task, { status: done ? "todo" : "done" })}
+        >
+          <TaskCheckbox done={!done} />
+          <span>{done ? "Mark as not done" : "Mark as done"}</span>
+        </ContextMenuItem>
 
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <PriorityIcon priority={task.priority} />
-            <span>Priority</span>
-            <ContextMenuShortcut>P</ContextMenuShortcut>
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="min-w-44">
-            {PRIORITY_MENU_ORDER.map((priority) => (
-              <ContextMenuItem
-                key={priority}
-                aria-current={priority === task.priority ? "true" : undefined}
-                onSelect={() => {
-                  if (priority !== task.priority) onEdit(task, { priority });
-                }}
-              >
-                <span className="flex flex-1 items-center gap-2">
-                  <PriorityIcon priority={priority} />
-                  {PRIORITY_LABELS[priority]}
-                  {priority === task.priority ? (
-                    <span className="sr-only"> (current)</span>
-                  ) : null}
-                </span>
-                {priority === task.priority ? (
-                  <Icon name="Check" aria-hidden className="size-3.5" />
-                ) : null}
-              </ContextMenuItem>
-            ))}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <Icon name="Clock" className="size-3.5" />
-            <span>Due date</span>
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="min-w-44">
-            {DUE_DATE_PRESETS.map(([label, days]) => {
-              const value = localIsoDate(days);
-              return (
-                <ContextMenuItem
-                  key={label}
-                  onSelect={() => onEdit(task, { dueDate: value })}
-                >
-                  <span>{label}</span>
-                  <span className="ml-auto text-2xs text-subtle-foreground">
-                    {formatDueDate(value)}
-                  </span>
-                </ContextMenuItem>
-              );
-            })}
-            {task.dueDate !== null ? (
-              <>
-                <ContextMenuSeparator />
-                <ContextMenuItem
-                  onSelect={() => onEdit(task, { dueDate: null })}
-                >
-                  <Icon name="X" className="size-3.5" />
-                  <span>No due date</span>
-                </ContextMenuItem>
-              </>
-            ) : null}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
+        <DueDateSubmenu
+          dueDate={task.dueDate}
+          onChange={(dueDate) => onEdit(task, { dueDate })}
+        />
 
         {projectLabels.length > 0 ? (
           <ContextMenuSub>

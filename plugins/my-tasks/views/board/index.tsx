@@ -1,35 +1,35 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import {
-  type Label,
-  type Task,
-  type TaskStatus,
-  type TaskThread,
+import type {
+  Project,
+  ProjectStatus,
+  SidebarProjectSummary,
 } from "../../shared/contract.js";
-import {
-  listAllTasks,
-  useTasksQuery,
-  useTasksRpc,
-  type TasksRpc,
-} from "../../shell/data.js";
+import { useProjects } from "../../shell/data.js";
 import { useTasksNavigation } from "../../shell/routes.js";
-import { NewTaskDialog } from "../manage/new-task-dialog.js";
+import { sortItems } from "../../shared/sort.js";
+import { NewProjectDialog } from "../manage/new-project-dialog.js";
+import { DetailToasts, useDetailToasts } from "../detail/toast.js";
+import { useProjectSummaries } from "../list/data.js";
+import { PriorityTag, StatusIcon } from "../list/icons.js";
+import { formatDueDate, STATUS_LABELS } from "../list/lib.js";
+import { useProjectEdits } from "../list/use-project-edits.js";
 import {
   applyBoardMove,
   BOARD_STATUSES,
   dropIndexForPointer,
   dropNeighborsForIndex,
+  emptyColumns,
   visibleBoardStatuses,
+  type BoardColumns,
 } from "./drop-position.js";
-import { PriorityIcon, StatusIcon } from "./icons.js";
-import { isActiveThread } from "../detail/meta.js";
-import { STATUS_LABELS } from "../list/lib.js";
-import { SubtaskProgressBar } from "../../components/subtask-progress-bar.js";
+import { ProgressBar } from "../../components/progress-bar.js";
 import { Button } from "@/components/ui/button";
 import { DelayedLoading } from "@/components/ui/delayed-loading";
 import { Icon } from "@/components/ui/icon";
@@ -38,141 +38,28 @@ import { cn } from "@/lib/utils";
 
 const DRAG_THRESHOLD_PX = 5;
 
-interface BoardCardMeta {
-  workingThreads: TaskThread[];
-  attachmentCount: number;
-  subDone: number;
-  subTotal: number;
-}
-
-interface BoardData {
-  tasks: Task[];
-  labelsById: Map<string, Label>;
-  metaByTaskId: Map<string, BoardCardMeta>;
-}
-
-const EMPTY_META: BoardCardMeta = {
-  workingThreads: [],
-  attachmentCount: 0,
-  subDone: 0,
-  subTotal: 0,
-};
-
-async function fetchBoard(
-  rpc: TasksRpc,
-  projectId: string,
-): Promise<BoardData> {
-  const tasks = await listAllTasks(rpc, { projectId });
-  const topLevel = tasks.filter((task) => task.parentTaskId === null);
-
-  const labels = await rpc.call("listLabels", { projectId }).then(
-    (result) => result.labels,
-    () => [],
-  );
-  const subProgress = new Map<string, { done: number; total: number }>();
-  for (const task of tasks) {
-    if (task.parentTaskId === null) continue;
-    const entry = subProgress.get(task.parentTaskId) ?? { done: 0, total: 0 };
-    entry.total += 1;
-    if (task.status === "done") entry.done += 1;
-    subProgress.set(task.parentTaskId, entry);
+function groupColumns(projects: readonly Project[]): BoardColumns<Project> {
+  const columns = emptyColumns<Project>();
+  for (const project of sortItems(projects, "manual")) {
+    columns[project.status].push(project);
   }
-  const activeTaskIds = await listAllTasks(rpc, {
-    projectId,
-    activeOnly: true,
-  }).then(
-    (result) => new Set(result.map((task) => task.id)),
-    () => new Set<string>(),
-  );
-  const workingByTaskId = new Map<string, TaskThread[]>();
-  await Promise.all(
-    topLevel
-      .filter((task) => activeTaskIds.has(task.id))
-      .map(async (task) => {
-        const threads = await rpc
-          .call("listTaskThreads", { taskId: task.id })
-          .then(
-            (result) => result.taskThreads,
-            () => [],
-          );
-        workingByTaskId.set(task.id, threads.filter(isActiveThread));
-      }),
-  );
-  const attachmentCounts = new Map<string, number>();
-  await Promise.all(
-    topLevel.map(async (task) => {
-      const count = await rpc.call("listAttachments", { taskId: task.id }).then(
-        (result) => result.attachments.length,
-        () => 0,
-      );
-      attachmentCounts.set(task.id, count);
-    }),
-  );
-
-  return {
-    tasks: topLevel,
-    labelsById: new Map(labels.map((label) => [label.id, label])),
-    metaByTaskId: new Map(
-      topLevel.map((task) => [
-        task.id,
-        {
-          workingThreads: workingByTaskId.get(task.id) ?? [],
-          attachmentCount: attachmentCounts.get(task.id) ?? 0,
-          subDone: subProgress.get(task.id)?.done ?? 0,
-          subTotal: subProgress.get(task.id)?.total ?? 0,
-        },
-      ]),
-    ),
-  };
-}
-
-type ColumnMap = Record<TaskStatus, Task[]>;
-
-function groupColumns(tasks: readonly Task[]): ColumnMap {
-  const columns: ColumnMap = {
-    backlog: [],
-    todo: [],
-    in_progress: [],
-    in_review: [],
-    done: [],
-    canceled: [],
-  };
-  for (const task of tasks) columns[task.status].push(task);
   return columns;
 }
 
 interface DragState {
-  taskId: string;
+  projectId: string;
   x: number;
   y: number;
   offsetX: number;
   offsetY: number;
   width: number;
-  overStatus: TaskStatus | null;
+  overStatus: ProjectStatus | null;
   dropIndex: number;
 }
 
-function WorkingAgentsChip({ threads }: { threads: TaskThread[] }) {
-  if (threads.length === 0) return null;
-  return (
-    <span className="flex min-w-0 items-center gap-1 font-medium text-success">
-      <span
-        aria-hidden
-        className="size-1.5 shrink-0 animate-pulse rounded-full bg-success"
-      />
-      <span className="truncate">
-        {threads.length === 1
-          ? threads[0]!.presetName
-          : `${threads.length} agents`}
-      </span>
-    </span>
-  );
-}
-
-interface TaskCardProps {
-  task: Task;
-  labelsById: Map<string, Label>;
-  meta: BoardCardMeta;
+interface ProjectCardProps {
+  project: Project;
+  summary: SidebarProjectSummary | undefined;
   ghost?: boolean;
   dragging?: boolean;
   cardRef?: (element: HTMLDivElement | null) => void;
@@ -180,25 +67,33 @@ interface TaskCardProps {
   onClick?: () => void;
 }
 
-function TaskCard({
-  task,
-  labelsById,
-  meta,
+function ProjectCard({
+  project,
+  summary,
   ghost = false,
   dragging = false,
   cardRef,
   onPointerDown,
   onClick,
-}: TaskCardProps) {
-  const labels = task.labelIds
-    .map((labelId) => labelsById.get(labelId))
-    .filter((label): label is Label => label !== undefined);
+}: ProjectCardProps) {
+  const working = (summary?.activeAgentCount ?? 0) > 0;
+  const done = summary?.doneTaskCount ?? 0;
+  const total = summary?.taskCount ?? 0;
   return (
     <div
       ref={cardRef}
-      data-task-key={task.key}
+      data-project-id={project.id}
+      role="button"
+      tabIndex={ghost ? -1 : 0}
+      aria-label={`Open ${project.name}`}
       onPointerDown={onPointerDown}
       onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick?.();
+        }
+      }}
       className={cn(
         "shrink-0 rounded-lg border border-border bg-card px-2.5 py-2 shadow-2xs select-none",
         ghost
@@ -207,43 +102,32 @@ function TaskCard({
         dragging && "opacity-40",
       )}
     >
-      <div className="flex items-center gap-1.5 text-2xs text-muted-foreground">
-        <span className="tabular-nums">{task.key}</span>
-        <WorkingAgentsChip threads={meta.workingThreads} />
-      </div>
-      <div className="mt-1 line-clamp-2 text-sm leading-snug font-medium">
-        {task.title}
-      </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        <PriorityIcon priority={task.priority} />
-        {labels.map((label) => (
-          <span
-            key={label.id}
-            className="flex items-center gap-1 rounded-md border border-border px-1.5 text-2xs text-muted-foreground"
-          >
-            <span
-              aria-hidden
-              className="size-1.5 rounded-full"
-              style={{ backgroundColor: label.color }}
-            />
-            {label.name}
-          </span>
-        ))}
-        <span className="flex items-center gap-1 text-2xs text-muted-foreground">
-          <Icon name="GitBranch" className="size-3" />
-          <SubtaskProgressBar
-            done={meta.subDone}
-            total={meta.subTotal}
-            active={meta.workingThreads.length > 0}
-          />
+      <div className="flex items-start gap-1.5">
+        <span className="line-clamp-2 min-w-0 flex-1 text-sm leading-snug font-medium">
+          {project.name}
         </span>
-        {meta.attachmentCount > 0 ? (
+        {working ? (
           <Icon
-            name="Paperclip"
-            className="size-3 text-muted-foreground"
-            aria-label={`${meta.attachmentCount} attachments`}
+            name="RotateCcw"
+            aria-label="Agent working"
+            className="mt-0.5 size-3 shrink-0 animate-spin text-timeline-accent"
           />
         ) : null}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-subtle-foreground">
+        <PriorityTag priority={project.priority} />
+        {project.dueDate !== null ? (
+          <span className="flex h-5 items-center gap-1 rounded-md border border-border px-1.5 tabular-nums">
+            <Icon name="Clock" className="size-3 shrink-0" />
+            {formatDueDate(project.dueDate)}
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-2 flex items-center gap-2 text-xs text-subtle-foreground">
+        <ProgressBar done={done} total={total} active={working} />
+        <span className="ml-auto tabular-nums">
+          {done}/{total}
+        </span>
       </div>
     </div>
   );
@@ -261,7 +145,6 @@ function BoardSkeleton() {
             <Skeleton className="h-5 w-24" />
             <Skeleton className="h-20 w-full rounded-lg" />
             <Skeleton className="h-20 w-full rounded-lg" />
-            <Skeleton className="h-14 w-full rounded-lg" />
           </div>
         ))}
       </div>
@@ -269,33 +152,39 @@ function BoardSkeleton() {
   );
 }
 
-interface BoardViewProps {
-  projectId: string;
-}
-
-export function BoardView({ projectId }: BoardViewProps) {
-  const rpc = useTasksRpc();
+export function BoardView({ activeOnly = false }: { activeOnly?: boolean }) {
   const navigation = useTasksNavigation();
-  const board = useTasksQuery(
-    (queryRpc) => fetchBoard(queryRpc, projectId),
-    ["tasks:changed", "projects:changed", "threads:changed"],
-    [projectId],
-  );
+  const projects = useProjects();
+  const summaries = useProjectSummaries();
+  const { toasts, push, dismiss } = useDetailToasts();
+  const edits = useProjectEdits(projects.data, push);
 
-  const [columns, setColumns] = useState<ColumnMap | undefined>(undefined);
+  const serverColumns = useMemo(() => {
+    if (edits.projects === undefined) return undefined;
+    return groupColumns(
+      activeOnly
+        ? edits.projects.filter(
+            (project) =>
+              (summaries.get(project.id)?.activeAgentCount ?? 0) > 0,
+          )
+        : edits.projects,
+    );
+  }, [edits.projects, activeOnly, summaries]);
+  const [columns, setColumns] = useState<BoardColumns<Project> | undefined>(
+    undefined,
+  );
   useEffect(() => {
-    setColumns(undefined);
-  }, [projectId]);
-  useEffect(() => {
-    if (board.data) setColumns(groupColumns(board.data.tasks));
-  }, [board.data]);
+    setColumns(serverColumns);
+  }, [serverColumns]);
   const columnsRef = useRef(columns);
   columnsRef.current = columns;
 
   const [drag, setDrag] = useState<DragState | null>(null);
-  const [quickAddStatus, setQuickAddStatus] = useState<TaskStatus | null>(null);
+  const [quickAddStatus, setQuickAddStatus] = useState<ProjectStatus | null>(
+    null,
+  );
   const boardRef = useRef<HTMLDivElement | null>(null);
-  const columnRefs = useRef(new Map<TaskStatus, HTMLDivElement>());
+  const columnRefs = useRef(new Map<ProjectStatus, HTMLDivElement>());
   const cardRefs = useRef(new Map<string, HTMLDivElement>());
   const suppressClickRef = useRef(false);
   const dragCleanupRef = useRef<(() => void) | null>(null);
@@ -304,8 +193,8 @@ export function BoardView({ projectId }: BoardViewProps) {
   const findDropTarget = (
     x: number,
     y: number,
-    draggedTaskId: string,
-  ): { status: TaskStatus; index: number } | null => {
+    draggedId: string,
+  ): { status: ProjectStatus; index: number } | null => {
     const current = columnsRef.current;
     if (!current) return null;
     const boardRect = boardRef.current?.getBoundingClientRect();
@@ -324,9 +213,9 @@ export function BoardView({ projectId }: BoardViewProps) {
       const rect = columnElement.getBoundingClientRect();
       if (x < rect.left - 6 || x > rect.right + 6) continue;
       const centers = current[status]
-        .filter((task) => task.id !== draggedTaskId)
-        .map((task) => {
-          const cardElement = cardRefs.current.get(task.id);
+        .filter((project) => project.id !== draggedId)
+        .map((project) => {
+          const cardElement = cardRefs.current.get(project.id);
           if (!cardElement) return Number.NEGATIVE_INFINITY;
           const cardRect = cardElement.getBoundingClientRect();
           return cardRect.top + cardRect.height / 2;
@@ -337,37 +226,35 @@ export function BoardView({ projectId }: BoardViewProps) {
   };
 
   const commitDrop = (
-    taskId: string,
-    toStatus: TaskStatus,
+    projectId: string,
+    toStatus: ProjectStatus,
     dropIndex: number,
   ) => {
     const current = columnsRef.current;
     if (!current) return;
+    const project = Object.values(current)
+      .flat()
+      .find((entry) => entry.id === projectId);
+    if (!project) return;
+    const column = current[toStatus];
     const neighbors = dropNeighborsForIndex(
-      current[toStatus].map((task) => task.id),
-      taskId,
+      column.map((entry) => entry.id),
+      projectId,
       dropIndex,
     );
-    setColumns(applyBoardMove(current, taskId, toStatus, dropIndex));
-    void rpc
-      .call("boardMove", {
-        taskId,
-        status: toStatus,
-        beforeTaskId: neighbors.beforeTaskId,
-        afterTaskId: neighbors.afterTaskId,
-        authorName: "You",
-      })
-      .then(
-        (result) => {
-          if (!result.ok) board.refresh();
-        },
-        () => board.refresh(),
-      );
+    const byId = new Map(column.map((entry) => [entry.id, entry]));
+    setColumns(applyBoardMove(current, projectId, toStatus, dropIndex));
+    edits.move(
+      project,
+      toStatus,
+      neighbors.beforeId === null ? undefined : byId.get(neighbors.beforeId),
+      neighbors.afterId === null ? undefined : byId.get(neighbors.afterId),
+    );
   };
 
   const handleCardPointerDown = (
     event: ReactPointerEvent<HTMLDivElement>,
-    task: Task,
+    project: Project,
   ) => {
     if (event.button !== 0 || dragCleanupRef.current) return;
     const rect = event.currentTarget.getBoundingClientRect();
@@ -384,10 +271,10 @@ export function BoardView({ projectId }: BoardViewProps) {
       const target = findDropTarget(
         moveEvent.clientX,
         moveEvent.clientY,
-        task.id,
+        project.id,
       );
       setDrag({
-        taskId: task.id,
+        projectId: project.id,
         x: moveEvent.clientX,
         y: moveEvent.clientY,
         offsetX: start.offsetX,
@@ -418,9 +305,9 @@ export function BoardView({ projectId }: BoardViewProps) {
         const target = findDropTarget(
           upEvent.clientX,
           upEvent.clientY,
-          task.id,
+          project.id,
         );
-        if (target) commitDrop(task.id, target.status, target.index);
+        if (target) commitDrop(project.id, target.status, target.index);
       }
       setDrag(null);
       suppressClickRef.current = true;
@@ -441,17 +328,17 @@ export function BoardView({ projectId }: BoardViewProps) {
     };
   };
 
-  const openTask = (task: Task) => {
+  const openProject = (project: Project) => {
     if (suppressClickRef.current) return;
-    navigation.go({ kind: "task", taskKey: task.key });
+    navigation.go({ kind: "project", projectId: project.id });
   };
 
   if (columns === undefined) {
-    if (board.error) {
+    if (projects.error) {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-sm text-muted-foreground">
-          <p>Failed to load the board: {board.error}</p>
-          <Button variant="outline" size="sm" onClick={board.refresh}>
+          <p>Failed to load the board: {projects.error}</p>
+          <Button variant="outline" size="sm" onClick={projects.refresh}>
             Retry
           </Button>
         </div>
@@ -460,22 +347,19 @@ export function BoardView({ projectId }: BoardViewProps) {
     return <BoardSkeleton />;
   }
 
-  const labelsById = board.data?.labelsById ?? new Map<string, Label>();
-  const metaByTaskId =
-    board.data?.metaByTaskId ?? new Map<string, BoardCardMeta>();
-  const ghostTask = drag
+  const ghostProject = drag
     ? Object.values(columns)
         .flat()
-        .find((task) => task.id === drag.taskId)
+        .find((project) => project.id === drag.projectId)
     : undefined;
 
-  const renderColumn = (status: TaskStatus) => {
+  const renderColumn = (status: ProjectStatus) => {
     const cards = columns[status];
     const isDragOver = drag !== null && drag.overStatus === status;
     const remaining = drag
-      ? cards.filter((task) => task.id !== drag.taskId)
+      ? cards.filter((project) => project.id !== drag.projectId)
       : cards;
-    const indicatorBeforeTaskId = isDragOver
+    const indicatorBeforeId = isDragOver
       ? (remaining[drag.dropIndex]?.id ?? null)
       : undefined;
     const indicator = (
@@ -485,28 +369,31 @@ export function BoardView({ projectId }: BoardViewProps) {
       />
     );
     const children: ReactNode[] = [];
-    for (const task of cards) {
-      if (task.id === indicatorBeforeTaskId) children.push(indicator);
+    for (const project of cards) {
+      if (project.id === indicatorBeforeId) children.push(indicator);
       children.push(
-        <TaskCard
-          key={task.id}
-          task={task}
-          labelsById={labelsById}
-          meta={metaByTaskId.get(task.id) ?? EMPTY_META}
-          dragging={drag?.taskId === task.id}
+        <ProjectCard
+          key={project.id}
+          project={project}
+          summary={summaries.get(project.id)}
+          dragging={drag?.projectId === project.id}
           cardRef={(element) => {
-            if (element) cardRefs.current.set(task.id, element);
-            else cardRefs.current.delete(task.id);
+            if (element) cardRefs.current.set(project.id, element);
+            else cardRefs.current.delete(project.id);
           }}
-          onPointerDown={(event) => handleCardPointerDown(event, task)}
-          onClick={() => openTask(task)}
+          onPointerDown={(event) => handleCardPointerDown(event, project)}
+          onClick={() => openProject(project)}
         />,
       );
     }
-    if (indicatorBeforeTaskId === null) children.push(indicator);
+    if (indicatorBeforeId === null) children.push(indicator);
 
     return (
-      <div key={status} className="flex max-h-full w-[230px] shrink-0 flex-col">
+      <div
+        key={status}
+        data-board-column-header={status}
+        className="flex max-h-full w-[230px] shrink-0 flex-col"
+      >
         <div className="flex items-center gap-1.5 px-1 pb-2 text-sm font-semibold">
           <StatusIcon status={status} />
           <span>{STATUS_LABELS[status]}</span>
@@ -517,7 +404,7 @@ export function BoardView({ projectId }: BoardViewProps) {
             variant="ghost"
             size="icon"
             className="ml-auto size-6 text-muted-foreground"
-            aria-label={`New ${STATUS_LABELS[status]} task`}
+            aria-label={`New ${STATUS_LABELS[status]} project`}
             onClick={() => setQuickAddStatus(status)}
           >
             <Icon name="Plus" className="size-3.5" />
@@ -550,7 +437,7 @@ export function BoardView({ projectId }: BoardViewProps) {
       )}
     >
       {visibleBoardStatuses(columns).map(renderColumn)}
-      {drag && ghostTask ? (
+      {drag && ghostProject ? (
         <div
           className="pointer-events-none fixed z-50"
           style={{
@@ -559,22 +446,21 @@ export function BoardView({ projectId }: BoardViewProps) {
             width: drag.width,
           }}
         >
-          <TaskCard
-            task={ghostTask}
-            labelsById={labelsById}
-            meta={metaByTaskId.get(ghostTask.id) ?? EMPTY_META}
+          <ProjectCard
+            project={ghostProject}
+            summary={summaries.get(ghostProject.id)}
             ghost
           />
         </div>
       ) : null}
-      <NewTaskDialog
+      <NewProjectDialog
         open={quickAddStatus !== null}
         onOpenChange={(open) => {
           if (!open) setQuickAddStatus(null);
         }}
-        projectId={projectId}
         defaultStatus={quickAddStatus ?? undefined}
       />
+      <DetailToasts toasts={toasts} onDismiss={dismiss} />
     </div>
   );
 }

@@ -11,6 +11,7 @@ import type {
 } from "../db";
 import {
   publishCommentsChanged,
+  publishProjectsChanged,
   publishTasksChanged,
   type TasksApiStore,
 } from "../api";
@@ -20,6 +21,7 @@ import {
   presetServiceTierSchema,
   type ThreadsChangedEvent,
 } from "../shared/contract";
+import { displayName } from "../shared/display-name";
 import { errorMessage } from "../shared/errors";
 import { truncateToWidth } from "../shared/text-measure";
 import { delegationRpcContract } from "./contract";
@@ -53,7 +55,7 @@ class DelegationError extends Error {
 interface SeedPromptInput {
   task: Task;
   project: Project;
-  subtasks: readonly Task[];
+  projectTasks: readonly Task[];
   attachments: readonly Pick<Attachment, "id" | "fileName">[];
   recentComments: readonly Comment[];
   presetInstructions: string;
@@ -64,10 +66,13 @@ function markdownSection(title: string, body: string): string {
   return `## ${title}\n\n${body}`;
 }
 
-function formatSubtasks(subtasks: readonly Task[]): string {
-  if (subtasks.length === 0) return "None.";
-  return subtasks
-    .map((subtask) => `- ${subtask.key} · ${subtask.title} (${subtask.status})`)
+function formatProjectTasks(tasks: readonly Task[]): string {
+  if (tasks.length === 0) return "None.";
+  return tasks
+    .map(
+      (task) =>
+        `- [${task.status === "done" ? "x" : " "}] ${task.key} · ${task.title}`,
+    )
     .join("\n");
 }
 
@@ -103,14 +108,24 @@ export function buildSeedPrompt(input: SeedPromptInput): string {
     ),
     markdownSection(
       "Project context",
-      `- Name: ${input.project.name}\n- Linked bb project: ${input.project.linkedBbProjectId ?? "Not linked"}`,
+      [
+        `- Name: ${input.project.name}`,
+        `- Status: ${displayName(input.project.status)}`,
+        `- Linked bb project: ${input.project.linkedBbProjectId ?? "Not linked"}`,
+        ...(input.project.description.trim()
+          ? ["", input.project.description.trim()]
+          : []),
+      ].join("\n"),
     ),
-    markdownSection("Sub-tasks", formatSubtasks(input.subtasks)),
+    markdownSection(
+      "Other tasks in this project",
+      formatProjectTasks(input.projectTasks),
+    ),
     markdownSection("Attachments", formatAttachments(input.attachments)),
     markdownSection("Recent comments", formatComments(input.recentComments)),
     markdownSection(
       "Report-back contract",
-      `You are working on task ${input.task.key}. Use the bb my-tasks CLI: comment substantive updates (bb my-tasks comment ${input.task.key} --body ...), attach result artifacts, set status when done (bb my-tasks update ${input.task.key} --status in_review) or explain blockage in a comment. Your thread is already attached to the task.`,
+      `You are working on task ${input.task.key}. Use the bb my-tasks CLI: comment substantive updates (bb my-tasks comment ${input.task.key} --body ...), attach result artifacts, mark the task done when the work is complete (bb my-tasks update ${input.task.key} --status done) or explain blockage in a comment. Your thread is already attached to the task.`,
     ),
   ];
 
@@ -319,7 +334,9 @@ export function handlers(
       const prompt = buildSeedPrompt({
         task,
         project,
-        subtasks: store.tasks.listSubtasks(task.id),
+        projectTasks: store.tasks
+          .listTasks({ projectId: project.id })
+          .filter((candidate) => candidate.id !== task.id),
         attachments: collectAttachments(store.tasks, task.id, comments),
         recentComments,
         presetInstructions: preset.instructions,
@@ -352,14 +369,8 @@ export function handlers(
           liveStatus: "starting",
         });
 
-        if (task.status === "backlog" || task.status === "todo") {
-          store.tasks.updateTask(task.id, { status: "in_progress" });
-          createSystemComment(store.tasks, {
-            taskId: task.id,
-            presetName: preset.name,
-            threadId: thread.id,
-            body: `Status changed to In Progress · dispatched to ${preset.name}`,
-          });
+        if (project.status === "backlog" || project.status === "todo") {
+          store.tasks.updateProject(project.id, { status: "in_progress" });
         }
 
         createSystemComment(store.tasks, {
@@ -387,6 +398,7 @@ export function handlers(
 
       publishThreadsChanged(bb, task.id);
       publishTasksChanged(bb, task.id, task.projectId);
+      publishProjectsChanged(bb, project.id);
       publishCommentsChanged(bb, task.id);
       return { threadId: thread.id };
     },

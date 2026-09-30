@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import type { Project, Task } from "../shared/contract.js";
-import { groupTasksByStatus } from "../views/list/lib.js";
+import { sortItems } from "../shared/sort.js";
 import { listAllTasks, useTasksQuery } from "./data.js";
 import type { ResolvedTasksRoute, TaskViewMode, TasksRoute } from "./routes.js";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,7 @@ export function pagerPosition(
   tasks: readonly Task[],
   taskKey: string,
 ): PagerPosition | null {
-  const ordered = groupTasksByStatus(tasks).flatMap((group) => group.tasks);
+  const ordered = sortItems(tasks, "manual");
   const wanted = taskKey.toUpperCase();
   const index = ordered.findIndex((task) => task.key.toUpperCase() === wanted);
   if (index === -1) return null;
@@ -45,15 +45,11 @@ function TaskPager({
   onNavigate,
 }: {
   taskKey: string;
-  projectId: string | null;
+  projectId: string;
   onNavigate: (route: TasksRoute) => void;
 }) {
   const siblings = useTasksQuery(
-    async (rpc) =>
-      listAllTasks(rpc, {
-        ...(projectId === null ? {} : { projectId }),
-        parentTaskId: null,
-      }),
+    async (rpc) => listAllTasks(rpc, { projectId }),
     ["tasks:changed"],
     [projectId],
   );
@@ -161,18 +157,16 @@ function RefreshTasksButton() {
 interface TasksTopbarProps {
   route: ResolvedTasksRoute;
   projects: Project[] | undefined;
-  pagerScope: { projectId: string | null } | null;
   onNavigate: (route: TasksRoute) => void;
-  onNewTask: () => void;
+  onNew: () => void;
   onBack: () => void;
 }
 
 export function TasksTopbar({
   route,
   projects,
-  pagerScope,
   onNavigate,
-  onNewTask,
+  onNew,
   onBack,
 }: TasksTopbarProps) {
   const project = useMemo(() => {
@@ -190,7 +184,7 @@ export function TasksTopbar({
     switch (route.kind) {
       case "all":
         return (
-          <span className="whitespace-nowrap font-semibold">All tasks</span>
+          <span className="whitespace-nowrap font-semibold">All projects</span>
         );
       case "active":
         return (
@@ -242,11 +236,7 @@ export function TasksTopbar({
                 type="button"
                 className="hidden min-w-0 items-center gap-2 text-muted-foreground hover:text-foreground @md:flex"
                 onClick={() =>
-                  onNavigate({
-                    kind: "project",
-                    projectId: project.id,
-                    view: null,
-                  })
+                  onNavigate({ kind: "project", projectId: project.id })
                 }
               >
                 <span
@@ -274,21 +264,18 @@ export function TasksTopbar({
   return (
     <header className="flex h-11 shrink-0 items-center gap-2.5 border-b border-border-hairline bg-background px-3.5 text-sm max-md:h-12 max-md:pl-12 max-md:pointer-coarse:pl-14">
       <div className="min-w-0 flex-1 overflow-hidden">{breadcrumb}</div>
-      {route.kind === "task" &&
-      (pagerScope !== null || projects !== undefined) ? (
+      {route.kind === "task" && project !== null ? (
         <TaskPager
           taskKey={route.taskKey}
-          projectId={
-            pagerScope !== null ? pagerScope.projectId : (project?.id ?? null)
-          }
+          projectId={project.id}
           onNavigate={onNavigate}
         />
       ) : null}
-      {route.kind === "project" ? (
+      {route.kind === "all" || route.kind === "active" ? (
         <span className="hidden @md:block">
           <ViewToggle
             view={route.view}
-            onChange={(view) => onNavigate({ ...route, view })}
+            onChange={(view) => onNavigate({ kind: route.kind, view })}
           />
         </span>
       ) : null}
@@ -297,11 +284,13 @@ export function TasksTopbar({
         <Button
           size="sm"
           className="h-7 gap-1.5 max-md:pointer-coarse:h-9"
-          aria-label="New task"
-          onClick={onNewTask}
+          aria-label={route.kind === "project" ? "New task" : "New project"}
+          onClick={onNew}
         >
           <Icon name="Plus" className="size-3.5" />
-          <span className="hidden @lg:inline">New task</span>
+          <span className="hidden @lg:inline">
+            {route.kind === "project" ? "New task" : "New project"}
+          </span>
         </Button>
       ) : null}
     </header>

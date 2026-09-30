@@ -5,11 +5,12 @@ import type {
   PresetReasoningLevel,
   PresetServiceTier,
   TASK_THREAD_LIVE_STATUSES,
-  TaskPriority,
+  Priority,
+  ProjectStatus,
   TaskStatus,
 } from "../shared/contract.js";
 
-export type { TaskPriority, TaskStatus };
+export type { Priority, ProjectStatus, TaskStatus };
 
 type CommentKind = "user" | "agent" | "system";
 
@@ -32,6 +33,11 @@ export interface Project {
   color: string;
   folderId: string | null;
   linkedBbProjectId: string | null;
+  status: ProjectStatus;
+  priority: Priority;
+  dueDate: string | null;
+  description: string;
+  position: number;
   createdAt: string;
 }
 
@@ -43,9 +49,8 @@ export interface Task {
   title: string;
   description: string;
   status: TaskStatus;
-  priority: TaskPriority;
+  priority: Priority;
   dueDate: string | null;
-  parentTaskId: string | null;
   position: number;
   createdAt: string;
   updatedAt: string;
@@ -100,8 +105,6 @@ export interface TaskThread {
 
 export interface TaskRowMeta {
   threads: TaskThread[];
-  subtaskDone: number;
-  subtaskTotal: number;
 }
 
 export interface Preset {
@@ -144,6 +147,10 @@ export interface CreateProjectInput {
   color: string;
   folderId?: string | null;
   linkedBbProjectId?: string | null;
+  status?: ProjectStatus;
+  priority?: Priority;
+  dueDate?: string | null;
+  description?: string;
 }
 
 export interface UpdateProjectInput {
@@ -152,6 +159,16 @@ export interface UpdateProjectInput {
   color?: string;
   folderId?: string | null;
   linkedBbProjectId?: string | null;
+  status?: ProjectStatus;
+  priority?: Priority;
+  dueDate?: string | null;
+  description?: string;
+}
+
+export interface MoveProjectInput {
+  status: ProjectStatus;
+  beforeProjectId: string | null;
+  afterProjectId: string | null;
 }
 
 export interface CreateTaskInput {
@@ -160,27 +177,24 @@ export interface CreateTaskInput {
   title: string;
   description?: string;
   status?: TaskStatus;
-  priority?: TaskPriority;
+  priority?: Priority;
   dueDate?: string | null;
-  parentTaskId?: string | null;
 }
 
 export interface UpdateTaskInput {
   title?: string;
   description?: string;
   status?: TaskStatus;
-  priority?: TaskPriority;
+  priority?: Priority;
   dueDate?: string | null;
-  parentTaskId?: string | null;
 }
 
 export interface ListTasksFilters {
   projectId?: string;
   statuses?: readonly TaskStatus[];
-  priorities?: readonly TaskPriority[];
+  priorities?: readonly Priority[];
   labelIds?: readonly string[];
   activeOnly?: boolean;
-  parentTaskId?: string | null;
   search?: string;
   sort?: TaskSort;
   limit?: number;
@@ -190,12 +204,6 @@ export interface ListTasksFilters {
 export interface ListTasksPage {
   tasks: Task[];
   nextCursor: string | null;
-}
-
-export interface UpdateTaskPositionInput {
-  status: TaskStatus;
-  beforeTaskId?: string | null;
-  afterTaskId?: string | null;
 }
 
 export interface CreateLabelInput {

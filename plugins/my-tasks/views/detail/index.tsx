@@ -6,12 +6,10 @@ import { errorMessage } from "../../shared/errors.js";
 import type { DelegationRpcContract } from "../../delegate/contract.js";
 import { useBbNavigate, useRpc } from "@get-bb/plugin-sdk/app";
 import {
-  listAllTasks,
   useMentionItems,
   useTasksQuery,
   useTasksRpc,
 } from "../../shell/data.js";
-import { useTasksNavigation } from "../../shell/routes.js";
 import { TasksEditor } from "../../editor/tasks-editor.js";
 import { TaskActivity } from "../activity/task-activity.js";
 import { AttachmentsGrid, uploadAttachment } from "./attachments.js";
@@ -19,17 +17,17 @@ import {
   createDescriptionSaver,
   type DescriptionSaver,
 } from "./description-save.js";
-import { isActiveThread, StatusIcon } from "./meta.js";
-import { STATUS_LABELS } from "../list/lib.js";
 import {
   InlineProperties,
   PropertiesRail,
   type TaskPropertyUpdate,
 } from "./rail.js";
 import { ThreadsSection } from "./threads.js";
+import {
+  AttachThreadPicker,
+  NewThreadMenu,
+} from "../tasks/thread-actions.js";
 import { DetailToasts, useDetailToasts } from "./toast.js";
-import { SubtaskProgressBar } from "../../components/subtask-progress-bar.js";
-import { ConfirmDialog } from "../../components/confirm-dialog.js";
 import { DelayedLoading } from "@/components/ui/delayed-loading";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -41,42 +39,24 @@ interface DetailViewProps {
 const DESCRIPTION_SAVE_DELAY_MS = 800;
 const ACTIVE_PULL_REQUEST_REFRESH_MS = 60_000;
 
-function SubTaskProgress({
-  subtasks,
-  active,
-  onClick,
-}: {
-  subtasks: Task[];
-  active: boolean;
-  onClick: () => void;
-}) {
-  const done = subtasks.filter((subtask) => subtask.status === "done").length;
-  return (
-    <button
-      type="button"
-      title="Sub-tasks completed"
-      onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground shadow-2xs hover:border-input hover:text-foreground"
-    >
-      <SubtaskProgressBar done={done} total={subtasks.length} active={active} />
-    </button>
-  );
-}
-
-function EditableTitle({
-  task,
+export function EditableTitle({
+  id,
+  title,
+  label,
   onSave,
 }: {
-  task: Task;
+  id: string;
+  title: string;
+  label: string;
   onSave: (title: string) => void;
 }) {
   return (
     <h1
-      key={`${task.id}:${task.title}`}
+      key={`${id}:${title}`}
       contentEditable
       suppressContentEditableWarning
       role="textbox"
-      aria-label="Task title"
+      aria-label={label}
       className="mb-2.5 mt-1 text-2xl font-semibold leading-tight outline-none"
       onKeyDown={(event) => {
         if (event.key === "Enter") {
@@ -87,123 +67,14 @@ function EditableTitle({
       onBlur={(event) => {
         const next = event.currentTarget.textContent?.trim() ?? "";
         if (!next) {
-          event.currentTarget.textContent = task.title;
+          event.currentTarget.textContent = title;
           return;
         }
-        if (next !== task.title) onSave(next);
+        if (next !== title) onSave(next);
       }}
     >
-      {task.title}
+      {title}
     </h1>
-  );
-}
-
-function SubTasksSection({
-  ref,
-  task,
-  subtasks,
-  onCreate,
-  onDelete,
-}: {
-  ref: React.Ref<HTMLElement>;
-  task: Task;
-  subtasks: Task[];
-  onCreate: (title: string) => Promise<boolean>;
-  onDelete: (subtask: Task) => void;
-}) {
-  const navigation = useTasksNavigation();
-  const [adding, setAdding] = useState(false);
-  const [title, setTitle] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<Task | null>(null);
-
-  const submit = async () => {
-    const trimmed = title.trim();
-    if (!trimmed || busy) return;
-    setBusy(true);
-    const created = await onCreate(trimmed);
-    setBusy(false);
-    if (created) setTitle("");
-  };
-
-  return (
-    <section ref={ref} className="mt-5">
-      {subtasks.map((subtask) => (
-        <div
-          key={subtask.id}
-          className="group flex h-8 w-full items-center gap-2 border-b border-border-hairline px-0.5 text-sm hover:bg-state-hover"
-        >
-          <button
-            type="button"
-            className="flex min-w-0 flex-1 items-center gap-2 text-left"
-            title={STATUS_LABELS[subtask.status]}
-            onClick={() =>
-              navigation.go({ kind: "task", taskKey: subtask.key })
-            }
-          >
-            <StatusIcon status={subtask.status} />
-            <span className="shrink-0 text-xs text-muted-foreground">
-              {subtask.key}
-            </span>
-            <span className="min-w-0 truncate">{subtask.title}</span>
-          </button>
-          <button
-            type="button"
-            aria-label={`Delete ${subtask.title}`}
-            className="shrink-0 rounded p-1 text-muted-foreground opacity-0 hover:bg-state-active hover:text-destructive group-hover:opacity-100"
-            onClick={() => setConfirmDelete(subtask)}
-          >
-            <Icon name="Trash2" className="size-3.5" />
-          </button>
-        </div>
-      ))}
-      {adding ? (
-        <div className="flex h-8 items-center gap-2 border-b border-border-hairline px-0.5">
-          <StatusIcon status="todo" className="opacity-60" />
-          <input
-            autoFocus
-            value={title}
-            placeholder={`Sub-task of ${task.key}…`}
-            className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            onChange={(event) => setTitle(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") void submit();
-              if (event.key === "Escape") {
-                setAdding(false);
-                setTitle("");
-              }
-            }}
-            onBlur={() => {
-              if (!title.trim()) setAdding(false);
-            }}
-          />
-        </div>
-      ) : null}
-      <button
-        type="button"
-        className="flex items-center gap-1.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-        onClick={() => setAdding(true)}
-      >
-        <Icon name="Plus" className="size-3" />
-        Add sub-task
-      </button>
-      <ConfirmDialog
-        open={confirmDelete !== null}
-        onOpenChange={(open) => {
-          if (!open) setConfirmDelete(null);
-        }}
-        title="Delete sub-task?"
-        description={
-          confirmDelete
-            ? `"${confirmDelete.title}" will be permanently deleted, including its attachments and comments. This can't be undone.`
-            : ""
-        }
-        confirmLabel="Delete"
-        onConfirm={() => {
-          if (confirmDelete) onDelete(confirmDelete);
-        }}
-      />
-    </section>
   );
 }
 
@@ -223,10 +94,8 @@ function DetailSkeleton() {
 function TaskDetail({ task }: { task: Task }) {
   const rpc = useTasksRpc();
   const delegationRpc = useRpc<DelegationRpcContract>();
-  const navigation = useTasksNavigation();
   const { toasts, push, dismiss } = useDetailToasts();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const subtasksRef = useRef<HTMLElement>(null);
 
   const [draft, setDraft] = useState<{ taskId: string; markdown: string }>();
   const rpcRef = useRef(rpc);
@@ -254,19 +123,6 @@ function TaskDetail({ task }: { task: Task }) {
   );
   const project = projects.data?.find((entry) => entry.id === task.projectId);
 
-  const parent = useTasksQuery(
-    async (query) =>
-      task.parentTaskId
-        ? (await query.call("getTask", { taskId: task.parentTaskId })).task
-        : null,
-    ["tasks:changed"],
-    [task.parentTaskId],
-  );
-  const subtasks = useTasksQuery(
-    async (query) => listAllTasks(query, { parentTaskId: task.id }),
-    ["tasks:changed"],
-    [task.id],
-  );
   const labels = useTasksQuery(
     async (query) =>
       (await query.call("listLabels", { projectId: task.projectId })).labels,
@@ -352,81 +208,20 @@ function TaskDetail({ task }: { task: Task }) {
     attachments.refresh();
   };
 
-  const createSubtask = async (title: string): Promise<boolean> => {
-    try {
-      const result = await rpc.call("createTask", {
-        projectId: task.projectId,
-        title,
-        parentTaskId: task.id,
-        status: "todo",
-      });
-      if (!result.ok) {
-        push(result.error.message);
-        return false;
-      }
-      subtasks.refresh();
-      return true;
-    } catch (error) {
-      push(errorMessage(error));
-      return false;
-    }
-  };
-
-  const deleteSubtask = async (subtask: Task) => {
-    try {
-      const result = await rpc.call("deleteTask", { taskId: subtask.id });
-      if (!result.deleted) {
-        push("Couldn't delete the sub-task");
-        return;
-      }
-      subtasks.refresh();
-    } catch (error) {
-      push(errorMessage(error));
-    }
-  };
-
   const mentionItems = useMentionItems();
   const navigate = useBbNavigate();
 
   const descriptionValue =
     draft && draft.taskId === task.id ? draft.markdown : task.description;
-  const parentTask = parent.data ?? null;
 
   return (
     <div className="@container flex min-h-full flex-col bg-surface-recessed-solid p-3">
       <div className="flex flex-1 items-stretch rounded-lg border border-border bg-card shadow-2xs">
         <div className="mx-auto w-full min-w-0 max-w-[55rem] flex-1 px-7 pb-16 pt-8 @3xl:px-13 @3xl:pt-11">
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            {parentTask ? (
-              <button
-                type="button"
-                className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground shadow-2xs hover:border-input"
-                onClick={() =>
-                  navigation.go({ kind: "task", taskKey: parentTask.key })
-                }
-              >
-                Sub-task of
-                <StatusIcon status={parentTask.status} className="size-3" />
-                <span className="font-medium text-foreground">
-                  {parentTask.key}
-                </span>
-                <span className="min-w-0 truncate">{parentTask.title}</span>
-              </button>
-            ) : null}
-            <SubTaskProgress
-              subtasks={subtasks.data ?? []}
-              active={(threads.data ?? []).some(isActiveThread)}
-              onClick={() =>
-                subtasksRef.current?.scrollIntoView({
-                  behavior: "smooth",
-                  block: "center",
-                })
-              }
-            />
-          </div>
-
           <EditableTitle
-            task={task}
+            id={task.id}
+            title={task.title}
+            label="Task title"
             onSave={(title) => void updateTask({ title })}
           />
 
@@ -494,16 +289,8 @@ function TaskDetail({ task }: { task: Task }) {
             onError={(message) => push(message)}
           />
 
-          <SubTasksSection
-            ref={subtasksRef}
-            task={task}
-            subtasks={subtasks.data ?? []}
-            onCreate={createSubtask}
-            onDelete={(subtask) => void deleteSubtask(subtask)}
-          />
-
-          {(threads.data ?? []).length > 0 ? (
-            <div className="mt-6">
+          <div className="mt-6">
+            {(threads.data ?? []).length > 0 ? (
               <ThreadsSection
                 threads={threads.data ?? []}
                 pullRequests={pullRequests.data?.pullRequests}
@@ -520,8 +307,22 @@ function TaskDetail({ task }: { task: Task }) {
                 }}
                 onError={(message) => push(message)}
               />
+            ) : null}
+            <div className="flex items-center gap-1 pt-1">
+              <NewThreadMenu
+                taskId={task.id}
+                presets={presets.data}
+                onError={push}
+              />
+              <AttachThreadPicker
+                taskId={task.id}
+                attachedThreadIds={(threads.data ?? []).map(
+                  (thread) => thread.threadId,
+                )}
+                onError={push}
+              />
             </div>
-          ) : null}
+          </div>
 
           <div className="mt-1">
             <TaskActivity taskId={task.id} />

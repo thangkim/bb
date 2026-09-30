@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Task } from "./contract.js";
-import { sortTasks } from "./sort.js";
+import { sortItems } from "./sort.js";
 import { makeTask } from "../test-fixtures.js";
 
 const ULIDS = [
@@ -12,10 +12,11 @@ const ULIDS = [
 
 function task(
   key: string,
-  overrides: Partial<Pick<Task, "priority" | "dueDate">> = {},
+  overrides: Partial<Pick<Task, "priority" | "dueDate" | "position">> = {},
 ): Task {
   return makeTask({
     id: ULIDS[Number(key.split("-")[1]) - 1]!,
+    position: Number(key.split("-")[1]),
     projectId: ULIDS[0],
     key,
     createdAt: "2026-07-01T00:00:00.000Z",
@@ -26,16 +27,16 @@ function task(
 
 const keys = (tasks: readonly Task[]) => tasks.map((t) => t.key);
 
-describe("sortTasks", () => {
-  it("keeps the server order for manual without mutating the input", () => {
-    const input = [task("T-2"), task("T-1")];
-    const sorted = sortTasks(input, "manual");
-    expect(keys(sorted)).toEqual(["T-2", "T-1"]);
-    expect(sorted).not.toBe(input);
+describe("sortItems", () => {
+  it("orders manual by position without mutating the input", () => {
+    const input = [task("T-2"), task("T-1"), task("T-3", { position: 0.5 })];
+    const sorted = sortItems(input, "manual");
+    expect(keys(sorted)).toEqual(["T-3", "T-1", "T-2"]);
+    expect(keys(input)).toEqual(["T-2", "T-1", "T-3"]);
   });
 
   it("orders priority urgent → none with due date breaking ties", () => {
-    const sorted = sortTasks(
+    const sorted = sortItems(
       [
         task("T-1", { priority: "none" }),
         task("T-2", { priority: "high", dueDate: "2026-08-01" }),
@@ -48,7 +49,7 @@ describe("sortTasks", () => {
   });
 
   it("orders due dates soonest first, undated last, priority breaking ties", () => {
-    const sorted = sortTasks(
+    const sorted = sortItems(
       [
         task("T-1", { dueDate: null, priority: "urgent" }),
         task("T-2", { dueDate: "2026-07-20", priority: "low" }),
@@ -60,13 +61,13 @@ describe("sortTasks", () => {
     expect(keys(sorted)).toEqual(["T-4", "T-3", "T-2", "T-1"]);
   });
 
-  it("preserves the incoming order when all sort keys tie", () => {
+  it("falls back to manual position when priority and due date tie", () => {
     const input = [
       task("T-3", { priority: "high" }),
       task("T-1", { priority: "high" }),
       task("T-2", { priority: "high" }),
     ];
-    expect(keys(sortTasks(input, "priority"))).toEqual(["T-3", "T-1", "T-2"]);
-    expect(keys(sortTasks(input, "due"))).toEqual(["T-3", "T-1", "T-2"]);
+    expect(keys(sortItems(input, "priority"))).toEqual(["T-1", "T-2", "T-3"]);
+    expect(keys(sortItems(input, "due"))).toEqual(["T-1", "T-2", "T-3"]);
   });
 });

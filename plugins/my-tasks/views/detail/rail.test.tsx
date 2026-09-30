@@ -6,7 +6,7 @@ import {
   installTestPluginRuntime,
   renderSlot,
 } from "@get-bb/plugin-sdk/testing/app";
-import { makeTask, rpcInput } from "../../test-fixtures.js";
+import { makeProject, makeTask, rpcInput } from "../../test-fixtures.js";
 
 if (!window.matchMedia) {
   window.matchMedia = (query: string) => ({
@@ -39,16 +39,13 @@ const PROJECT_ID = "01HZZZZZZZZZZZZZZZZZZZZZP1";
 const BB_PROJECT_ID = "proj_bb0000000000000000000001";
 
 function projectRow(linkedBbProjectId: string | null) {
-  return {
+  return makeProject({
     id: PROJECT_ID,
     name: "Tasks Plugin",
     prefix: "TSK",
     nextTaskNumber: 6,
-    color: "blue",
-    folderId: null,
     linkedBbProjectId,
-    createdAt: "2026-07-15T00:00:00.000Z",
-  };
+  });
 }
 
 const task = makeTask({
@@ -71,6 +68,21 @@ function railProps(linkedBbProjectId: string | null) {
     onError: () => {},
   };
 }
+
+describe("task completion rail control", () => {
+  it("toggles the task between not done and done", () => {
+    const updates: unknown[] = [];
+    const slot = renderSlot(
+      { component: RailHarness },
+      { ...railProps(null), onUpdate: (update: unknown) => updates.push(update) },
+      { rpc: { listBbProjects: () => ({ bbProjects: [] }) } },
+    );
+    const toggle = slot.getByRole("checkbox", { name: "Not done" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(toggle);
+    expect(updates).toEqual([{ status: "done" }]);
+  });
+});
 
 describe("dispatch target rail control", () => {
   it("links a discovered bb project", async () => {

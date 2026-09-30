@@ -1,6 +1,5 @@
 import type { PluginNavPanelProps } from "@get-bb/plugin-sdk/app";
 import {
-  useActiveTasks,
   useFolders,
   usePresets,
   useProjects,
@@ -26,7 +25,6 @@ function TasksNavigationPanelContent({ subPath }: PluginNavPanelProps) {
   const projects = useProjects();
   const summaries = useSidebarSummary();
   const presets = usePresets();
-  const activeTasks = useActiveTasks();
   const [newProjectOpen, setNewProjectOpen] = useState(false);
 
   return (
@@ -37,7 +35,6 @@ function TasksNavigationPanelContent({ subPath }: PluginNavPanelProps) {
         projects={projects.data}
         summaries={summaries.data}
         presets={presets.data}
-        activeTasks={activeTasks.data}
         isLoading={
           isAwaitingFirstResult(folders) ||
           isAwaitingFirstResult(projects) ||

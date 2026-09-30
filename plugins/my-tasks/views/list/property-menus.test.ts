@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { TASK_PRIORITIES, TASK_STATUSES } from "../../shared/contract.js";
+import { PRIORITIES, PROJECT_STATUSES } from "../../shared/contract.js";
 import {
   isBareKey,
   PRIORITY_MENU_ORDER,
@@ -12,16 +12,16 @@ describe("PRIORITY_MENU_ORDER", () => {
   it("lists No priority first (0) and covers every priority once", () => {
     expect(PRIORITY_MENU_ORDER[0]).toBe("none");
     expect([...PRIORITY_MENU_ORDER].sort()).toEqual(
-      [...TASK_PRIORITIES].sort(),
+      [...PRIORITIES].sort(),
     );
   });
 });
 
 describe("statusForShortcut", () => {
   it("maps 1-based digits to canonical status order", () => {
-    expect(statusForShortcut("1")).toBe(TASK_STATUSES[0]);
-    expect(statusForShortcut("3")).toBe(TASK_STATUSES[2]);
-    expect(statusForShortcut("6")).toBe(TASK_STATUSES[5]);
+    expect(statusForShortcut("1")).toBe(PROJECT_STATUSES[0]);
+    expect(statusForShortcut("3")).toBe(PROJECT_STATUSES[2]);
+    expect(statusForShortcut("6")).toBe(PROJECT_STATUSES[5]);
   });
 
   it("rejects out-of-range and non-digit keys", () => {

@@ -13,6 +13,7 @@ import { TasksTopbar } from "./topbar.js";
 import { ListView } from "../views/list/index.js";
 import { BoardView } from "../views/board/index.js";
 import { DetailView } from "../views/detail/index.js";
+import { ProjectDetailView } from "../views/project/index.js";
 import { NewTaskDialog } from "../views/manage/new-task-dialog.js";
 import { NewProjectDialog } from "../views/manage/new-project-dialog.js";
 import { ManagePanel } from "../views/manage/manage-panel.js";
@@ -49,25 +50,29 @@ function RouteOutlet({
 }) {
   switch (route.kind) {
     case "all":
-      return <ListView projectId={null} />;
     case "active":
-      return <ListView projectId={null} activeOnly />;
+      return route.view === "board" && boardUsable ? (
+        <BoardView activeOnly={route.kind === "active"} />
+      ) : (
+        <ListView activeOnly={route.kind === "active"} />
+      );
     case "manage":
       return <ManagePanel />;
     case "task":
       return <DetailView taskKey={route.taskKey} />;
     case "project":
-      return route.view === "board" && boardUsable ? (
-        <BoardView projectId={route.projectId} />
-      ) : (
-        <ListView projectId={route.projectId} />
-      );
+      return <ProjectDetailView projectId={route.projectId} />;
   }
 }
 
 function resolveRoute(route: TasksRoute): ResolvedTasksRoute {
-  if (route.kind !== "project") return route;
-  return { ...route, view: route.view ?? loadViewMode(route.projectId) };
+  switch (route.kind) {
+    case "all":
+    case "active":
+      return { kind: route.kind, view: route.view ?? loadViewMode() };
+    default:
+      return route;
+  }
 }
 
 function TasksAppShellContent({ subPath }: PluginNavPanelProps) {
@@ -76,8 +81,11 @@ function TasksAppShellContent({ subPath }: PluginNavPanelProps) {
   const navigation = useMemo<TasksNavigation>(
     () => ({
       go: (target, options) => {
-        if (target.kind === "project" && target.view !== null) {
-          storeViewMode(target.projectId, target.view);
+        if (
+          (target.kind === "all" || target.kind === "active") &&
+          target.view !== undefined
+        ) {
+          storeViewMode(target.view);
         }
         tasksNavigation.go(target, options);
       },
@@ -86,6 +94,10 @@ function TasksAppShellContent({ subPath }: PluginNavPanelProps) {
   );
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const openNew = () => {
+    if (route.kind === "project") setNewTaskOpen(true);
+    else setNewProjectOpen(true);
+  };
 
   const mainRef = useRef<HTMLElement>(null);
   const [boardUsable, setBoardUsable] = useState(true);
@@ -148,18 +160,8 @@ function TasksAppShellContent({ subPath }: PluginNavPanelProps) {
         <TasksTopbar
           route={route}
           projects={projects.data}
-          pagerScope={
-            lastBrowseRouteRef.current === null
-              ? null
-              : {
-                  projectId:
-                    lastBrowseRouteRef.current.kind === "project"
-                      ? lastBrowseRouteRef.current.projectId
-                      : null,
-                }
-          }
           onNavigate={navigation.go}
-          onNewTask={() => setNewTaskOpen(true)}
+          onNew={openNew}
           onBack={backFromTask}
         />
         <div className="min-h-0 flex-1 overflow-auto">

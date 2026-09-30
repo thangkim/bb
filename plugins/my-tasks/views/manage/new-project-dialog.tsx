@@ -6,7 +6,10 @@ import {
   useTasksRpc,
 } from "../../shell/data.js";
 import { useTasksNavigation } from "../../shell/routes.js";
-import { PROJECT_PREFIX_PATTERN } from "../../shared/contract.js";
+import {
+  PROJECT_PREFIX_PATTERN,
+  type ProjectStatus,
+} from "../../shared/contract.js";
 import { errorMessage } from "../../shared/errors.js";
 import {
   Dialog,
@@ -42,11 +45,13 @@ const NEW_FOLDER = "__new__";
 interface NewProjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultStatus?: ProjectStatus;
 }
 
 export function NewProjectDialog({
   open,
   onOpenChange,
+  defaultStatus = "todo",
 }: NewProjectDialogProps) {
   const rpc = useTasksRpc();
   const navigation = useTasksNavigation();
@@ -140,9 +145,10 @@ export function NewProjectDialog({
         color,
         folderId,
         linkedBbProjectId,
+        status: defaultStatus,
       });
       onOpenChange(false);
-      navigation.go({ kind: "project", projectId: project.id, view: null });
+      navigation.go({ kind: "project", projectId: project.id });
     } catch (submitError) {
       setError(describeCreateProjectError(submitError));
     } finally {

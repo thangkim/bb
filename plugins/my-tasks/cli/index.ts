@@ -26,7 +26,8 @@ import {
   presetReasoningLevelSchema,
   tasksRpcContract,
   PRESET_PERMISSION_MODES,
-  TASK_PRIORITIES,
+  PRIORITIES,
+  PROJECT_STATUSES,
   TASK_STATUSES,
   ULID_PATTERN,
   type Attachment,
@@ -34,6 +35,7 @@ import {
   type Label,
   type Project,
   type Preset,
+  type SidebarProjectSummary,
   type Task,
   type TaskMutationResult,
 } from "../shared/contract";
@@ -576,18 +578,48 @@ function resolveLabel(labels: readonly Label[], address: string): Label {
   return label;
 }
 
+async function projectSummaries(
+  domain: TasksDomain,
+): Promise<Map<string, SidebarProjectSummary>> {
+  const { projects } = tasksRpcContract.sidebarSummary.output.parse(
+    await domain.sidebarSummary(tasksRpcContract.sidebarSummary.input.parse(null)),
+  );
+  return new Map(projects.map((summary) => [summary.projectId, summary]));
+}
+
+function projectProgress(summary: SidebarProjectSummary | undefined): string {
+  if (!summary || summary.taskCount === 0) return "0/0";
+  const percent = Math.round((summary.doneTaskCount / summary.taskCount) * 100);
+  return `${summary.doneTaskCount}/${summary.taskCount} (${percent}%)`;
+}
+
 function projectTable(
   projects: readonly Project[],
   folders: readonly Folder[],
+  summaries: ReadonlyMap<string, SidebarProjectSummary>,
 ) {
   const folderNames = new Map(
     folders.map((folder) => [folder.id, folder.name]),
   );
   return table(
-    ["PREFIX", "NAME", "FOLDER", "BB PROJECT", "ID"],
+    [
+      "PREFIX",
+      "NAME",
+      "STATUS",
+      "PRIORITY",
+      "DUE",
+      "PROGRESS",
+      "FOLDER",
+      "BB PROJECT",
+      "ID",
+    ],
     projects.map((project) => [
       project.prefix,
       project.name,
+      project.status,
+      project.priority,
+      project.dueDate ?? "-",
+      projectProgress(summaries.get(project.id)),
       project.folderId
         ? (folderNames.get(project.folderId) ?? project.folderId)
         : "-",
@@ -679,7 +711,7 @@ export function registerTasksCli(
         status: cliCommand({
           summary: "Show the My Tasks plugin name and version",
           description:
-            "Plugin health only. To filter tasks by workflow status run bb my-tasks list --status <status>; to change one run bb my-tasks update <key-or-id> --status <status>.",
+            "Plugin health only. Projects carry the workflow status (bb my-tasks project update <prefix> --status <status>); tasks are todo or done (bb my-tasks update <key-or-id> --status done).",
           options: { json: JSON_OPTION },
           run(input) {
             return {
@@ -698,7 +730,8 @@ export function registerTasksCli(
             ["create", "Create a tracker project"],
             ["list", "List tracker projects"],
             ["show", "Show one tracker project"],
-            ["update", "Rename, recolor, refile, or relink a project"],
+            ["update", "Change a project's status, priority, due date, or details"],
+            ["move", "Move a project to a status column and position"],
           ],
         ),
         "project create": cliCommand({
@@ -732,6 +765,30 @@ export function registerTasksCli(
               default: DEFAULT_PROJECT_COLOR,
               description: "Accent color name",
             },
+            status: {
+              type: "enum",
+              values: PROJECT_STATUSES,
+              default: "todo",
+              aliases: ["state"],
+              description: "Workflow status",
+            },
+            priority: {
+              type: "enum",
+              values: PRIORITIES,
+              default: "none",
+              description: "Project priority",
+            },
+            due: {
+              type: "string",
+              placeholder: "YYYY-MM-DD",
+              aliases: ["due-date"],
+              description: "Due date as a calendar date, YYYY-MM-DD",
+            },
+            description: {
+              type: "string",
+              placeholder: "markdown",
+              description: "Markdown description",
+            },
             json: JSON_OPTION,
           },
           unexpectedPositionalHint:
@@ -754,6 +811,10 @@ export function registerTasksCli(
                     color: input.options.color,
                     folderId: folder?.id ?? null,
                     linkedBbProjectId: input.options["link-bb-project"] ?? null,
+                    status: input.options.status,
+                    priority: input.options.priority,
+                    dueDate: input.options.due ?? null,
+                    description: input.options.description ?? "",
                   }),
                 ),
               );
@@ -774,9 +835,19 @@ export function registerTasksCli(
                   tasksRpcContract.listFolders.input.parse(null),
                 ),
               ).folders;
+              const summaries = await projectSummaries(domain);
               return input.options.json
-                ? JSON.stringify({ projects })
-                : projectTable(projects, folders);
+                ? JSON.stringify({
+                    projects: projects.map((project) => {
+                      const summary = summaries.get(project.id);
+                      return {
+                        ...project,
+                        taskCount: summary?.taskCount ?? 0,
+                        doneTaskCount: summary?.doneTaskCount ?? 0,
+                      };
+                    }),
+                  })
+                : projectTable(projects, folders, summaries);
             });
           },
         }),
@@ -799,23 +870,48 @@ export function registerTasksCli(
               const folder = project.folderId
                 ? await resolveFolder(domain, project.folderId)
                 : null;
+              const summary = (await projectSummaries(domain)).get(project.id);
+              const tasks = await listAllTasks(
+                domain,
+                tasksRpcContract.listTasks.input.parse({
+                  projectId: project.id,
+                }),
+              );
               if (input.options.json) {
-                return JSON.stringify({ project, folder });
+                return JSON.stringify({ project, folder, tasks });
               }
-              return detail([
+              return [
+                detail([
                 ["Project", `${project.prefix} — ${project.name}`],
                 ["ID", project.id],
+                ["Status", project.status],
+                ["Priority", project.priority],
+                ["Due", project.dueDate ?? "-"],
+                ["Progress", projectProgress(summary)],
                 ["Color", project.color],
                 ["Folder", folder?.name ?? "-"],
                 ["BB project", project.linkedBbProjectId ?? "-"],
                 ["Next task", `${project.prefix}-${project.nextTaskNumber}`],
                 ["Created", project.createdAt],
-              ]);
+                ]),
+                `Description\n${project.description || "(none)"}`,
+                `Tasks\n${table(
+                  ["DONE", "KEY", "DUE", "TITLE"],
+                  tasks.map((task) => [
+                    task.status === "done" ? "x" : " ",
+                    task.key,
+                    task.dueDate ?? "-",
+                    task.title,
+                  ]),
+                  "(none)",
+                )}`,
+              ].join("\n\n");
             });
           },
         }),
         "project update": cliCommand({
-          summary: "Rename, recolor, refile, or relink a tracker project",
+          summary:
+            "Change a tracker project's status, priority, due date, description, name, color, folder, or bb link",
           positionals: [
             {
               name: "prefix-or-id",
@@ -851,9 +947,33 @@ export function registerTasksCli(
               description:
                 "New task key prefix; existing task keys are rewritten",
             },
+            status: {
+              type: "enum",
+              values: PROJECT_STATUSES,
+              aliases: ["state"],
+              description: "New workflow status; the project moves to the end of that column",
+            },
+            priority: {
+              type: "enum",
+              values: PRIORITIES,
+              description: "New priority",
+            },
+            due: {
+              type: "string",
+              placeholder: "YYYY-MM-DD",
+              aliases: ["due-date"],
+              description: "New due date as a calendar date, YYYY-MM-DD",
+            },
+            "no-due": { type: "boolean", description: "Clear the due date" },
+            description: {
+              type: "string",
+              placeholder: "markdown",
+              description: "Replacement markdown description",
+            },
             json: JSON_OPTION,
           },
           constraints: [
+            { kind: "at-most-one", options: ["due", "no-due"] },
             { kind: "at-most-one", options: ["folder", "no-folder"] },
             {
               kind: "at-most-one",
@@ -877,15 +997,16 @@ export function registerTasksCli(
                 linkedBbProjectId: input.options["unlink-bb-project"]
                   ? null
                   : input.options["link-bb-project"],
+                status: input.options.status,
+                priority: input.options.priority,
+                dueDate: input.options["no-due"] ? null : input.options.due,
+                description: input.options.description,
               };
               const renamePrefix = input.options["rename-prefix"];
-              if (
-                renamePrefix === undefined &&
-                changes.name === undefined &&
-                changes.color === undefined &&
-                changes.folderId === undefined &&
-                changes.linkedBbProjectId === undefined
-              ) {
+              const hasFieldChanges = Object.values(changes).some(
+                (value) => value !== undefined,
+              );
+              if (renamePrefix === undefined && !hasFieldChanges) {
                 throw new CliError("no project changes were provided", {
                   code: "no_changes",
                 });
@@ -897,11 +1018,6 @@ export function registerTasksCli(
                       projectId: project.id,
                       prefix: normalizePrefix(renamePrefix),
                     });
-              const hasFieldChanges =
-                changes.name !== undefined ||
-                changes.color !== undefined ||
-                changes.folderId !== undefined ||
-                changes.linkedBbProjectId !== undefined;
               const updateInput = hasFieldChanges
                 ? tasksRpcContract.updateProject.input.parse({
                     projectId: project.id,
@@ -923,12 +1039,73 @@ export function registerTasksCli(
                   color: updateInput?.color,
                   folderId: updateInput?.folderId,
                   linkedBbProjectId: updateInput?.linkedBbProjectId,
+                  status: updateInput?.status,
+                  priority: updateInput?.priority,
+                  dueDate: updateInput?.dueDate,
+                  description: updateInput?.description,
                 }),
               );
               publishProjectsChanged(bb, updated.id);
               return input.options.json
                 ? JSON.stringify({ project: updated })
                 : `Updated project ${updated.prefix}  ${updated.name}`;
+            });
+          },
+        }),
+        "project move": cliCommand({
+          summary: "Move a project to a status column, optionally between two neighbors",
+          positionals: [
+            {
+              name: "prefix-or-id",
+              description: "Tracker project prefix such as ABC, or its ULID",
+              required: true,
+            },
+          ],
+          options: {
+            status: {
+              type: "enum",
+              values: PROJECT_STATUSES,
+              required: true,
+              aliases: ["state"],
+              description: "Destination workflow status",
+            },
+            after: {
+              type: "string",
+              placeholder: "prefix-or-id",
+              description: "Place directly after this project in the destination column",
+            },
+            before: {
+              type: "string",
+              placeholder: "prefix-or-id",
+              description: "Place directly before this project in the destination column",
+            },
+            json: JSON_OPTION,
+          },
+          run(input) {
+            return guard(async () => {
+              const project = await resolveProject(
+                domain,
+                input.positionals["prefix-or-id"],
+              );
+              const after = input.options.after
+                ? await resolveProject(domain, input.options.after)
+                : null;
+              const before = input.options.before
+                ? await resolveProject(domain, input.options.before)
+                : null;
+              const { project: moved } = tasksRpcContract.moveProject.output.parse(
+                await domain.moveProject(
+                  tasksRpcContract.moveProject.input.parse({
+                    projectId: project.id,
+                    status: input.options.status,
+                    beforeProjectId: after?.id ?? null,
+                    afterProjectId: before?.id ?? null,
+                  }),
+                ),
+              );
+              return input.options.json
+                ? JSON.stringify({ project: moved })
+                : `Moved project ${moved.prefix} to ${moved.status}`;
             });
           },
         }),
@@ -1158,7 +1335,7 @@ export function registerTasksCli(
             },
             priority: {
               type: "enum",
-              values: TASK_PRIORITIES,
+              values: PRIORITIES,
               default: "none",
               description: "Task priority",
             },
@@ -1176,12 +1353,6 @@ export function registerTasksCli(
               placeholder: "YYYY-MM-DD",
               aliases: ["due-date"],
               description: "Due date as a calendar date, YYYY-MM-DD",
-            },
-            parent: {
-              type: "string",
-              placeholder: "key-or-id",
-              description:
-                "Parent task key or id; tasks support at most one level of sub-tasks",
             },
             attach: {
               type: "string",
@@ -1239,10 +1410,6 @@ export function registerTasksCli(
               const labelIds = input.options.label.map(
                 (name) => resolveLabel(labels, name).id,
               );
-              const parentAddress = input.options.parent;
-              const parent = parentAddress
-                ? await resolveTask(domain, parentAddress)
-                : undefined;
               const created = tasksRpcContract.createTask.input.parse({
                 projectId: project.id,
                 title: input.options.title,
@@ -1256,7 +1423,6 @@ export function registerTasksCli(
                   )) ?? "",
                 priority: input.options.priority,
                 dueDate: input.options.due ?? null,
-                parentTaskId: parent?.id ?? null,
                 labelIds,
               });
               const task = unwrapTask(
@@ -1324,11 +1490,11 @@ export function registerTasksCli(
               split: ",",
               aliases: ["statuses", "state"],
               description:
-                "Keep only these workflow statuses; repeat the flag or pass a comma-separated list",
+                "Keep only todo (not done) or done tasks; repeat the flag or pass a comma-separated list",
             },
             priority: {
               type: "enum",
-              values: TASK_PRIORITIES,
+              values: PRIORITIES,
               repeatable: true,
               split: ",",
               aliases: ["priorities"],
@@ -1500,12 +1666,6 @@ export function registerTasksCli(
               const labels = task.labelIds
                 .map((id) => labelById.get(id)!)
                 .filter(Boolean);
-              const subtasks = await listAllTasks(
-                domain,
-                tasksRpcContract.listTasks.input.parse({
-                  parentTaskId: task.id,
-                }),
-              );
               const comments = tasksRpcContract.listComments.output.parse(
                 await domain.listComments(
                   tasksRpcContract.listComments.input.parse({
@@ -1538,7 +1698,6 @@ export function registerTasksCli(
                   task,
                   project,
                   labels,
-                  subtasks,
                   attachments,
                   taskThreads,
                   pullRequests,
@@ -1554,7 +1713,6 @@ export function registerTasksCli(
                   ["Status", task.status],
                   ["Priority", task.priority],
                   ["Due", task.dueDate ?? "-"],
-                  ["Parent", task.parentTaskId ?? "-"],
                   [
                     "Labels",
                     labels.map((label) => label.name).join(", ") || "-",
@@ -1563,16 +1721,6 @@ export function registerTasksCli(
                   ["Updated", task.updatedAt],
                 ]),
                 `Description\n${task.description || "(none)"}`,
-                `Sub-tasks\n${table(
-                  ["KEY", "STATUS", "PRIORITY", "TITLE"],
-                  subtasks.map((subtask) => [
-                    subtask.key,
-                    subtask.status,
-                    subtask.priority,
-                    subtask.title,
-                  ]),
-                  "(none)",
-                )}`,
                 `Attachments\n${table(
                   ["ID", "NAME", "SIZE"],
                   attachments.map((attachment) => [
@@ -1631,11 +1779,11 @@ export function registerTasksCli(
               values: TASK_STATUSES,
               aliases: ["state"],
               description:
-                "New workflow status; in_review when implementation needs review, done when the criteria are met",
+                "done when the task's criteria are met, todo to reopen it",
             },
             priority: {
               type: "enum",
-              values: TASK_PRIORITIES,
+              values: PRIORITIES,
               description: "New priority",
             },
             title: {
@@ -1663,16 +1811,6 @@ export function registerTasksCli(
               description: "New due date as a calendar date, YYYY-MM-DD",
             },
             "no-due": { type: "boolean", description: "Clear the due date" },
-            parent: {
-              type: "string",
-              placeholder: "key-or-id",
-              description:
-                "New parent task key or id; tasks support at most one level of sub-tasks",
-            },
-            "no-parent": {
-              type: "boolean",
-              description: "Promote the task to the top level",
-            },
             "add-label": {
               type: "string",
               repeatable: true,
@@ -1697,7 +1835,6 @@ export function registerTasksCli(
               options: ["description", "description-file"],
             },
             { kind: "at-most-one", options: ["due", "no-due"] },
-            { kind: "at-most-one", options: ["parent", "no-parent"] },
             {
               kind: "requires",
               option: "machine",
@@ -1712,12 +1849,6 @@ export function registerTasksCli(
               );
               const dueDate = input.options.due;
               const noDue = input.options["no-due"];
-              const parentAddress = input.options.parent;
-              const noParent = input.options["no-parent"];
-              const parent =
-                parentAddress === undefined
-                  ? undefined
-                  : await resolveTask(domain, parentAddress);
               const descriptionFile = input.options["description-file"];
               const clientHostId =
                 descriptionFile !== undefined
@@ -1753,8 +1884,6 @@ export function registerTasksCli(
                 description === undefined &&
                 dueDate === undefined &&
                 !noDue &&
-                parentAddress === undefined &&
-                !noParent &&
                 !labelsChanged
               ) {
                 throw new CliError("no task changes were provided", {
@@ -1770,10 +1899,6 @@ export function registerTasksCli(
                     title: input.options.title,
                     description,
                     dueDate: noDue ? null : dueDate,
-                    parentTaskId:
-                      parentAddress === undefined && !noParent
-                        ? undefined
-                        : (parent?.id ?? null),
                     labelIds: labelsChanged ? [...nextLabels] : undefined,
                     authorName: taskAuthor(ctx),
                   }),

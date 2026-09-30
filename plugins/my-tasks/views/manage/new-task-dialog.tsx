@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  TASK_PRIORITIES,
-  TASK_STATUSES,
+  PRIORITIES,
   type Task,
-  type TaskPriority,
-  type TaskStatus,
+  type Priority,
 } from "../../shared/contract.js";
 import { errorMessage } from "../../shared/errors.js";
 import {
@@ -49,7 +47,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { CheckboxField, DEFAULT_COLOR } from "./shared.js";
-import { PRIORITY_LABELS, STATUS_LABELS } from "../list/lib.js";
+import { PRIORITY_LABELS } from "../list/lib.js";
 
 const CHIP_TRIGGER =
   "h-7 w-auto gap-1.5 rounded-md px-2 text-xs text-muted-foreground";
@@ -58,14 +56,12 @@ interface NewTaskDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: string | null;
-  defaultStatus?: TaskStatus;
 }
 
 export function NewTaskDialog({
   open,
   onOpenChange,
   projectId,
-  defaultStatus,
 }: NewTaskDialogProps) {
   const rpc = useTasksRpc();
   const navigation = useTasksNavigation();
@@ -74,8 +70,7 @@ export function NewTaskDialog({
   const [selectedProjectId, setSelectedProjectId] = useState(projectId);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<TaskStatus>(defaultStatus ?? "todo");
-  const [priority, setPriority] = useState<TaskPriority>("none");
+  const [priority, setPriority] = useState<Priority>("none");
   const [labelIds, setLabelIds] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState("");
   const [createMore, setCreateMore] = useState(false);
@@ -93,7 +88,6 @@ export function NewTaskDialog({
     setSelectedProjectId(projectId);
     setTitle("");
     setDescription("");
-    setStatus(defaultStatus ?? "todo");
     setPriority("none");
     setLabelIds([]);
     setDueDate("");
@@ -198,10 +192,8 @@ export function NewTaskDialog({
         projectId: effectiveProjectId,
         title: title.trim(),
         description,
-        status,
         priority,
         dueDate: dueDate === "" ? null : dueDate,
-        parentTaskId: null,
         labelIds,
       });
       if (!result.ok) {
@@ -377,29 +369,14 @@ export function NewTaskDialog({
             </SelectContent>
           </Select>
           <Select
-            value={status}
-            onValueChange={(value) => setStatus(value as TaskStatus)}
-          >
-            <SelectTrigger aria-label="Status" className={CHIP_TRIGGER}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {TASK_STATUSES.map((value) => (
-                <SelectItem key={value} value={value}>
-                  {STATUS_LABELS[value]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
             value={priority}
-            onValueChange={(value) => setPriority(value as TaskPriority)}
+            onValueChange={(value) => setPriority(value as Priority)}
           >
             <SelectTrigger aria-label="Priority" className={CHIP_TRIGGER}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {TASK_PRIORITIES.map((value) => (
+              {PRIORITIES.map((value) => (
                 <SelectItem key={value} value={value}>
                   {PRIORITY_LABELS[value]}
                 </SelectItem>
