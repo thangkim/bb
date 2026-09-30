@@ -46,6 +46,68 @@ export const THEME_TOKENS = [
   "radius",
 ] as const;
 
+const PAINTED_TAGS = new Set([
+  "canvas",
+  "embed",
+  "iframe",
+  "img",
+  "input",
+  "object",
+  "picture",
+  "select",
+  "textarea",
+  "video",
+]);
+
+function isTransparentColor(value: string): boolean {
+  return (
+    value === "" ||
+    value === "transparent" ||
+    /[,/]\s*0(?:\.0*)?%?\s*\)$/u.test(value)
+  );
+}
+
+function isEmptyHitArea(element: Element): boolean {
+  if (
+    element instanceof SVGElement ||
+    PAINTED_TAGS.has(element.tagName.toLowerCase())
+  ) {
+    return false;
+  }
+  for (const node of element.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
+      return false;
+    }
+  }
+  for (const child of element.children) {
+    const rect = child.getBoundingClientRect();
+    if (rect.width > 1 && rect.height > 1) return false;
+  }
+  const style = getComputedStyle(element);
+  const borderWidths = [
+    style.borderTopWidth,
+    style.borderRightWidth,
+    style.borderBottomWidth,
+    style.borderLeftWidth,
+  ];
+  return (
+    isTransparentColor(style.backgroundColor) &&
+    (style.backgroundImage === "" || style.backgroundImage === "none") &&
+    (style.boxShadow === "" || style.boxShadow === "none") &&
+    borderWidths.every((width) => width === "" || parseFloat(width) === 0)
+  );
+}
+
+function containsRect(outer: DOMRect, inner: DOMRect): boolean {
+  return (
+    inner.left >= outer.left - 0.5 &&
+    inner.top >= outer.top - 0.5 &&
+    inner.right <= outer.right + 0.5 &&
+    inner.bottom <= outer.bottom + 0.5 &&
+    inner.width * inner.height < outer.width * outer.height
+  );
+}
+
 export function installBuildingMode(
   bb: PageBridge,
   theme: Record<string, string>,
@@ -313,6 +375,8 @@ export function installBuildingMode(
   }
 
   function targetAt(x: number, y: number): Element | null {
+    let target: Element | null = null;
+    let targetRect: DOMRect | null = null;
     for (const element of document.elementsFromPoint(x, y)) {
       if (
         element === host ||
@@ -321,9 +385,20 @@ export function installBuildingMode(
       ) {
         continue;
       }
-      return element;
+      if (target === null || targetRect === null) {
+        target = element;
+        targetRect = element.getBoundingClientRect();
+        if (!isEmptyHitArea(target)) return target;
+        continue;
+      }
+      if (element.contains(target)) continue;
+      const rect = element.getBoundingClientRect();
+      if (containsRect(targetRect, rect)) {
+        target = element;
+        targetRect = rect;
+      }
     }
-    return null;
+    return target;
   }
 
   function reposition(): void {

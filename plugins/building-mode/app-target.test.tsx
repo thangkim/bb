@@ -39,7 +39,7 @@ let button: HTMLButtonElement;
 beforeEach(() => {
   appSurface = document.createElement("div");
   appSurface.innerHTML =
-    '<main data-bb-src="apps/app/src/views/Thread.tsx:20:5"><button id="send" data-bb-src="packages/shared-ui/src/button.tsx:52:5">Send</button></main>';
+    '<main data-bb-src="apps/app/src/views/Thread.tsx:20:5"><button id="send" data-bb-src="packages/shared-ui/src/button.tsx:52:5">Send</button><div id="root-compose-prompt"></div><div id="thread-detail-follow-up-composer"></div></main>';
   document.body.append(appSurface);
   button = requireElement(document.querySelector<HTMLButtonElement>("#send"));
   Object.defineProperty(document, "elementsFromPoint", {
@@ -101,7 +101,7 @@ describe("AppAnnotationsOverlay", () => {
         {
           provider: "bb-ui-annotation",
           id: "ann_saved",
-          label: '1. <SendButton> button: "Send"',
+          label: '#1 <SendButton> button: "Send"',
         },
       ]),
     );
@@ -139,6 +139,59 @@ describe("AppAnnotationsOverlay", () => {
     cleanup();
     expect(document.querySelector("bb-building-mode")).toBeNull();
     expect(Reflect.get(globalThis, ANNOTATION_CONTROLLER_KEY)).toBeUndefined();
+  });
+
+  it("copies the feedback instead of writing to a composer that is not on the page", async () => {
+    document.querySelector("#root-compose-prompt")?.remove();
+    const copied: string[] = [];
+    const originalClipboard = Object.getOwnPropertyDescriptor(
+      navigator,
+      "clipboard",
+    );
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          copied.push(text);
+        },
+      },
+    });
+    try {
+      const slot = renderSlot(
+        overlay(),
+        {},
+        { rpc: { save: () => ({ id: "ann_saved" }) } },
+      );
+      act(() => requestAppAnnotationToggle());
+      await slot.findByRole("status");
+
+      button.click();
+      const textarea = requireElement(shadowRoot().querySelector("textarea"));
+      textarea.value = "Make this button quieter";
+      textarea.dispatchEvent(new Event("input"));
+      requireElement(
+        shadowRoot().querySelector<HTMLButtonElement>(".save"),
+      ).click();
+
+      await waitFor(() =>
+        expect(slot.getByRole("status").textContent).toContain(
+          "feedback was copied",
+        ),
+      );
+      expect(copied).toHaveLength(1);
+      expect(copied[0]).toContain("**Feedback:** Make this button quieter");
+      expect(copied[0]).toContain(
+        "**Source trail:** `packages/shared-ui/src/button.tsx:52:5`",
+      );
+      expect(slot.inspection.composer.mentions).toEqual([]);
+      expect(slot.inspection.rpcCalls[0]).toMatchObject({ method: "save" });
+    } finally {
+      if (originalClipboard === undefined) {
+        Reflect.deleteProperty(navigator, "clipboard");
+      } else {
+        Object.defineProperty(navigator, "clipboard", originalClipboard);
+      }
+    }
   });
 
   it("removes a deleted pin's mention and clears pins when the composer changes", async () => {

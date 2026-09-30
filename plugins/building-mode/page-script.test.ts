@@ -369,6 +369,76 @@ describe("building mode page script", () => {
     });
   });
 
+  function placeAt(
+    element: Element,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ) {
+    Object.defineProperty(element, "getBoundingClientRect", {
+      configurable: true,
+      value: () => new DOMRect(x, y, w, h),
+    });
+  }
+
+  function pickedElementName(): string | null | undefined {
+    document.body.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, clientX: 200, clientY: 30 }),
+    );
+    return shadowRoot().querySelector(".editor-title")?.getAttribute("title");
+  }
+
+  it("looks through an empty hit-area overlay to the small element beneath it", () => {
+    document.body.innerHTML = [
+      '<div class="row relative">',
+      '<button class="absolute inset-0" aria-label="Open UPM-1"></button>',
+      '<span class="key">UPM-1</span>',
+      '<div class="progress" aria-label="88% done"><div class="fill"></div></div>',
+      "</div>",
+    ].join("");
+    const row = requireElement(document.querySelector(".row"));
+    const overlay = requireElement(document.querySelector("button"));
+    const progress = requireElement(document.querySelector(".progress"));
+    const fill = requireElement(document.querySelector(".fill"));
+    placeAt(row, 0, 0, 400, 60);
+    placeAt(overlay, 0, 0, 400, 60);
+    placeAt(progress, 180, 25, 60, 8);
+    placeAt(fill, 180, 25, 50, 8);
+    Object.defineProperty(document, "elementsFromPoint", {
+      configurable: true,
+      value: () => [
+        overlay,
+        fill,
+        progress,
+        row,
+        document.body,
+        document.documentElement,
+      ],
+    });
+    activate(silent);
+
+    expect(pickedElementName()).toBe("div.fill");
+  });
+
+  it("keeps a visible button on top instead of looking beneath it", () => {
+    document.body.innerHTML =
+      '<div class="row"><button class="absolute inset-0">Open</button><span class="key">UPM-1</span></div>';
+    const row = requireElement(document.querySelector(".row"));
+    const overlay = requireElement(document.querySelector("button"));
+    const key = requireElement(document.querySelector(".key"));
+    placeAt(row, 0, 0, 400, 60);
+    placeAt(overlay, 0, 0, 400, 60);
+    placeAt(key, 150, 20, 60, 20);
+    Object.defineProperty(document, "elementsFromPoint", {
+      configurable: true,
+      value: () => [overlay, key, row, document.body, document.documentElement],
+    });
+    activate(silent);
+
+    expect(pickedElementName()).toBe('button.absolute.inset-0 "Open"');
+  });
+
   it("records a readable location and the text around the element", () => {
     document.body.innerHTML = [
       '<div class="flex-1"><div class="new-branch-modal"><div class="md:flex flex">',

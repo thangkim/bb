@@ -33,7 +33,7 @@ const record: AnnotationRecord = {
 describe("annotation formatting", () => {
   it("labels mentions with a stable element description", () => {
     expect(annotationMentionLabel(record)).toBe(
-      '2. <SendButton> button: "Send message"',
+      '#2 <SendButton> button: "Send message"',
     );
     expect(
       annotationMentionLabel({
@@ -47,7 +47,7 @@ describe("annotation formatting", () => {
         components: [{ name: "MarkdownParagraph", source: null }],
       }),
     ).toBe(
-      '2. <MarkdownParagraph> paragraph: "Tests and typecheck pass for Bui..."',
+      '#2 <MarkdownParagraph> paragraph: "Tests and typecheck pass for Bui..."',
     );
     expect(
       annotationMentionLabel({
@@ -55,7 +55,7 @@ describe("annotation formatting", () => {
         element: { ...record.element, attributes: {}, text: "" },
         components: [],
       }),
-    ).toBe("2. button");
+    ).toBe("#2 button");
   });
 
   it("formats an annotation as compact bb UI feedback for the current route", () => {

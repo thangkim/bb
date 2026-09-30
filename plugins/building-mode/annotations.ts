@@ -154,7 +154,7 @@ function summaryFor(
 }
 
 export function annotationMentionLabel(record: AnnotationRecord): string {
-  return `${record.number}. ${summaryFor(record, 1, 32)}`.slice(0, 200);
+  return `#${record.number} ${summaryFor(record, 1, 32)}`.slice(0, 200);
 }
 
 function primarySource(record: AnnotationRecord): string | null {

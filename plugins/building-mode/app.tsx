@@ -11,7 +11,7 @@ import {
 export const APP_ANNOTATION_COMMAND_ID = "annotate-app";
 
 export function AppAnnotationsOverlay() {
-  const { state, error, toggle, clear, scope } =
+  const { state, error, notice, toggle, clear, scope } =
     useAnnotationSession(appAnnotationTarget);
   const scopeKey = JSON.stringify(scope);
   const previousScopeKey = useRef(scopeKey);
@@ -24,7 +24,7 @@ export function AppAnnotationsOverlay() {
     clear().catch(() => undefined);
   }, [clear, scopeKey]);
 
-  if (!state.active && error === null) {
+  if (!state.active && error === null && notice === null) {
     return null;
   }
   return (
@@ -35,7 +35,9 @@ export function AppAnnotationsOverlay() {
         error !== null && "text-destructive",
       )}
     >
-      {error ?? "Annotating bb: click an element to comment. Esc to stop."}
+      {error ??
+        notice ??
+        "Annotating bb: click an element to comment. Esc to stop."}
     </div>
   );
 }

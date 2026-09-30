@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useComposer, useRpc } from "@get-bb/plugin-sdk/app";
+import {
+  useComposer,
+  useRpc,
+  type PluginComposerScope,
+} from "@get-bb/plugin-sdk/app";
 import {
   ANNOTATION_MENTION_PROVIDER_ID,
   annotationMentionLabel,
+  formatAnnotationContext,
   pageMessageSchema,
   pageStateSchema,
+  type AnnotationRecord,
   type PageAnnotation,
   type PageState,
   type ReactComponent,
@@ -40,6 +46,34 @@ function errorMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
+const NOTICE_DURATION_MS = 5000;
+
+const COMPOSER_SELECTORS: Partial<Record<PluginComposerScope["kind"], string>> =
+  {
+    thread: "#thread-detail-follow-up-composer",
+    "new-thread": "#root-compose-prompt",
+  };
+
+function composerOnPage(scope: PluginComposerScope): boolean {
+  const selector = COMPOSER_SELECTORS[scope.kind];
+  return selector === undefined || document.querySelector(selector) !== null;
+}
+
+async function copyToClipboard(text: Promise<string>): Promise<void> {
+  if (typeof ClipboardItem === "undefined") {
+    await navigator.clipboard.writeText(await text);
+    return;
+  }
+  const item = new ClipboardItem({
+    "text/plain": text.then(
+      (value) => new Blob([value], { type: "text/plain" }),
+    ),
+  });
+  await navigator.clipboard
+    .write([item])
+    .catch(async () => navigator.clipboard.writeText(await text));
+}
+
 export function useAnnotationSession(target: AnnotationTarget) {
   const composer = useComposer();
   const rpc = useRpc<typeof buildingModeRpcContract>();
@@ -48,26 +82,45 @@ export function useAnnotationSession(target: AnnotationTarget) {
   composerRef.current = composer;
   const [state, setState] = useState<PageState>(INACTIVE_STATE);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (notice === null) return;
+    const timeout = setTimeout(() => setNotice(null), NOTICE_DURATION_MS);
+    return () => clearTimeout(timeout);
+  }, [notice]);
 
   const applyState = useCallback((value: unknown) => {
     const parsed = pageStateSchema.safeParse(value);
     setState(parsed.success ? parsed.data : INACTIVE_STATE);
   }, []);
 
-  const addToPrompt = useCallback(
-    async (annotation: PageAnnotation) => {
-      const record = {
-        ...annotation,
-        components: await target.readComponents(annotation.id),
-      };
-      const saved = await rpc.call("save", record);
+  const readRecord = useCallback(
+    async (annotation: PageAnnotation): Promise<AnnotationRecord> => ({
+      ...annotation,
+      components: await target.readComponents(annotation.id),
+    }),
+    [target],
+  );
+
+  const saveAnnotation = useCallback(
+    async (record: Promise<AnnotationRecord>, copied: Promise<void> | null) => {
+      const resolved = await record;
+      const saved = await rpc.call("save", resolved);
+      if (copied !== null) {
+        await copied;
+        setNotice(
+          "No prompt box here, so the feedback was copied. Paste it into a thread.",
+        );
+        return;
+      }
       composerRef.current.insertMention({
         provider: ANNOTATION_MENTION_PROVIDER_ID,
         id: saved.id,
-        label: annotationMentionLabel(record),
+        label: annotationMentionLabel(resolved),
       });
     },
-    [rpc, target],
+    [rpc],
   );
 
   useEffect(
@@ -82,6 +135,13 @@ export function useAnnotationSession(target: AnnotationTarget) {
           return;
         }
         const message = parsed.data;
+        const record =
+          message.type === "annotation" ? readRecord(message.annotation) : null;
+        const copied =
+          record !== null && !composerOnPage(composerRef.current.scope)
+            ? copyToClipboard(record.then(formatAnnotationContext))
+            : null;
+        copied?.catch(() => undefined);
         pendingSaves.current = pendingSaves.current
           .then(async () => {
             if (message.type === "annotation-delete") {
@@ -94,8 +154,8 @@ export function useAnnotationSession(target: AnnotationTarget) {
                 id: message.id,
                 comment: message.comment,
               });
-            } else {
-              await addToPrompt(message.annotation);
+            } else if (record !== null) {
+              await saveAnnotation(record, copied);
             }
             setError(null);
           })
@@ -103,7 +163,7 @@ export function useAnnotationSession(target: AnnotationTarget) {
             setError(errorMessage(cause));
           });
       }),
-    [addToPrompt, rpc, target],
+    [readRecord, rpc, saveAnnotation, target],
   );
 
   useEffect(() => {
@@ -129,6 +189,7 @@ export function useAnnotationSession(target: AnnotationTarget) {
 
   const toggle = useCallback(() => {
     setError(null);
+    setNotice(null);
     const result = state.active
       ? target.control("deactivate")
       : target.activate(readTheme());
@@ -137,5 +198,5 @@ export function useAnnotationSession(target: AnnotationTarget) {
     });
   }, [applyState, state.active, target]);
 
-  return { state, error, toggle, clear, scope: composer.scope };
+  return { state, error, notice, toggle, clear, scope: composer.scope };
 }

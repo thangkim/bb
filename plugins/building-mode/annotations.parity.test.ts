@@ -116,7 +116,7 @@ describe("context parity with the previous agent-annotations app surface", () =>
         record.element.pluginId !== null,
       );
       expect(annotationMentionLabel(record)).toBe(
-        legacyMentionLabel(legacyRecord(record)),
+        legacyMentionLabel(legacyRecord(record)).replace(/^(\d+)\. /u, "#$1 "),
       );
     },
   );
