@@ -807,6 +807,44 @@ describe("tasks app shell", () => {
     );
   });
 
+  it("links the project page and task page back through a breadcrumb", async () => {
+    const projectSlot = renderSlot(
+      app.navPanels[0]!,
+      { subPath: PROJECT_ID },
+      { rpc: seededRpc({ listBbProjects: () => ({ bbProjects: [] }) }) },
+    );
+    const projectCrumbs = await projectSlot.findByRole("navigation", {
+      name: "Breadcrumb",
+    });
+    await within(projectCrumbs).findByText("Tasks Plugin");
+    fireEvent.click(
+      within(projectCrumbs).getByRole("button", { name: "All projects" }),
+    );
+    expect(projectSlot.navigateCalls).toContainEqual({
+      method: "toPluginPanel",
+      path: "tasks",
+      options: { subPath: "all" },
+    });
+    cleanup();
+
+    const taskSlot = renderSlot(
+      app.navPanels[0]!,
+      { subPath: "task/TSK-4" },
+      { rpc: seededRpc() },
+    );
+    const taskCrumbs = await taskSlot.findByRole("navigation", {
+      name: "Breadcrumb",
+    });
+    fireEvent.click(
+      await within(taskCrumbs).findByRole("button", { name: "Tasks Plugin" }),
+    );
+    expect(taskSlot.navigateCalls).toContainEqual({
+      method: "toPluginPanel",
+      path: "tasks",
+      options: { subPath: PROJECT_ID },
+    });
+  });
+
   it("renders right-panel navigation and routes through the plugin panel", async () => {
     const slot = renderSlot(
       navigationRegistration,

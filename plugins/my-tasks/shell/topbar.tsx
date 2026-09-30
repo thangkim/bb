@@ -180,6 +180,23 @@ export function TasksTopbar({
     return null;
   }, [route, projects]);
 
+  const allProjectsCrumb = (
+    <button
+      type="button"
+      className="shrink-0 cursor-pointer whitespace-nowrap text-muted-foreground hover:text-foreground"
+      onClick={() => onNavigate({ kind: "all" })}
+    >
+      All projects
+    </button>
+  );
+  const crumbSeparator = (
+    <Icon
+      name="ChevronRight"
+      aria-hidden
+      className="size-3 shrink-0 text-subtle-foreground"
+    />
+  );
+
   const breadcrumb = (() => {
     switch (route.kind) {
       case "all":
@@ -206,18 +223,25 @@ export function TasksTopbar({
         );
       case "project":
         return (
-          <span className="flex min-w-0 items-center gap-2">
-            {project ? (
-              <span
-                aria-hidden
-                className="size-3 shrink-0 rounded-sm"
-                style={{ backgroundColor: project.color }}
-              />
-            ) : null}
-            <span className="truncate font-semibold">
-              {project?.name ?? "Project"}
+          <nav
+            aria-label="Breadcrumb"
+            className="flex min-w-0 items-center gap-1.5"
+          >
+            {allProjectsCrumb}
+            {crumbSeparator}
+            <span className="flex min-w-0 items-center gap-2">
+              {project ? (
+                <span
+                  aria-hidden
+                  className="size-3 shrink-0 rounded-sm"
+                  style={{ backgroundColor: project.color }}
+                />
+              ) : null}
+              <span aria-current="page" className="truncate font-semibold">
+                {project?.name ?? "Project"}
+              </span>
             </span>
-          </span>
+          </nav>
         );
       case "task":
         return (
@@ -231,31 +255,38 @@ export function TasksTopbar({
             >
               <Icon name="ChevronLeft" className="size-4" />
             </Button>
-            {project ? (
-              <button
-                type="button"
-                className="hidden min-w-0 items-center gap-2 text-muted-foreground hover:text-foreground @md:flex"
-                onClick={() =>
-                  onNavigate({ kind: "project", projectId: project.id })
-                }
+            <nav
+              aria-label="Breadcrumb"
+              className="flex min-w-0 items-center gap-1.5"
+            >
+              {allProjectsCrumb}
+              {crumbSeparator}
+              {project ? (
+                <>
+                  <button
+                    type="button"
+                    className="flex min-w-0 cursor-pointer items-center gap-2 text-muted-foreground hover:text-foreground"
+                    onClick={() =>
+                      onNavigate({ kind: "project", projectId: project.id })
+                    }
+                  >
+                    <span
+                      aria-hidden
+                      className="size-3 shrink-0 rounded-sm"
+                      style={{ backgroundColor: project.color }}
+                    />
+                    <span className="truncate font-medium">{project.name}</span>
+                  </button>
+                  {crumbSeparator}
+                </>
+              ) : null}
+              <span
+                aria-current="page"
+                className="shrink-0 font-medium text-muted-foreground"
               >
-                <span
-                  aria-hidden
-                  className="size-3 shrink-0 rounded-sm"
-                  style={{ backgroundColor: project.color }}
-                />
-                <span className="truncate font-medium">{project.name}</span>
-              </button>
-            ) : null}
-            {project ? (
-              <Icon
-                name="ChevronRight"
-                className="hidden size-3 shrink-0 text-muted-foreground @md:block"
-              />
-            ) : null}
-            <span className="min-w-0 truncate font-medium text-muted-foreground">
-              {route.taskKey}
-            </span>
+                {route.taskKey}
+              </span>
+            </nav>
           </span>
         );
     }
