@@ -105,9 +105,7 @@ function ThreadCard({
       <button
         type="button"
         className="flex shrink-0 items-center gap-1 text-xs font-medium underline decoration-input underline-offset-2 hover:decoration-current"
-        onClick={() =>
-          navigate.toThread(thread.threadId, { openInSplit: true })
-        }
+        onClick={() => navigate.toThread(thread.threadId)}
       >
         Open thread
         <Icon name="ArrowUpRight" className="size-3" />

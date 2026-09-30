@@ -168,7 +168,7 @@ function baseRpc(
       }
       return { tasks: next };
     },
-    listTaskRowMeta: () => ({ rowMeta: [] }),
+    listTaskThreads: () => ({ taskThreads: [] }),
     listComments: () => ({ comments: [] }),
     listAttachments: () => ({ attachments: [] }),
     ...overrides,
@@ -181,21 +181,6 @@ function renderProject(projectId: string) {
     { subPath: projectId },
     { rpc: baseRpc() },
   );
-}
-
-async function findRow(
-  slot: { container: HTMLElement },
-  key: string,
-): Promise<HTMLElement> {
-  return waitFor(() => {
-    const row = slot.container.querySelector(`[data-task-key="${key}"]`);
-    if (row === null) throw new Error(`row ${key} not found`);
-    return row as HTMLElement;
-  });
-}
-
-function hasRow(slot: { container: HTMLElement }, key: string): boolean {
-  return slot.container.querySelector(`[data-task-key="${key}"]`) !== null;
 }
 
 async function selectSort(
@@ -217,7 +202,7 @@ describe("list filter/sort preference persistence", () => {
       { subPath: PROJECT_A },
       { rpc: baseRpc() },
     );
-    await findRow(slot, "ALP-1");
+    await slot.findByText("ALP-1");
 
     await selectSort(slot, "Priority");
     await waitFor(() =>
@@ -245,16 +230,16 @@ describe("list filter/sort preference persistence", () => {
       { subPath: PROJECT_A },
       { rpc: baseRpc() },
     );
-    await findRow(remounted, "ALP-3");
+    await remounted.findByText("ALP-3");
     expect(
       remounted.getByRole("button", { name: /Sort/ }).textContent,
     ).toContain("Priority");
     expect(
       remounted.getByRole("button", { name: /^Status/ }).textContent,
     ).toContain("Done");
-    expect(hasRow(remounted, "ALP-1")).toBe(false);
-    expect(hasRow(remounted, "ALP-2")).toBe(false);
-    expect(hasRow(remounted, "ALP-3")).toBe(true);
+    expect(remounted.queryByText("ALP-1")).toBeNull();
+    expect(remounted.queryByText("ALP-2")).toBeNull();
+    expect(remounted.getByText("ALP-3")).toBeDefined();
   });
 
   it("keeps project A and project B preferences independent", async () => {
@@ -264,7 +249,7 @@ describe("list filter/sort preference persistence", () => {
       { subPath: PROJECT_A },
       { rpc: baseRpc() },
     );
-    await findRow(slotA, "ALP-1");
+    await slotA.findByText("ALP-1");
     await selectSort(slotA, "Priority");
     await waitFor(() =>
       expect(slotA.getByRole("button", { name: /Sort/ }).textContent).toContain(
@@ -278,7 +263,7 @@ describe("list filter/sort preference persistence", () => {
       { subPath: PROJECT_B },
       { rpc: baseRpc() },
     );
-    await findRow(slotB, "BET-1");
+    await slotB.findByText("BET-1");
     expect(
       slotB.getByRole("button", { name: /Sort/ }).textContent,
     ).not.toContain("Priority");
@@ -295,7 +280,7 @@ describe("list filter/sort preference persistence", () => {
       { subPath: PROJECT_A },
       { rpc: baseRpc() },
     );
-    await findRow(backToA, "ALP-1");
+    await backToA.findByText("ALP-1");
     expect(backToA.getByRole("button", { name: /Sort/ }).textContent).toContain(
       "Priority",
     );
@@ -328,10 +313,10 @@ describe("list filter/sort preference persistence", () => {
       { subPath: PROJECT_A },
       { rpc: baseRpc() },
     );
-    await findRow(slot, "ALP-3");
+    await slot.findByText("ALP-3");
     fireEvent.click(slot.getByRole("button", { name: /Clear/ }));
     await waitFor(() => {
-      expect(hasRow(slot, "ALP-1")).toBe(true);
+      expect(slot.queryByText("ALP-1")).not.toBeNull();
     });
     expect(slot.queryByRole("button", { name: /Clear/ })).toBeNull();
 
@@ -341,12 +326,12 @@ describe("list filter/sort preference persistence", () => {
       { subPath: PROJECT_A },
       { rpc: baseRpc() },
     );
-    await findRow(remounted, "ALP-1");
+    await remounted.findByText("ALP-1");
     expect(remounted.queryByRole("button", { name: /Clear/ })).toBeNull();
     expect(
       remounted.getByRole("button", { name: /Sort/ }).textContent,
     ).toContain("Priority");
-    expect(hasRow(remounted, "ALP-2")).toBe(true);
+    expect(remounted.getByText("ALP-2")).toBeDefined();
   });
 
   it("keeps filtering usable when storage rejects writes", async () => {
@@ -354,14 +339,14 @@ describe("list filter/sort preference persistence", () => {
       throw new DOMException("Storage is disabled", "SecurityError");
     });
     const slot = renderProject(PROJECT_A);
-    await findRow(slot, "ALP-1");
+    await slot.findByText("ALP-1");
     await selectSort(slot, "Priority");
     await waitFor(() =>
       expect(slot.getByRole("button", { name: /Sort/ }).textContent).toContain(
         "Priority",
       ),
     );
-    expect(hasRow(slot, "ALP-2")).toBe(true);
+    expect(slot.getByText("ALP-2")).toBeDefined();
   });
 
   it("isolates All tasks preference from Active", async () => {
@@ -371,7 +356,7 @@ describe("list filter/sort preference persistence", () => {
       { subPath: "all" },
       { rpc: baseRpc() },
     );
-    await findRow(allSlot, "ALP-1");
+    await allSlot.findByText("ALP-1");
     await selectSort(allSlot, "Priority");
     allSlot.lifecycle.unmount();
 
@@ -386,7 +371,7 @@ describe("list filter/sort preference persistence", () => {
         }),
       },
     );
-    await findRow(activeSlot, "ALP-9");
+    await activeSlot.findByText("ALP-9");
     expect(
       activeSlot.getByRole("button", { name: /Sort/ }).textContent,
     ).not.toContain("Priority");
@@ -397,7 +382,7 @@ describe("list filter/sort preference persistence", () => {
     const listTasksCalls: Record<string, unknown>[] = [];
     const rpc = baseRpc({}, listTasksCalls);
     const slot = renderSlot(registration, { subPath: PROJECT_A }, { rpc });
-    await findRow(slot, "ALP-1");
+    await slot.findByText("ALP-1");
 
     fireEvent.click(slot.getByRole("button", { name: /^Priority/ }));
     fireEvent.click(
@@ -480,8 +465,8 @@ describe("list filter/sort preference persistence", () => {
       ).toBe(true);
     });
     await waitFor(() => {
-      expect(hasRow(slot, "ALP-1")).toBe(false);
-      expect(hasRow(slot, "ALP-2")).toBe(false);
+      expect(slot.queryByText("ALP-1")).toBeNull();
+      expect(slot.queryByText("ALP-2")).toBeNull();
     });
   });
 });

@@ -82,7 +82,7 @@ function renderList() {
         sidebarSummary: () => ({ projects: [] }),
         listLabels: () => ({ labels: [] }),
         listTasks: () => ({ tasks }),
-        listTaskRowMeta: () => ({ rowMeta: [] }),
+        listTaskThreads: () => ({ taskThreads: [] }),
         listComments: () => ({ comments: [] }),
         listAttachments: () => ({ attachments: [] }),
       },
@@ -91,11 +91,7 @@ function renderList() {
 }
 
 async function rowOrder(slot: ReturnType<typeof renderList>) {
-  await waitFor(() =>
-    expect(slot.container.querySelectorAll("[data-task-key]").length).toBe(
-      tasks.length,
-    ),
-  );
+  await slot.findByText("TSK-1");
   const keys = Array.from(
     slot.container.querySelectorAll("[data-task-key]"),
   ).map((row) => row.getAttribute("data-task-key"));
@@ -139,11 +135,7 @@ describe("list sorting (compact viewport)", () => {
 
   it("offers every sort mode in the compact drawer and marks the active one", async () => {
     const slot = renderList();
-    await waitFor(() =>
-      expect(
-        slot.container.querySelector('[data-task-key="TSK-1"]'),
-      ).not.toBeNull(),
-    );
+    await slot.findByText("TSK-1");
 
     fireEvent.click(slot.getByRole("button", { name: /Sort/ }));
     const drawer = await slot.findByRole("dialog", { name: "Sort tasks" });

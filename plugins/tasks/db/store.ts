@@ -35,7 +35,6 @@ import type {
   Project,
   Task,
   TaskLabel,
-  TaskRowMeta,
   TaskThread,
   TaskThreadLiveStatus,
   UpdateAttachmentInput,
@@ -149,12 +148,6 @@ interface TaskThreadRow {
   live_status: TaskThreadLiveStatus;
   attached_at: string;
   updated_at: string;
-}
-
-interface SubtaskCountRow {
-  parent_task_id: string;
-  total: number;
-  done: number;
 }
 
 interface PresetRow {
@@ -1662,59 +1655,6 @@ export function createTasksStore(db: PluginDatabase) {
       .map(taskThreadFromRow);
   }
 
-  function taskRowMeta(taskIds: readonly string[]): Map<string, TaskRowMeta> {
-    const byTask = new Map<string, TaskRowMeta>();
-    for (const taskId of taskIds) {
-      byTask.set(taskId, { threads: [], subtaskDone: 0, subtaskTotal: 0 });
-    }
-
-    for (let offset = 0; offset < taskIds.length; offset += 500) {
-      const ids = taskIds.slice(offset, offset + 500);
-      if (ids.length === 0) continue;
-      const placeholders = ids.map(() => "?").join(", ");
-
-      const threadRows = db
-        .prepare<string[], TaskThreadRow>(
-          `
-          SELECT * FROM task_threads
-          WHERE task_id IN (${placeholders})
-          ORDER BY
-            task_id,
-            CASE WHEN live_status IN ('completed', 'failed') THEN 1 ELSE 0 END,
-            attached_at DESC,
-            id DESC
-        `,
-        )
-        .all(...ids);
-      for (const row of threadRows) {
-        byTask.get(row.task_id)?.threads.push(taskThreadFromRow(row));
-      }
-
-      const subtaskRows = db
-        .prepare<string[], SubtaskCountRow>(
-          `
-          SELECT
-            parent_task_id,
-            COUNT(*) AS total,
-            SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done
-          FROM tasks
-          WHERE parent_task_id IN (${placeholders})
-          GROUP BY parent_task_id
-        `,
-        )
-        .all(...ids);
-      for (const row of subtaskRows) {
-        const meta = byTask.get(row.parent_task_id);
-        if (meta) {
-          meta.subtaskDone = row.done;
-          meta.subtaskTotal = row.total;
-        }
-      }
-    }
-
-    return byTask;
-  }
-
   function updateTaskThreadStatus(
     id: string,
     liveStatus: TaskThreadLiveStatus,
@@ -1914,7 +1854,6 @@ export function createTasksStore(db: PluginDatabase) {
     getTaskThreadByThreadId,
     listTaskThreadsByThreadId,
     listTaskThreads,
-    taskRowMeta,
     updateTaskThreadStatus,
     deleteTaskThread,
     createPreset,

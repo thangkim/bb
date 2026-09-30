@@ -16,7 +16,6 @@ interface ListTaskEditController {
   entries: TaskEntries;
   pending: ReadonlySet<string>;
   edit: (task: Task, patch: TaskEdit) => void;
-  remove: (task: Task) => void;
 }
 
 export function useListTaskEdits(
@@ -59,23 +58,7 @@ export function useListTaskEdits(
     [rpc],
   );
 
-  const remove = useCallback(
-    (task: Task) => {
-      void rpc.call("deleteTask", { taskId: task.id }).then(
-        (result) => {
-          if (!result.deleted) {
-            onErrorRef.current("Couldn't delete the task");
-          }
-        },
-        (error: unknown) => {
-          onErrorRef.current(errorMessage(error));
-        },
-      );
-    },
-    [rpc],
-  );
-
   const pending = useMemo(() => pendingIds(entries), [entries]);
 
-  return { entries, pending, edit, remove };
+  return { entries, pending, edit };
 }

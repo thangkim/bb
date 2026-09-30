@@ -98,12 +98,6 @@ export interface TaskThread {
   updatedAt: string;
 }
 
-export interface TaskRowMeta {
-  threads: TaskThread[];
-  subtaskDone: number;
-  subtaskTotal: number;
-}
-
 export interface Preset {
   id: string;
   name: string;

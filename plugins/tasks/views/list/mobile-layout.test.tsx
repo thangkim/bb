@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, waitFor, within } from "@testing-library/react";
+import { cleanup, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { Label, Task, TaskThread } from "../../shared/contract.js";
@@ -83,16 +83,7 @@ function renderList() {
         sidebarSummary: () => ({ projects: [] }),
         listLabels: () => ({ labels }),
         listTasks: () => ({ tasks: [busyTask] }),
-        listTaskRowMeta: () => ({
-          rowMeta: [
-            {
-              taskId: busyTask.id,
-              threads: [workerThread],
-              subtaskDone: 0,
-              subtaskTotal: 0,
-            },
-          ],
-        }),
+        listTaskThreads: () => ({ taskThreads: [workerThread] }),
         listComments: () => ({ comments: [] }),
         listAttachments: () => ({ attachments: [] }),
       },
@@ -101,9 +92,10 @@ function renderList() {
 }
 
 describe("responsive list structure", () => {
-  it("pins the sort chip outside the filter-chip scroller so it cannot wrap or scroll away", async () => {
+  it("pins the task count outside the filter-chip scroller so it cannot wrap or scroll away", async () => {
     const slot = renderList();
-    await slot.findByRole("button", { name: "Status" });
+    const count = await slot.findByText("1 task");
+    expect(count.closest(".overflow-x-auto")).toBeNull();
     const sortChip = slot.getByRole("button", { name: /Sort/ });
     expect(sortChip.closest(".overflow-x-auto")).toBeNull();
     const statusChip = slot.getByRole("button", { name: "Status" });
@@ -112,11 +104,8 @@ describe("responsive list structure", () => {
 
   it("renders exactly one status and one priority editor per row with full metadata", async () => {
     const slot = renderList();
-    const row = (await waitFor(() => {
-      const found = slot.container.querySelector('[data-task-key="TSK-1"]');
-      if (found === null) throw new Error("row TSK-1 not found");
-      return found;
-    })) as HTMLElement;
+    await slot.findByText("TSK-1");
+    const row = slot.container.querySelector('[data-task-key="TSK-1"]')!;
     expect(
       within(row as HTMLElement).getAllByRole("button", {
         name: /Change status, currently/,

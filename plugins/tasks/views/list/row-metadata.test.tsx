@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, waitFor, within } from "@testing-library/react";
+import { cleanup, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { Label, Task, TaskThread } from "../../shared/contract.js";
@@ -100,13 +100,9 @@ function renderList(fixture: ListFixture) {
         sidebarSummary: () => ({ projects: [] }),
         listLabels: () => ({ labels: fixture.labels ?? [] }),
         listTasks: () => ({ tasks: fixture.tasks }),
-        listTaskRowMeta: (input: unknown) => ({
-          rowMeta: (rpcInput(input).taskIds as string[]).map((taskId) => ({
-            taskId,
-            threads: fixture.threadsByTask?.[taskId] ?? [],
-            subtaskDone: 0,
-            subtaskTotal: 0,
-          })),
+        listTaskThreads: (input: unknown) => ({
+          taskThreads:
+            fixture.threadsByTask?.[String(rpcInput(input).taskId)] ?? [],
         }),
         listComments: () => {
           calls.listComments += 1;
@@ -122,53 +118,60 @@ function renderList(fixture: ListFixture) {
   return { slot, calls };
 }
 
-async function findRow(
-  slot: { container: HTMLElement },
-  key: string,
-): Promise<HTMLElement> {
-  return waitFor(() => {
-    const row = slot.container.querySelector(`[data-task-key="${key}"]`);
-    if (row === null) throw new Error(`row ${key} not found`);
-    return row as HTMLElement;
-  });
-}
-
-describe("list-row progress bar", () => {
-  it("is always visible and animates only while a thread is actively working", async () => {
+describe("list-row Active chip", () => {
+  it("shows the chip only for actively starting/working agents", async () => {
     const working = task(1);
-    const idleOnly = task(2);
-    const bare = task(3);
+    const starting = task(2);
+    const historical = task(3);
+    const bare = task(4);
     const { slot } = renderList({
-      tasks: [working, idleOnly, bare],
+      tasks: [working, starting, historical, bare],
       threadsByTask: {
         [working.id]: [thread(working.id, "working", "W1")],
-        [idleOnly.id]: [thread(idleOnly.id, "idle", "I1")],
+        [starting.id]: [thread(starting.id, "starting", "S1")],
+        [historical.id]: [
+          thread(historical.id, "idle", "I1"),
+          thread(historical.id, "completed", "C1"),
+          thread(historical.id, "failed", "F1"),
+        ],
       },
     });
+    await slot.findByText("TSK-1");
+    await waitFor(() => {
+      expect(slot.getByTitle("Agent working")).toBeTruthy();
+    });
+    expect(slot.getByTitle("Agent working").textContent).toBe("Active");
+    expect(slot.getByTitle("Agent starting").textContent).toBe("Active");
+    expect(
+      slot.getAllByText("Active", { selector: "span[title]" }),
+    ).toHaveLength(2);
+    expect(slot.queryByText(/Attached/)).toBeNull();
+  });
 
-    const workingRow = await findRow(slot, "TSK-1");
-    const workingBar = within(workingRow).getByTitle(/agent working/);
-    expect(workingBar.querySelector(".animate-pulse")).not.toBeNull();
-    expect(within(workingRow).getByText("0%")).toBeTruthy();
-
-    const idleRow = await findRow(slot, "TSK-2");
-    const idleBar = within(idleRow).getByTitle(/sub-tasks done/);
-    expect(idleBar.querySelector(".animate-pulse")).toBeNull();
-    expect(within(idleRow).getByText("0%")).toBeTruthy();
-
-    const bareRow = await findRow(slot, "TSK-3");
-    expect(within(bareRow).getByText("0%")).toBeTruthy();
+  it("aggregates multiple live agents into one constant-text chip", async () => {
+    const busy = task(1);
+    const { slot } = renderList({
+      tasks: [busy],
+      threadsByTask: {
+        [busy.id]: [
+          thread(busy.id, "working", "W1"),
+          thread(busy.id, "working", "W2"),
+          thread(busy.id, "idle", "I1"),
+        ],
+      },
+    });
+    await slot.findByText("TSK-1");
+    await waitFor(() => {
+      expect(slot.getByTitle("2 agents working")).toBeTruthy();
+    });
+    expect(slot.getByTitle("2 agents working").textContent).toBe("Active");
   });
 });
 
 describe("list-row metadata rail", () => {
   it("fetches no comment/attachment data and renders no counts", async () => {
     const { slot, calls } = renderList({ tasks: [task(1), task(2)] });
-    await waitFor(() =>
-      expect(
-        slot.container.querySelector('[data-task-key="TSK-1"]'),
-      ).not.toBeNull(),
-    );
+    await slot.findByText("TSK-1");
     await waitFor(() =>
       expect(slot.getAllByRole("button").length > 0).toBe(true),
     );
@@ -196,11 +199,7 @@ describe("list-row metadata rail", () => {
       ],
       labels,
     });
-    await waitFor(() =>
-      expect(
-        slot.container.querySelector('[data-task-key="TSK-1"]'),
-      ).not.toBeNull(),
-    );
+    await slot.findByText("TSK-1");
 
     expect(slot.getAllByText("bug").length).toBeGreaterThan(0);
 

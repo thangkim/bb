@@ -158,11 +158,7 @@ type PluginSdkFakeTree<T> = {
  */
 export type PluginSdkTestFakes = PluginSdkFakeTree<PluginBrowserBbSdk>;
 export type NavigateCall =
-  | {
-      method: "toThread";
-      threadId: string;
-      options?: { openInSplit?: boolean };
-    }
+  | { method: "toThread"; threadId: string }
   | { method: "toProject"; projectId: string }
   | {
       method: "toPluginPanel";
@@ -1838,12 +1834,8 @@ export function renderSlot<
     },
   };
   const navigate: BbNavigate = {
-    toThread(threadId, threadOptions) {
-      navigateCalls.push({
-        method: "toThread",
-        threadId,
-        ...(threadOptions !== undefined ? { options: threadOptions } : {}),
-      });
+    toThread(threadId) {
+      navigateCalls.push({ method: "toThread", threadId });
     },
     toProject(projectId) {
       navigateCalls.push({ method: "toProject", projectId });

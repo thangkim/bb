@@ -906,19 +906,6 @@ export function registerHandlers(
     listTaskThreads(input) {
       return { taskThreads: store.tasks.listTaskThreads(input.taskId) };
     },
-    listTaskRowMeta(input) {
-      const meta = store.tasks.taskRowMeta(input.taskIds);
-      return {
-        rowMeta: input.taskIds.map((taskId) => ({
-          taskId,
-          ...(meta.get(taskId) ?? {
-            threads: [],
-            subtaskDone: 0,
-            subtaskTotal: 0,
-          }),
-        })),
-      };
-    },
     async listTaskPullRequests(input) {
       return listTaskPullRequests(bb, store, input.taskId);
     },

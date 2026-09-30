@@ -134,19 +134,21 @@ export function ListFilterBar({
   sort,
   onSortChange,
   labelOptions,
+  taskCount,
 }: {
   filters: ListFilterState;
   onChange: (filters: ListFilterState) => void;
   sort: TaskSort;
   onSortChange: (sort: TaskSort) => void;
   labelOptions: readonly LabelFilterOption[];
+  taskCount: number | undefined;
 }) {
   const keepOpen = (event: Event) => event.preventDefault();
   const showLabelChip =
     labelOptions.length > 0 || filters.labelNames.length > 0;
   return (
     <div className="flex shrink-0 items-center gap-1.5 border-b border-border-hairline px-3.5 py-1.5">
-      <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
         <FilterChip
           icon="Circle"
           label="Status"
@@ -279,6 +281,11 @@ export function ListFilterBar({
         ) : null}
       </div>
       <SortChip sort={sort} onChange={onSortChange} />
+      <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-subtle-foreground">
+        {taskCount === undefined
+          ? ""
+          : `${taskCount} ${taskCount === 1 ? "task" : "tasks"}`}
+      </span>
     </div>
   );
 }

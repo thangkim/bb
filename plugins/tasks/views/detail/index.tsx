@@ -19,7 +19,7 @@ import {
   createDescriptionSaver,
   type DescriptionSaver,
 } from "./description-save.js";
-import { isActiveThread, StatusIcon } from "./meta.js";
+import { StatusIcon } from "./meta.js";
 import { STATUS_LABELS } from "../list/lib.js";
 import {
   InlineProperties,
@@ -28,8 +28,6 @@ import {
 } from "./rail.js";
 import { ThreadsSection } from "./threads.js";
 import { DetailToasts, useDetailToasts } from "./toast.js";
-import { SubtaskProgressBar } from "../../components/subtask-progress-bar.js";
-import { ConfirmDialog } from "../../components/confirm-dialog.js";
 import { DelayedLoading } from "@/components/ui/delayed-loading";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -41,16 +39,16 @@ interface DetailViewProps {
 const DESCRIPTION_SAVE_DELAY_MS = 800;
 const ACTIVE_PULL_REQUEST_REFRESH_MS = 60_000;
 
-function SubTaskProgress({
+function SubTaskDonut({
   subtasks,
-  active,
   onClick,
 }: {
   subtasks: Task[];
-  active: boolean;
   onClick: () => void;
 }) {
+  if (subtasks.length === 0) return null;
   const done = subtasks.filter((subtask) => subtask.status === "done").length;
+  const degrees = (done / subtasks.length) * 360;
   return (
     <button
       type="button"
@@ -58,7 +56,14 @@ function SubTaskProgress({
       onClick={onClick}
       className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground shadow-2xs hover:border-input hover:text-foreground"
     >
-      <SubtaskProgressBar done={done} total={subtasks.length} active={active} />
+      <span
+        aria-hidden
+        className="inline-block size-3 rounded-full"
+        style={{
+          background: `conic-gradient(var(--primary) ${degrees}deg, var(--muted) 0)`,
+        }}
+      />
+      {done}/{subtasks.length} sub-tasks
     </button>
   );
 }
@@ -103,19 +108,16 @@ function SubTasksSection({
   task,
   subtasks,
   onCreate,
-  onDelete,
 }: {
   ref: React.Ref<HTMLElement>;
   task: Task;
   subtasks: Task[];
   onCreate: (title: string) => Promise<boolean>;
-  onDelete: (subtask: Task) => void;
 }) {
   const navigation = useTasksNavigation();
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<Task | null>(null);
 
   const submit = async () => {
     const trimmed = title.trim();
@@ -129,33 +131,19 @@ function SubTasksSection({
   return (
     <section ref={ref} className="mt-5">
       {subtasks.map((subtask) => (
-        <div
+        <button
           key={subtask.id}
-          className="group flex h-8 w-full items-center gap-2 border-b border-border-hairline px-0.5 text-sm hover:bg-state-hover"
+          type="button"
+          className="flex h-8 w-full items-center gap-2 border-b border-border-hairline px-0.5 text-left text-sm hover:bg-state-hover"
+          title={STATUS_LABELS[subtask.status]}
+          onClick={() => navigation.go({ kind: "task", taskKey: subtask.key })}
         >
-          <button
-            type="button"
-            className="flex min-w-0 flex-1 items-center gap-2 text-left"
-            title={STATUS_LABELS[subtask.status]}
-            onClick={() =>
-              navigation.go({ kind: "task", taskKey: subtask.key })
-            }
-          >
-            <StatusIcon status={subtask.status} />
-            <span className="shrink-0 text-xs text-muted-foreground">
-              {subtask.key}
-            </span>
-            <span className="min-w-0 truncate">{subtask.title}</span>
-          </button>
-          <button
-            type="button"
-            aria-label={`Delete ${subtask.title}`}
-            className="shrink-0 rounded p-1 text-muted-foreground opacity-0 hover:bg-state-active hover:text-destructive group-hover:opacity-100"
-            onClick={() => setConfirmDelete(subtask)}
-          >
-            <Icon name="Trash2" className="size-3.5" />
-          </button>
-        </div>
+          <StatusIcon status={subtask.status} />
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {subtask.key}
+          </span>
+          <span className="min-w-0 truncate">{subtask.title}</span>
+        </button>
       ))}
       {adding ? (
         <div className="flex h-8 items-center gap-2 border-b border-border-hairline px-0.5">
@@ -187,22 +175,6 @@ function SubTasksSection({
         <Icon name="Plus" className="size-3" />
         Add sub-task
       </button>
-      <ConfirmDialog
-        open={confirmDelete !== null}
-        onOpenChange={(open) => {
-          if (!open) setConfirmDelete(null);
-        }}
-        title="Delete sub-task?"
-        description={
-          confirmDelete
-            ? `"${confirmDelete.title}" will be permanently deleted, including its attachments and comments. This can't be undone.`
-            : ""
-        }
-        confirmLabel="Delete"
-        onConfirm={() => {
-          if (confirmDelete) onDelete(confirmDelete);
-        }}
-      />
     </section>
   );
 }
@@ -372,19 +344,6 @@ function TaskDetail({ task }: { task: Task }) {
     }
   };
 
-  const deleteSubtask = async (subtask: Task) => {
-    try {
-      const result = await rpc.call("deleteTask", { taskId: subtask.id });
-      if (!result.deleted) {
-        push("Couldn't delete the sub-task");
-        return;
-      }
-      subtasks.refresh();
-    } catch (error) {
-      push(errorMessage(error));
-    }
-  };
-
   const mentionItems = useMentionItems();
   const navigate = useBbNavigate();
 
@@ -396,34 +355,35 @@ function TaskDetail({ task }: { task: Task }) {
     <div className="@container flex min-h-full flex-col bg-surface-recessed-solid p-3">
       <div className="flex flex-1 items-stretch rounded-lg border border-border bg-card shadow-2xs">
         <div className="mx-auto w-full min-w-0 max-w-[55rem] flex-1 px-7 pb-16 pt-8 @3xl:px-13 @3xl:pt-11">
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            {parentTask ? (
-              <button
-                type="button"
-                className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground shadow-2xs hover:border-input"
+          {parentTask || subtasks.data?.length ? (
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              {parentTask ? (
+                <button
+                  type="button"
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground shadow-2xs hover:border-input"
+                  onClick={() =>
+                    navigation.go({ kind: "task", taskKey: parentTask.key })
+                  }
+                >
+                  Sub-task of
+                  <StatusIcon status={parentTask.status} className="size-3" />
+                  <span className="font-medium text-foreground">
+                    {parentTask.key}
+                  </span>
+                  <span className="min-w-0 truncate">{parentTask.title}</span>
+                </button>
+              ) : null}
+              <SubTaskDonut
+                subtasks={subtasks.data ?? []}
                 onClick={() =>
-                  navigation.go({ kind: "task", taskKey: parentTask.key })
+                  subtasksRef.current?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
+                  })
                 }
-              >
-                Sub-task of
-                <StatusIcon status={parentTask.status} className="size-3" />
-                <span className="font-medium text-foreground">
-                  {parentTask.key}
-                </span>
-                <span className="min-w-0 truncate">{parentTask.title}</span>
-              </button>
-            ) : null}
-            <SubTaskProgress
-              subtasks={subtasks.data ?? []}
-              active={(threads.data ?? []).some(isActiveThread)}
-              onClick={() =>
-                subtasksRef.current?.scrollIntoView({
-                  behavior: "smooth",
-                  block: "center",
-                })
-              }
-            />
-          </div>
+              />
+            </div>
+          ) : null}
 
           <EditableTitle
             task={task}
@@ -499,7 +459,6 @@ function TaskDetail({ task }: { task: Task }) {
             task={task}
             subtasks={subtasks.data ?? []}
             onCreate={createSubtask}
-            onDelete={(subtask) => void deleteSubtask(subtask)}
           />
 
           {(threads.data ?? []).length > 0 ? (
