@@ -12,6 +12,8 @@ import {
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { matchPath, useLocation, useNavigate } from "react-router-dom";
+import { useStore } from "jotai";
+import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { z } from "zod";
 import type { PromptTextMention } from "@bb/domain";
 import { createThreadEnvironmentArgsSchema } from "@bb/server-contract";
@@ -87,6 +89,7 @@ import { wsManager } from "@/lib/ws";
 import { pluginSdkSettingsQueryKey } from "@/hooks/queries/query-keys";
 import { useAppNavigationHost } from "@/lib/app-navigation-host";
 import { normalizeExperimentalFileOpenOptions } from "@/lib/live-file-navigation";
+import { openThreadInSplit } from "@/lib/split-layout/openThreadInSplit";
 import { deprecatedAlias } from "@/lib/plugin-sdk-deprecated-aliases";
 import {
   getPluginFixedTabOwnerId,
@@ -345,18 +348,30 @@ export function useBbNavigate(): BbNavigate {
   const openThreadPanelHandler = usePluginThreadPanelOpenHandler();
   const navigate = useNavigate();
   const appNavigation = useAppNavigationHost();
+  const splitLayoutStore = useStore();
+  const isCompact = useIsCompactViewport();
   const toThread = useCallback(
-    (threadId: string) => {
+    (threadId: string, options?: { openInSplit?: boolean }) => {
       void sdk.threads
         .get({ threadId })
-        .then((thread) =>
+        .then((thread) => {
+          if (options?.openInSplit) {
+            openThreadInSplit({
+              store: splitLayoutStore,
+              navigate,
+              projectId: thread.projectId,
+              threadId,
+              isCompact,
+            });
+            return;
+          }
           navigate(
             getThreadRoutePath({ projectId: thread.projectId, threadId }),
-          ),
-        )
+          );
+        })
         .catch(() => navigate(`/threads/${threadId}`));
     },
-    [navigate],
+    [navigate, splitLayoutStore, isCompact],
   );
   const toProject = useCallback(
     (projectId: string) => {

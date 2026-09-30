@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   TASK_STATUSES,
   type Label,
@@ -6,6 +6,7 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "../../shared/contract.js";
+import { ConfirmDialog } from "../../components/confirm-dialog.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,7 +29,7 @@ import {
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import type { TaskEdit } from "./optimistic.js";
-import { PriorityIcon, StatusIcon } from "./icons.js";
+import { PriorityIcon, PriorityTag, StatusIcon } from "./icons.js";
 import {
   DUE_DATE_PRESETS,
   formatDueDate,
@@ -120,6 +121,9 @@ function PickerOption({
 const TRIGGER_CLASS =
   "relative z-10 inline-flex size-5 shrink-0 items-center justify-center rounded-sm hover:bg-state-active focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-state-active max-md:pointer-coarse:size-8";
 
+const PRIORITY_TRIGGER_CLASS =
+  "relative z-10 inline-flex h-5 shrink-0 items-center rounded-md hover:opacity-75 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:opacity-75 max-md:pointer-coarse:h-8";
+
 export function StatusEditor({
   task,
   onEdit,
@@ -202,9 +206,9 @@ export function PriorityEditor({
         <button
           type="button"
           aria-label={`Set priority, currently ${PRIORITY_LABELS[task.priority]}`}
-          className={cn(TRIGGER_CLASS, className)}
+          className={cn(PRIORITY_TRIGGER_CLASS, className)}
         >
-          <PriorityIcon priority={task.priority} />
+          <PriorityTag priority={task.priority} />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -243,14 +247,17 @@ export function PriorityEditor({
 export function TaskContextMenu({
   task,
   onEdit,
+  onDelete,
   projectLabels,
   children,
 }: {
   task: Task;
   onEdit: EditFn;
+  onDelete: () => void;
   projectLabels: readonly Label[];
   children: ReactNode;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const toggleLabel = (labelId: string) => {
     const labelIds = task.labelIds.includes(labelId)
       ? task.labelIds.filter((id) => id !== labelId)
@@ -380,7 +387,24 @@ export function TaskContextMenu({
             </ContextMenuSubContent>
           </ContextMenuSub>
         ) : null}
+
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          className="text-destructive focus:text-destructive"
+          onSelect={() => setConfirmDelete(true)}
+        >
+          <Icon name="Trash2" className="size-3.5" />
+          <span>Delete task</span>
+        </ContextMenuItem>
       </ContextMenuContent>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete task?"
+        description={`"${task.title}" will be permanently deleted, including its attachments and comments. This can't be undone.`}
+        confirmLabel="Delete"
+        onConfirm={onDelete}
+      />
     </ContextMenu>
   );
 }

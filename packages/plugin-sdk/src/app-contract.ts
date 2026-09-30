@@ -3189,7 +3189,13 @@ export interface BbContext {
 }
 
 export interface BbNavigate {
-  toThread(threadId: string): void;
+  /**
+   * Navigate to a thread. `openInSplit: true` applies bb's split placement
+   * rules — a right split by default, focus when the thread is already open,
+   * replace at the pane cap — and falls back to plain navigation where
+   * splits are off (compact viewports).
+   */
+  toThread(threadId: string, options?: { openInSplit?: boolean }): void;
   toProject(projectId: string): void;
   /**
    * Navigate to one of this plugin's own nav panels by its `path`.

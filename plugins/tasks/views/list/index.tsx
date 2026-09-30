@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Label } from "../../shared/contract.js";
+import type { Label, TaskStatus } from "../../shared/contract.js";
 import { useProjects } from "../../shell/data.js";
 import { useTasksNavigation } from "../../shell/routes.js";
 import { NewTaskDialog } from "../manage/new-task-dialog.js";
@@ -24,7 +24,6 @@ import {
 } from "./list-preference.js";
 import { sortTasks } from "../../shared/sort.js";
 import type { TaskSort } from "../../shared/pagination.js";
-import { StatusIcon } from "./icons.js";
 import {
   listScrollScopeKey,
   useListScrollRestoration,
@@ -93,6 +92,17 @@ export function ListView({ projectId, activeOnly = false }: ListViewProps) {
     });
   };
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [collapsedStatuses, setCollapsedStatuses] = useState<Set<TaskStatus>>(
+    () => new Set(),
+  );
+  const toggleStatusCollapsed = (status: TaskStatus) => {
+    setCollapsedStatuses((current) => {
+      const next = new Set(current);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+  };
 
   const labelProjectIds = useMemo(
     () =>
@@ -133,12 +143,6 @@ export function ListView({ projectId, activeOnly = false }: ListViewProps) {
     }
     return map;
   }, [labels.data]);
-  const projectsById = useMemo(
-    () =>
-      new Map((projects.data ?? []).map((project) => [project.id, project])),
-    [projects.data],
-  );
-
   const displayTasks = useMemo(() => {
     if (tasksQuery.data === undefined) return undefined;
     return editedTasks(tasksQuery.data, edits.entries).filter((task) =>
@@ -161,7 +165,6 @@ export function ListView({ projectId, activeOnly = false }: ListViewProps) {
     [displayTasks, sort],
   );
 
-  const showProject = projectId === null;
   const filtered = hasActiveFilters(filters);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -245,34 +248,41 @@ export function ListView({ projectId, activeOnly = false }: ListViewProps) {
       );
     }
   } else {
-    body = groups.map((group) => (
+    body = groups.map((group) => {
+      const collapsed = collapsedStatuses.has(group.status);
+      return (
       <section key={group.status}>
-        <div
+        <button
+          type="button"
           data-status-group-header={group.status}
-          className="sticky top-0 z-20 isolate flex items-center gap-2 border-b border-border-hairline bg-background px-3.5 pb-1.5 pt-2.5 text-sm font-semibold"
+          aria-expanded={!collapsed}
+          onClick={() => toggleStatusCollapsed(group.status)}
+          className="sticky top-0 z-20 isolate flex w-full items-center gap-2 bg-background px-3.5 pb-1.5 pt-4 text-left text-xs font-normal text-muted-foreground"
         >
-          <StatusIcon status={group.status} />
           {STATUS_LABELS[group.status]}
           <span className="text-xs font-normal tabular-nums text-subtle-foreground">
             {group.tasks.length}
           </span>
-        </div>
-        {group.tasks.map((task) => (
-          <TaskRow
-            key={task.id}
-            task={task}
-            meta={meta.data?.get(task.id)}
-            project={projectsById.get(task.projectId)}
-            showProject={showProject}
-            labelsById={labelsById}
-            projectLabels={labelsByProject.get(task.projectId) ?? []}
-            onEdit={edits.edit}
-            onOpen={() => navigation.go({ kind: "task", taskKey: task.key })}
-            pending={edits.pending.has(task.id)}
-          />
-        ))}
+        </button>
+        {collapsed
+          ? null
+          : group.tasks.map((task, index) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                meta={meta.data?.get(task.id)}
+                labelsById={labelsById}
+                projectLabels={labelsByProject.get(task.projectId) ?? []}
+                onEdit={edits.edit}
+                onDelete={() => edits.remove(task)}
+                onOpen={() => navigation.go({ kind: "task", taskKey: task.key })}
+                pending={edits.pending.has(task.id)}
+                isLastInSection={index === group.tasks.length - 1}
+              />
+            ))}
       </section>
-    ));
+      );
+    });
   }
 
   return (
@@ -283,7 +293,6 @@ export function ListView({ projectId, activeOnly = false }: ListViewProps) {
         sort={sort}
         onSortChange={setSort}
         labelOptions={labelOptions}
-        taskCount={displayTasks?.length}
       />
       <div
         ref={scrollRef}

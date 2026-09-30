@@ -29,6 +29,7 @@ import {
 import { PriorityIcon, StatusIcon } from "./icons.js";
 import { isActiveThread } from "../detail/meta.js";
 import { STATUS_LABELS } from "../list/lib.js";
+import { SubtaskProgressBar } from "../../components/subtask-progress-bar.js";
 import { Button } from "@/components/ui/button";
 import { DelayedLoading } from "@/components/ui/delayed-loading";
 import { Icon } from "@/components/ui/icon";
@@ -228,12 +229,14 @@ function TaskCard({
             {label.name}
           </span>
         ))}
-        {meta.subTotal > 0 ? (
-          <span className="flex items-center gap-0.5 text-2xs text-muted-foreground">
-            <Icon name="GitBranch" className="size-3" />
-            {meta.subDone}/{meta.subTotal}
-          </span>
-        ) : null}
+        <span className="flex items-center gap-1 text-2xs text-muted-foreground">
+          <Icon name="GitBranch" className="size-3" />
+          <SubtaskProgressBar
+            done={meta.subDone}
+            total={meta.subTotal}
+            active={meta.workingThreads.length > 0}
+          />
+        </span>
         {meta.attachmentCount > 0 ? (
           <Icon
             name="Paperclip"

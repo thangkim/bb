@@ -91,6 +91,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Register ordered, non-closable fixed tabs beside Browser and Terminal; bb persists selection and mounts each component only while its tab is visible in an open pane",
           "Open an owned fixed tab with experimental_useAppPanel and read its validated JSON target with experimental_useFixedTabTarget; targets survive route changes in the current session, but not a refresh",
           "Add headerContent to the page title bar, or a non-interactive experimental_sidebarAccessory to the desktop sidebar row",
+          "Navigate to a thread with BbNavigate.toThread, passing openInSplit to apply bb's split placement rules instead of a plain in-place navigation",
         ],
         apiSymbols: [
           "PluginNavPanelRegistration",
@@ -107,6 +108,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "useBbContext",
           "useBbNavigate",
           "BbNavigate.toPluginPanel",
+          "BbNavigate.toThread",
         ],
         firstParty: ["Automations", "Docs", "GitHub", "Tasks"],
       },

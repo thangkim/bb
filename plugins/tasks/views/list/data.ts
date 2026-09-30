@@ -60,23 +60,38 @@ export function useLabels(projectIds: readonly string[]) {
 }
 
 export interface TaskRowMeta {
+  threads: TaskThread[];
   activeThreads: TaskThread[];
+  subtaskDone: number;
+  subtaskTotal: number;
 }
+
+const ROW_META_BATCH_SIZE = 500;
 
 export function useTaskListMeta(tasks: readonly Task[] | undefined) {
   const taskIds = (tasks ?? []).map((task) => task.id);
   return useTasksQuery<Map<string, TaskRowMeta>>(
     async (rpc) => {
-      const entries = await Promise.all(
-        taskIds.map(async (taskId) => {
-          const threads = await rpc.call("listTaskThreads", { taskId });
-          const meta: TaskRowMeta = {
-            activeThreads: threads.taskThreads.filter(isActiveThread),
-          };
-          return [taskId, meta] as const;
-        }),
-      );
-      return new Map(entries);
+      const map = new Map<string, TaskRowMeta>();
+      for (
+        let offset = 0;
+        offset < taskIds.length;
+        offset += ROW_META_BATCH_SIZE
+      ) {
+        const batch = taskIds.slice(offset, offset + ROW_META_BATCH_SIZE);
+        const { rowMeta } = await rpc.call("listTaskRowMeta", {
+          taskIds: batch,
+        });
+        for (const entry of rowMeta) {
+          map.set(entry.taskId, {
+            threads: entry.threads,
+            activeThreads: entry.threads.filter(isActiveThread),
+            subtaskDone: entry.subtaskDone,
+            subtaskTotal: entry.subtaskTotal,
+          });
+        }
+      }
+      return map;
     },
     ["threads:changed", "tasks:changed"],
     [taskIds.join()],

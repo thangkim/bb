@@ -147,3 +147,35 @@ export function PriorityIcon({
     </svg>
   );
 }
+
+const PRIORITY_TAG_META: Record<
+  TaskPriority,
+  { label: string; textClassName: string } | null
+> = {
+  urgent: { label: "P1", textClassName: "text-destructive" },
+  high: { label: "P2", textClassName: "text-warning" },
+  medium: { label: "P3", textClassName: "text-attention" },
+  low: { label: "P4", textClassName: "text-muted-foreground" },
+  none: null,
+};
+
+export function PriorityTag({
+  priority,
+  className,
+}: {
+  priority: TaskPriority;
+  className?: string;
+}) {
+  const meta = PRIORITY_TAG_META[priority];
+  return (
+    <span
+      className={cn(
+        "inline-flex h-5 min-w-5 items-center justify-center rounded-md border border-border px-1 text-2xs font-medium tabular-nums",
+        meta ? meta.textClassName : "text-muted-foreground",
+        className,
+      )}
+    >
+      {meta ? meta.label : "–"}
+    </span>
+  );
+}

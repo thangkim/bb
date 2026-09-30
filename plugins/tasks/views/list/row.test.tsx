@@ -73,7 +73,7 @@ function renderList(tasks: Task[], options: Options = {}) {
         sidebarSummary: () => ({ projects: [] }),
         listLabels: () => ({ labels: [label] }),
         listTasks: () => ({ tasks }),
-        listTaskThreads: () => ({ taskThreads: [] }),
+        listTaskRowMeta: () => ({ rowMeta: [] }),
         listComments: () => ({ comments: [] }),
         listAttachments: () => ({ attachments: [] }),
         updateTask: (raw) => {
@@ -88,10 +88,11 @@ function renderList(tasks: Task[], options: Options = {}) {
 }
 
 async function rowFor(slot: ReturnType<typeof renderList>, key: string) {
-  await slot.findByText(key);
-  const row = slot.container.querySelector(`[data-task-key="${key}"]`);
-  if (row === null) throw new Error(`row ${key} not found`);
-  return row as HTMLElement;
+  return waitFor(() => {
+    const row = slot.container.querySelector(`[data-task-key="${key}"]`);
+    if (row === null) throw new Error(`row ${key} not found`);
+    return row as HTMLElement;
+  });
 }
 
 describe("inline row editing", () => {
