@@ -3562,3 +3562,38 @@ remain forbidden. New-machine selections continue through creation.
 
 Stabilization requires lifecycle coverage for reuse, missing paths, cleanup in
 progress, cross-project ownership, and concurrent creation before binding.
+
+## `app.slots.experimental_threadMenuAction` and `experimental_useThreadMenuActions` (`@get-bb/plugin-sdk/app`)
+
+**What it does.** Adds a host-rendered entry to every thread's actions menu:
+the sidebar row's context menu and "…" button, the compact long-press
+drawer, and the thread header's menu. A registration is
+`{ id, title, icon?, run }`. Entries render after Rename in plugin load
+order. Selecting one closes the menu, then the host calls
+`run({ threadId, projectId })` on the next task, so focus restoration
+cannot steal focus from a dialog the plugin opens. Sync and async errors are
+contained and logged as `[plugin:<id>] threadMenuAction "<id>" failed`.
+
+`experimental_useThreadMenuActions()` returns every registration as
+`{ key, title, icon?, run }`, with `key` set to `<pluginId>:<id>`. A plugin
+that replaces the thread list renders these entries in its own menu. The
+bundled Thread list plugin does. The array keeps its identity until a plugin
+registers or unregisters.
+
+My Tasks registers "Attach to My Tasks…", which opens an
+`experimental_appOverlay` picker for attaching the thread to projects and
+tasks.
+
+**Audit before stabilizing.**
+
+1. **Pickers.** Every plugin that needs a choice opens its own dialog. Decide
+   whether the host should offer a submenu or a picker step instead, with
+   items the plugin supplies. On compact drawers that step would be a
+   drawer step, as Move to section is.
+2. **Availability.** No `isAvailable` exists, so entries show for archived
+   and child threads alike. Decide whether a predicate is needed and which
+   thread fields it would receive.
+3. **Ordering and crowding.** Confirm a flat, load-ordered list after Rename
+   holds up with several plugins, or add grouping or a cap.
+4. **Replacement lists.** Confirm third-party thread lists render the hook's
+   entries, and decide whether the host should require it.

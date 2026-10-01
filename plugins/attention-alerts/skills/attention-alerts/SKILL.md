@@ -14,7 +14,7 @@ bb attention-alerts clear [--json]
 bb attention-alerts test [question|approval|plan|error|done] [--json]
 ```
 
-`list --json` prints `{ "alerts": [{ id, threadId, projectId, interactionId, kind, title, body, createdAt }] }`, newest first. `threadId` is null for test alerts. `test` defaults to `question`, which also repeats on the reminder interval.
+`list --json` prints `{ "alerts": [{ id, threadId, projectId, interactionId, kind, title, body, createdAt }] }`, newest first. `threadId` is null for test alerts. `body` is null when the title says everything (finished alerts, and errors without a message). `test` defaults to `question`, which also repeats on the reminder interval.
 
 Do not dismiss alerts the user hasn't asked you to clear: they are the user's to-do list.
 

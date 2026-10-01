@@ -41,6 +41,7 @@ export function makePluginRegistrationSet(
     diffRenderers: [],
     messageDirectives: [],
     messageActions: [],
+    experimentalThreadMenuActions: [],
     commandPaletteActions: [],
     providerIcons: [],
     timelineRenderers: [],

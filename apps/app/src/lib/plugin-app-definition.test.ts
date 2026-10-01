@@ -527,6 +527,11 @@ describe("collectPluginAppRegistrations", () => {
         icon: "Zap",
         run,
       });
+      app.slots.experimental_threadMenuAction({
+        id: "attach",
+        title: "Attach",
+        run,
+      });
       app.composer.customize({
         id: "improve-prompt",
         scopes: ["thread", "new-thread"],
@@ -601,6 +606,9 @@ describe("collectPluginAppRegistrations", () => {
     ]);
     expect(registrations.messageActions).toEqual([
       { id: "summarize", title: "Summarize", icon: "Zap", run },
+    ]);
+    expect(registrations.experimentalThreadMenuActions).toEqual([
+      { id: "attach", title: "Attach", run },
     ]);
     expect(registrations.composerCustomizations).toEqual([
       {
@@ -864,6 +872,35 @@ describe("collectPluginAppRegistrations", () => {
             run: () => {},
           });
           app.slots.messageAction({
+            id: "a",
+            title: "B",
+            run: () => {},
+          });
+        }),
+      /duplicate id "a"/,
+    ],
+    [
+      "thread menu action without a run function",
+      () =>
+        definePluginApp((app) => {
+          app.slots.experimental_threadMenuAction({
+            id: "no-run",
+            title: "No run",
+            run: undefined as never,
+          });
+        }),
+      /"run" must be a function/,
+    ],
+    [
+      "duplicate thread menu action id",
+      () =>
+        definePluginApp((app) => {
+          app.slots.experimental_threadMenuAction({
+            id: "a",
+            title: "A",
+            run: () => {},
+          });
+          app.slots.experimental_threadMenuAction({
             id: "a",
             title: "B",
             run: () => {},

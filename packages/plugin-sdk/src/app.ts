@@ -172,6 +172,9 @@ export const experimental_useSidebarThreads = runtimeFunction(
 export const experimental_useSidebarThreadActions = runtimeFunction(
   "experimental_useSidebarThreadActions",
 );
+export const experimental_useThreadMenuActions = runtimeFunction(
+  "experimental_useThreadMenuActions",
+);
 export const experimental_useSidebarThreadPullRequest = runtimeFunction(
   "experimental_useSidebarThreadPullRequest",
 );

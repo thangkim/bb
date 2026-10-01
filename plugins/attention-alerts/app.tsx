@@ -20,9 +20,9 @@ import {
 import { createAlertAudio, type AlertAudio } from "./audio.js";
 import type { AlertSound } from "./sounds.js";
 import {
-  alertHeadline,
   clientKind,
   createSystemNotifications,
+  KIND_LABELS,
   notificationPermission,
 } from "./system-notifications.js";
 
@@ -80,11 +80,11 @@ const KIND_ICONS: Record<Alert["kind"], string> = {
 };
 
 const KIND_TONES: Record<Alert["kind"], string> = {
-  question: "text-primary",
-  approval: "text-primary",
-  plan: "text-primary",
+  question: "text-warning",
+  approval: "text-warning",
+  plan: "text-warning",
   error: "text-destructive",
-  done: "text-muted-foreground",
+  done: "text-success",
 };
 
 function useNow(intervalMs: number): number {
@@ -115,7 +115,7 @@ function AlertCard({
       <Icon
         name={KIND_ICONS[alert.kind]}
         fallback="Info"
-        aria-hidden
+        aria-label={KIND_LABELS[alert.kind]}
         className={`mt-0.5 size-4 shrink-0 ${KIND_TONES[alert.kind]}`}
       />
       <button
@@ -124,12 +124,14 @@ function AlertCard({
         disabled={alert.threadId === null}
         onClick={() => onOpen(alert)}
       >
-        <span className="block truncate text-sm font-medium">
-          {alertHeadline(alert)}
+        <span className="line-clamp-2 block text-sm font-medium">
+          {alert.title}
         </span>
-        <span className="mt-0.5 line-clamp-2 block text-sm text-muted-foreground">
-          {alert.body}
-        </span>
+        {alert.body === null ? null : (
+          <span className="mt-0.5 line-clamp-2 block text-sm text-muted-foreground">
+            {alert.body}
+          </span>
+        )}
         <span className="mt-1 block text-xs text-muted-foreground">
           {relativeTime(alert.createdAt, now)}
         </span>
@@ -137,7 +139,7 @@ function AlertCard({
       <button
         type="button"
         className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-        aria-label={`Dismiss ${alertHeadline(alert)}`}
+        aria-label={`Dismiss ${alert.title}`}
         onClick={() => onDismiss(alert)}
       >
         <Icon name="X" aria-hidden className="size-4" />

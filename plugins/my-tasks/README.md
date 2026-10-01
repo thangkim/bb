@@ -99,6 +99,7 @@ machine; pass `--machine <id-or-name>` to target another enrolled machine.
 | `bb my-tasks attach <key-or-id>`                  | Attach the current bb thread to a task when it was not delegated from Tasks.                                                               |
 | `bb my-tasks detach <key-or-id>`                  | Detach the current bb thread (or `--thread <id>`) from a task, for example a dead predecessor after a respawn.                             |
 | `bb my-tasks threads <key>`                       | List the bb threads attached to a task: live threads first, newest first.                                                                  |
+| `bb my-tasks links`                               | List the tasks and projects the current thread (or `--thread <id>`) is attached to.                                                        |
 | `bb my-tasks label create\|list\|delete`          | Manage project-scoped labels.                                                                                                              |
 | `bb my-tasks seed-demo --yes`                     | Create sample folders, projects, labels, tasks, and comments for evaluation.                                                               |
 
@@ -135,6 +136,11 @@ right-click menu) to move it there.
 
 In the app, every task row has **New thread** (pick a preset) and **Attach
 thread** (search your bb threads). Clicking a thread opens it in a split pane.
+Going the other way, every thread's menu (right-click a sidebar row, its "…"
+button, or the thread header menu) has **Attach to My Tasks…**. It opens a
+dialog that suggests open tasks from projects linked to the thread's bb
+project, searches all tasks and projects, and lists what the thread is already
+attached to; select an attached item to detach it.
 
 If work begins outside the Delegate action, the agent can associate its current
 thread with `bb my-tasks attach KEY`. The inverse is `bb my-tasks detach KEY

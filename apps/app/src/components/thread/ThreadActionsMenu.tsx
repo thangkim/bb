@@ -33,6 +33,7 @@ import { cn } from "@bb/shared-ui/lib/utils";
 import { CompactLongPressMenu } from "@/components/ui/compact-long-press-menu";
 import { isThreadRead } from "@bb/client-core";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
+import { useThreadMenuActions } from "@/lib/plugin-thread-menu-actions";
 import { getThreadRoutePath } from "@/lib/route-paths";
 import { useThreadActions } from "./ThreadActionsProvider";
 import { useThreadSectionMove } from "./ThreadSectionMoveProvider";
@@ -191,6 +192,7 @@ function ThreadActionsMenuItems({
     toggleRead,
     unarchiveThread,
   } = useThreadActions();
+  const pluginActions = useThreadMenuActions();
   const isCompactViewport = useIsCompactViewport();
   const isDrawer = surface === "dropdown" && isCompactViewport;
   const showSeparators = !isDrawer;
@@ -298,6 +300,20 @@ function ThreadActionsMenuItems({
       >
         Rename
       </ActionMenuItem>
+      {pluginActions.map((action) => (
+        <ActionMenuItem
+          key={action.key}
+          surface={surface}
+          icon={action.icon ?? "Zap"}
+          onSelect={() => {
+            window.setTimeout(() => {
+              action.run({ threadId: thread.id, projectId: thread.projectId });
+            }, 0);
+          }}
+        >
+          {action.title}
+        </ActionMenuItem>
+      ))}
       {showSeparators ? <ActionMenuSeparator surface={surface} /> : null}
       <ActionMenuItem
         surface={surface}

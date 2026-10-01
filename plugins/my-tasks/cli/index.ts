@@ -2967,6 +2967,51 @@ export function registerTasksCli(
           },
         }),
 
+        links: cliCommand({
+          summary: "List the tasks and projects a thread is attached to",
+          options: {
+            thread: {
+              type: "string",
+              placeholder: "thread-id",
+              aliases: ["thread-id"],
+              description:
+                "Thread to look up; defaults to BB_THREAD_ID or the invoking thread",
+            },
+            json: JSON_OPTION,
+          },
+          run(input, ctx) {
+            return guard(async () => {
+              const threadId = resolveInvokingThreadId(
+                input.options.thread,
+                ctx,
+              );
+              const result = tasksRpcContract.listThreadLinks.output.parse(
+                await domain.listThreadLinks(
+                  tasksRpcContract.listThreadLinks.input.parse({ threadId }),
+                ),
+              );
+              return input.options.json
+                ? JSON.stringify({ threadId, ...result })
+                : table(
+                    ["KIND", "KEY", "TITLE"],
+                    [
+                      ...result.projects.map((project) => [
+                        "project",
+                        project.prefix,
+                        project.name,
+                      ]),
+                      ...result.tasks.map((task) => [
+                        "task",
+                        task.key,
+                        task.title,
+                      ]),
+                    ],
+                    "Not attached to any task or project.",
+                  );
+            });
+          },
+        }),
+
         "seed-demo": cliCommand({
           summary:
             "Create sample folders, projects, labels, tasks, and comments",

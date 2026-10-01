@@ -3,6 +3,7 @@ Get an alert, with sound, whenever an agent needs you: it asks a question, wants
 ## What you get
 
 - **A stack of cards** in the bottom-right corner of every bb window, newest first. Click a card to open its thread; click × to dismiss it, or use **Dismiss all**.
+- **Titles that say what happened**: a finished thread called "Summarize the blog post" shows "Summarized the blog post", and a failed one shows "Failed to summarize the blog post". Titles that don't start with a verb read "Finished “…”" or "Failed: …". The icon's color shows the status: amber when the agent is waiting for you, red for errors, green when done. A second line appears only when it adds something: the question, the command to approve, or the error message.
 - **A sound for each new alert**: an urgent chime for questions, approvals and plan reviews, a falling tone for errors, and a soft chime for finished tasks. The sound plays while bb is in the background or minimized, and several alerts arriving together play once.
 - **A repeat reminder** while a question, approval or plan review is still waiting: every 1, 2, 3, 5 or 10 minutes, or off.
 - **System notifications** while bb is in the background, one per alert, so they pile up in Notification Center instead of replacing each other. They close by themselves when the alert is handled.

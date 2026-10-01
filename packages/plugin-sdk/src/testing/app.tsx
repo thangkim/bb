@@ -25,6 +25,8 @@ import {
   type ExperimentalNewThreadHandler,
   type ExperimentalNewThreadRequest,
   type ExperimentalSplitPanes,
+  type ExperimentalThreadMenuAction,
+  type ExperimentalThreadMenuActionRegistration,
   type PluginAppDefinition,
   type PluginAppSetup,
   type PluginCodeThemeState,
@@ -269,6 +271,7 @@ interface SlotEnv {
   sidebarThreads: PluginSidebarThreadsState;
   sidebarActions: PluginSidebarThreadActions;
   sidebarActionCalls: SidebarActionCall[];
+  threadMenuActions: readonly ExperimentalThreadMenuAction[];
   sidebarPullRequests: ReadonlyMap<string, PluginSidebarPullRequest>;
   sidebarDraftThreadIds: ReadonlySet<string>;
   sidebarRowStatuses: ReadonlyMap<string, PluginSidebarThreadRowStatus>;
@@ -297,6 +300,8 @@ interface TestFixedTabTargetStore {
   } | null;
   subscribe(listener: () => void): () => void;
 }
+
+const EMPTY_THREAD_MENU_ACTIONS: readonly ExperimentalThreadMenuAction[] = [];
 
 /** One recorded `experimental_useSidebarThreadActions()` call. */
 export interface SidebarActionCall {
@@ -1079,6 +1084,9 @@ const testPluginSdkApp = {
   experimental_useSidebarThreadActions(): PluginSidebarThreadActions {
     return useSlotEnv("experimental_useSidebarThreadActions").sidebarActions;
   },
+  experimental_useThreadMenuActions(): readonly ExperimentalThreadMenuAction[] {
+    return useSlotEnv("experimental_useThreadMenuActions").threadMenuActions;
+  },
   experimental_useSidebarThreadSplit(threadId): PluginSidebarThreadSplit {
     const env = useSlotEnv("experimental_useSidebarThreadSplit");
     return useMemo(
@@ -1234,6 +1242,7 @@ export interface CapturedPluginApp {
   diffRenderers: PluginDiffRendererRegistration[];
   messageDirectives: PluginMessageDirectiveRegistration[];
   messageActions: PluginMessageActionRegistration[];
+  experimentalThreadMenuActions: ExperimentalThreadMenuActionRegistration[];
   providerIcons: CollectedPluginProviderIconRegistration[];
   icons: ExperimentalIconRegistration[];
   timelineRenderers: PluginTimelineRendererRegistration[];
@@ -1448,6 +1457,10 @@ export interface RenderSlotOptions<
    * a ready, empty list. Pass `{ status: "loading" }` to test that branch.
    */
   sidebarThreads?: Partial<PluginSidebarThreadsState>;
+  /**
+   * What `experimental_useThreadMenuActions()` reports. Omitted → no actions.
+   */
+  experimental_threadMenuActions?: readonly ExperimentalThreadMenuAction[];
   /**
    * The provider directory `experimental_useProviders()` reports. Omitted →
    * a ready, empty list. Pass `{ status: "loading" }` to test that branch.
@@ -2138,6 +2151,8 @@ export function renderSlot<
     sidebarThreads,
     sidebarActions,
     sidebarActionCalls,
+    threadMenuActions:
+      options.experimental_threadMenuActions ?? EMPTY_THREAD_MENU_ACTIONS,
     sidebarPullRequests,
     sidebarDraftThreadIds,
     sidebarRowStatuses,

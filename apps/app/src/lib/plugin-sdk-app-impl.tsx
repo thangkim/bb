@@ -61,6 +61,7 @@ import {
 } from "./plugin-sidebar-navigation";
 import { SidebarNavigationIcon } from "@/components/sidebar/SidebarNavigationModel";
 import { useAppNavigationHost } from "./app-navigation-host";
+import { useThreadMenuActions } from "./plugin-thread-menu-actions";
 import { useCodeTheme } from "./plugin-code-theme";
 import { useNewThreadHandler } from "./plugin-new-thread-handlers";
 import { useSplitPanes } from "./plugin-split-panes";
@@ -96,6 +97,7 @@ export const pluginSdkAppImplementation = installDeprecatedAliases(
     experimental_Diff: PluginDiff,
     experimental_useSidebarThreads: useSidebarThreads,
     experimental_useSidebarThreadActions: useSidebarThreadActions,
+    experimental_useThreadMenuActions: useThreadMenuActions,
     experimental_useSidebarThreadPullRequest: useSidebarThreadPullRequest,
     experimental_useSidebarThreadSplit: useSidebarThreadSplit,
     experimental_useSidebarNavigation: useSidebarNavigation,

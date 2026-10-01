@@ -49,7 +49,7 @@ function formatAlerts(alerts: readonly Alert[]): string {
         KIND_LABELS[alert.kind],
         alert.threadId ?? "-",
         alert.title,
-        alert.body,
+        alert.body ?? "-",
         new Date(alert.createdAt).toISOString(),
       ].join("\t"),
     ),

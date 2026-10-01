@@ -33,6 +33,7 @@ import {
   type PluginSidebarFooterActionProps,
   type ExperimentalSidebarNavigationProps,
   type ExperimentalSidebarHeaderProps,
+  type ExperimentalThreadMenuActionContext,
   type PluginSourceCodeRendererProps,
   type PluginThreadHeaderActionProps,
   type ExperimentalPluginBrowserToolbarActionProps,
@@ -274,6 +275,7 @@ type SlotPropsByName = {
   experimental_diffRenderer: PluginDiffRendererProps;
   messageDirective: PluginMessageDirectiveProps;
   messageAction: PluginMessageActionContext;
+  experimental_threadMenuAction: ExperimentalThreadMenuActionContext;
   commandPaletteAction: PluginCommandContext;
   experimental_providerIcon: PluginProviderIconRegistration;
   experimental_timelineRenderer: PluginTimelineRendererProps;
@@ -393,6 +395,7 @@ const FRONTEND_SLOT_PROP_FIELDS = {
   ],
   messageDirective: ["attributes", "source", "message", "openWorkspaceFile"],
   messageAction: ["threadId", "message", "selectedText", "openPanel"],
+  experimental_threadMenuAction: ["threadId", "projectId"],
   commandPaletteAction: ["threadId", "projectId", "openPanel"],
   experimental_providerIcon: ["providerKind", "providerId", "icon"],
   experimental_timelineRenderer: [

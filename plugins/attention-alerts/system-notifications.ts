@@ -23,17 +23,13 @@ export function notificationPermission():
     : Notification.permission;
 }
 
-const KIND_TITLES: Record<Alert["kind"], string> = {
+export const KIND_LABELS: Record<Alert["kind"], string> = {
   question: "Question",
   approval: "Needs approval",
   plan: "Plan review",
   error: "Failed",
   done: "Done",
 };
-
-export function alertHeadline(alert: Alert): string {
-  return `${KIND_TITLES[alert.kind]} · ${alert.title}`;
-}
 
 export function createSystemNotifications(onOpen: (alert: Alert) => void) {
   const shown = new Map<string, Notification>();
@@ -51,8 +47,8 @@ export function createSystemNotifications(onOpen: (alert: Alert) => void) {
   return {
     show(alert: Alert): void {
       if (notificationPermission() !== "granted" || shown.has(alert.id)) return;
-      const notification = new Notification(alertHeadline(alert), {
-        body: alert.body,
+      const notification = new Notification(alert.title, {
+        ...(alert.body === null ? {} : { body: alert.body }),
         tag: `bb-attention-${alert.id}`,
         requireInteraction: true,
         silent: true,

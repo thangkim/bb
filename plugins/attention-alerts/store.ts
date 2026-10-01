@@ -16,6 +16,22 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX alerts_thread ON alerts(thread_id)`,
   `CREATE UNIQUE INDEX alerts_interaction ON alerts(interaction_id) WHERE interaction_id IS NOT NULL`,
+  `CREATE TABLE alerts_next (
+    id TEXT PRIMARY KEY,
+    thread_id TEXT,
+    project_id TEXT,
+    interaction_id TEXT,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    created_at INTEGER NOT NULL,
+    last_rung_at INTEGER NOT NULL
+  )`,
+  `INSERT INTO alerts_next SELECT id, thread_id, project_id, interaction_id, kind, title, body, created_at, last_rung_at FROM alerts ORDER BY rowid`,
+  `DROP TABLE alerts`,
+  `ALTER TABLE alerts_next RENAME TO alerts`,
+  `CREATE INDEX alerts_thread ON alerts(thread_id)`,
+  `CREATE UNIQUE INDEX alerts_interaction ON alerts(interaction_id) WHERE interaction_id IS NOT NULL`,
 ];
 
 const rowSchema = z.object({
@@ -25,7 +41,7 @@ const rowSchema = z.object({
   interaction_id: z.string().nullable(),
   kind: alertKindSchema,
   title: z.string(),
-  body: z.string(),
+  body: z.string().nullable(),
   created_at: z.number().int(),
 });
 

@@ -18,6 +18,7 @@ import type {
   PluginSidebarFooterActionRegistration,
   ExperimentalSidebarNavigationRegistration,
   ExperimentalSidebarHeaderRegistration,
+  ExperimentalThreadMenuActionRegistration,
   PluginSourceCodeRendererRegistration,
   PluginThreadHeaderActionRegistration,
   ExperimentalPluginBrowserToolbarActionRegistration,
@@ -56,6 +57,7 @@ export interface PluginRegistrationSet {
   diffRenderers?: readonly PluginDiffRendererRegistration[];
   messageDirectives: readonly PluginMessageDirectiveRegistration[];
   messageActions?: readonly PluginMessageActionRegistration[];
+  experimentalThreadMenuActions?: readonly ExperimentalThreadMenuActionRegistration[];
   commandPaletteActions?: readonly CollectedPluginCommandRegistration[];
   providerIcons?: readonly CollectedPluginProviderIconRegistration[];
   icons?: readonly ExperimentalIconRegistration[];
@@ -107,6 +109,8 @@ export interface PluginMessageDirectiveSlot
   extends PluginMessageDirectiveRegistration, PluginSlotBase {}
 export interface PluginMessageActionSlot
   extends PluginMessageActionRegistration, PluginSlotBase {}
+export interface ExperimentalThreadMenuActionSlot
+  extends ExperimentalThreadMenuActionRegistration, PluginSlotBase {}
 export interface PluginCommandPaletteActionSlot
   extends CollectedPluginCommandRegistration, PluginSlotBase {}
 interface PluginIconSlot extends ExperimentalIconRegistration, PluginSlotBase {}
@@ -139,6 +143,7 @@ export interface PluginSlotSnapshot {
   diffRenderers: readonly PluginDiffRendererSlot[];
   messageDirectives: readonly PluginMessageDirectiveSlot[];
   messageActions: readonly PluginMessageActionSlot[];
+  experimentalThreadMenuActions: readonly ExperimentalThreadMenuActionSlot[];
   commandPaletteActions: readonly PluginCommandPaletteActionSlot[];
   providerIcons: readonly PluginProviderIconSlot[];
   icons: readonly PluginIconSlot[];
@@ -167,6 +172,7 @@ export const EMPTY_PLUGIN_SLOT_SNAPSHOT: PluginSlotSnapshot = {
   diffRenderers: [],
   messageDirectives: [],
   messageActions: [],
+  experimentalThreadMenuActions: [],
   commandPaletteActions: [],
   providerIcons: [],
   icons: [],
@@ -202,6 +208,7 @@ const SLOT_KINDS: readonly SlotKind[] = [
   "diffRenderers",
   "messageDirectives",
   "messageActions",
+  "experimentalThreadMenuActions",
   "commandPaletteActions",
   "providerIcons",
   "icons",
@@ -261,6 +268,7 @@ function flattenRegistrations(
     diffRenderers: stamp(set.diffRenderers),
     messageDirectives: stamp(set.messageDirectives),
     messageActions: stamp(set.messageActions),
+    experimentalThreadMenuActions: stamp(set.experimentalThreadMenuActions),
     commandPaletteActions: stamp(set.commandPaletteActions),
     providerIcons: stamp(set.providerIcons),
     icons: stamp(set.icons),

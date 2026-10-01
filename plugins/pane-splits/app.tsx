@@ -4,15 +4,24 @@ import {
   definePluginApp,
   experimental_useNewThreadHandler,
   experimental_useSplitPanes,
+  useBbContext,
   useBbNavigate,
+  useSidebarSplitLayout,
   type BbNavigate,
   type ExperimentalNewThreadRequest,
   type ExperimentalSplitPaneNewThreadOptions,
   type ExperimentalSplitPaneOpenResult,
   type ExperimentalSplitPanes,
+  type PluginSidebarSplitLayout,
 } from "@get-bb/plugin-sdk/app";
+import {
+  nextReopenTarget,
+  recordClosedPanes,
+  type ClosedPaneRecord,
+} from "./closed-panes";
 
 export const PANE_CAP_MESSAGE = "Can't split — 8 panes is the maximum.";
+export const NOTHING_TO_REOPEN_MESSAGE = "No closed thread to reopen.";
 
 export const SPLIT_COMMANDS = [
   { id: "split-left", side: "left", key: "a", direction: "left" },
@@ -29,20 +38,30 @@ export const SPLIT_COMMANDS = [
 interface Controller {
   splitPanes: ExperimentalSplitPanes;
   navigate: BbNavigate;
+  layout: PluginSidebarSplitLayout | null;
+  threadId: string | null;
 }
 
 let controller: Controller | null = null;
+let observedLayout: PluginSidebarSplitLayout | null = null;
+let closedHistory: readonly ClosedPaneRecord[] = [];
 
 export function PaneSplitsController() {
   const splitPanes = experimental_useSplitPanes();
   const navigate = useBbNavigate();
+  const layout = useSidebarSplitLayout();
+  const { threadId } = useBbContext();
   useEffect(() => {
-    const current: Controller = { splitPanes, navigate };
+    closedHistory = recordClosedPanes(closedHistory, observedLayout, layout);
+    observedLayout = layout;
+  }, [layout]);
+  useEffect(() => {
+    const current: Controller = { splitPanes, navigate, layout, threadId };
     controller = current;
     return () => {
       if (controller === current) controller = null;
     };
-  }, [navigate, splitPanes]);
+  }, [layout, navigate, splitPanes, threadId]);
   const handleNewThread = useCallback(
     (request: ExperimentalNewThreadRequest) =>
       openNewThreadBeside(splitPanes, request) !== "unavailable",
@@ -79,6 +98,32 @@ function runNewThreadBeside(): void {
   }
 }
 
+function reopenClosedThread(): void {
+  if (controller === null) return;
+  const openThreadIds = new Set(
+    controller.layout?.panes.flatMap((pane) =>
+      pane.threadId === null ? [] : [pane.threadId],
+    ) ?? [],
+  );
+  if (controller.threadId !== null) openThreadIds.add(controller.threadId);
+  const { target, history } = nextReopenTarget(closedHistory, openThreadIds);
+  if (target === null) {
+    closedHistory = history;
+    toast(NOTHING_TO_REOPEN_MESSAGE);
+    return;
+  }
+  const result = controller.splitPanes.openNewThread({
+    side: target.side,
+    focusPrompt: false,
+  });
+  if (result === "at-cap") {
+    toast(PANE_CAP_MESSAGE);
+    return;
+  }
+  closedHistory = history;
+  controller.navigate.toThread(target.threadId);
+}
+
 export default definePluginApp((app) => {
   app.slots.experimental_appOverlay({
     id: "controller",
@@ -100,5 +145,13 @@ export default definePluginApp((app) => {
     title: "Panes: new thread beside the focused pane",
     isAvailable: () => controller !== null,
     run: runNewThreadBeside,
+  });
+
+  app.commands.register({
+    id: "reopen-closed",
+    title: "Panes: reopen closed thread",
+    defaultShortcut: { key: "t", mod: true, alt: true },
+    isAvailable: () => controller !== null,
+    run: reopenClosedThread,
   });
 });

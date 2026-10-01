@@ -41,6 +41,8 @@ Read the installed SDK declarations for the exact current signatures.
 - `useComposerView`
 - `experimental_useSidebarThreads`
 - `experimental_useSidebarThreadActions`
+- `experimental_useThreadMenuActions` — every plugin's
+  `experimental_threadMenuAction` entry, bound for a replacement thread menu
 - `experimental_useSidebarThreadPullRequest`
 - `experimental_useSidebarThreadSplit`
 - `experimental_useSidebarNavigation` — the sidebar navigation items in the
@@ -202,6 +204,9 @@ Read the installed SDK declarations for the exact current signatures.
 - `PluginTargetedPanelActionOpenOptions`
 - `PluginMessageActionContext`
 - `PluginMessageActionRegistration`
+- `ExperimentalThreadMenuActionContext`
+- `ExperimentalThreadMenuActionRegistration`
+- `ExperimentalThreadMenuAction`
 - `PluginAppCommands`
 - `PluginCommandContext`
 - `PluginCommandShortcut`

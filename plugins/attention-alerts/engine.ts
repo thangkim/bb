@@ -5,7 +5,6 @@ import type {
 import {
   ALERTS_CHANGED_CHANNEL,
   ALERTS_RING_CHANNEL,
-  needsInput,
   soundForKind,
   type Alert,
   type AlertKind,
@@ -13,6 +12,7 @@ import {
 } from "./contract.js";
 import type { AlertStore } from "./store.js";
 import type { AlertSound } from "./sounds.js";
+import { failedTitle, finishedTitle } from "./titles.js";
 
 type ThreadResponse = PluginThreadEventPayloads["thread.idle"]["thread"];
 type PendingInteraction =
@@ -77,6 +77,25 @@ const ALL_KINDS: readonly AlertKind[] = [
   "done",
 ];
 const INPUT_KINDS: readonly AlertKind[] = ["question", "approval", "plan"];
+const TEST_ALERTS: Record<AlertKind, { title: string; body: string | null }> = {
+  question: {
+    title: "Test the attention alerts",
+    body: "Which sound do you prefer for questions?",
+  },
+  approval: {
+    title: "Test the attention alerts",
+    body: "Approve command: bb attention-alerts test",
+  },
+  plan: {
+    title: "Test the attention alerts",
+    body: "Review the plan before the agent continues",
+  },
+  error: {
+    title: "Failed to test the attention alerts",
+    body: "This is how an error looks",
+  },
+  done: { title: "Tested the attention alerts", body: null },
+};
 
 function firstLine(text: string): string {
   for (const line of text.split(/\r?\n/u)) {
@@ -93,7 +112,7 @@ function truncate(text: string, maxLength: number): string {
 
 function threadTitle(thread: ThreadResponse): string {
   const title = thread.title?.trim() || thread.titleFallback?.trim();
-  return truncate(title || `Thread ${thread.id.slice(0, 8)}`, TITLE_MAX_LENGTH);
+  return title || `Thread ${thread.id.slice(0, 8)}`;
 }
 
 function isVisible(thread: ThreadResponse): boolean {
@@ -259,7 +278,7 @@ export function createAlertEngine(args: AlertEngineArgs) {
   async function onStateAlert(
     thread: ThreadResponse,
     kind: "done" | "error",
-    body: string,
+    body: string | null,
   ): Promise<void> {
     const removed = store.removeForThread(thread.id, STATE_KINDS);
     let changed = removed.length > 0;
@@ -273,8 +292,13 @@ export function createAlertEngine(args: AlertEngineArgs) {
           projectId: thread.projectId,
           interactionId: null,
           kind,
-          title: threadTitle(thread),
-          body: truncate(body, BODY_MAX_LENGTH),
+          title: truncate(
+            kind === "done"
+              ? finishedTitle(threadTitle(thread))
+              : failedTitle(threadTitle(thread)),
+            TITLE_MAX_LENGTH,
+          ),
+          body: body === null ? null : truncate(body, BODY_MAX_LENGTH),
         }) !== null || changed;
     }
     if (changed) publishChanged();
@@ -294,7 +318,7 @@ export function createAlertEngine(args: AlertEngineArgs) {
         projectId: thread.projectId,
         interactionId: interaction.id,
         kind: described.kind,
-        title: threadTitle(thread),
+        title: truncate(threadTitle(thread), TITLE_MAX_LENGTH),
         body: truncate(described.body, BODY_MAX_LENGTH),
       });
       if (created) publishChanged();
@@ -302,24 +326,15 @@ export function createAlertEngine(args: AlertEngineArgs) {
 
     async onThreadIdle({
       thread,
-      lastAssistantText,
     }: PluginThreadEventPayloads["thread.idle"]): Promise<void> {
-      await onStateAlert(
-        thread,
-        "done",
-        firstLine(lastAssistantText ?? "") || "Finished and waiting for you",
-      );
+      await onStateAlert(thread, "done", null);
     },
 
     async onThreadFailed({
       thread,
       error,
     }: PluginThreadEventPayloads["thread.failed"]): Promise<void> {
-      await onStateAlert(
-        thread,
-        "error",
-        firstLine(error ?? "") || "The thread stopped on an error",
-      );
+      await onStateAlert(thread, "error", firstLine(error ?? "") || null);
     },
 
     async onThreadActive({
@@ -400,12 +415,7 @@ export function createAlertEngine(args: AlertEngineArgs) {
         projectId: null,
         interactionId: null,
         kind,
-        title: "Attention alerts test",
-        body: needsInput(kind)
-          ? "This is how a question or plan review will look and sound."
-          : kind === "error"
-            ? "This is how a failed thread will look and sound."
-            : "This is how a finished task will look and sound.",
+        ...TEST_ALERTS[kind],
       });
       if (!created) throw new Error("Could not create the test alert");
       publishChanged();

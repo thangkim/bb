@@ -114,8 +114,8 @@ function overlay() {
 describe("attention overlay", () => {
   it("stacks open alerts newest first and dismisses or opens them", async () => {
     let open = [
-      alert({ id: "a3", kind: "done", title: "Third", body: "All green" }),
-      alert({ id: "a2", kind: "error", title: "Second" }),
+      alert({ id: "a3", kind: "done", title: "Fixed the build", body: null }),
+      alert({ id: "a2", kind: "error", title: "Failed to deploy" }),
       alert({ id: "a1", kind: "plan", title: "First" }),
       alert({ id: "a0", title: "Zeroth" }),
     ];
@@ -140,20 +140,29 @@ describe("attention overlay", () => {
       .getAllByRole("listitem")
       .map((item) => item.textContent ?? "");
     expect(headlines).toHaveLength(3);
-    expect(headlines[0]).toContain("Done · Third");
-    expect(headlines[1]).toContain("Failed · Second");
-    expect(headlines[2]).toContain("Plan review · First");
+    expect(headlines[0]).toBe("Fixed the buildjust now");
+    expect(headlines[1]).toContain("Failed to deploy");
+    expect(headlines[2]).toContain("First");
+    expect(slot.getByLabelText("Done").getAttribute("class")).toContain(
+      "text-success",
+    );
+    expect(slot.getByLabelText("Failed").getAttribute("class")).toContain(
+      "text-destructive",
+    );
+    expect(slot.getByLabelText("Plan review").getAttribute("class")).toContain(
+      "text-warning",
+    );
 
     fireEvent.click(slot.getByText("+1 more"));
     expect(slot.getAllByRole("listitem")).toHaveLength(4);
 
-    fireEvent.click(slot.getByText("Done · Third"));
+    fireEvent.click(slot.getByText("Fixed the build"));
     expect(slot.inspection.navigateCalls).toContainEqual({
       method: "toThread",
       threadId: "thread-1",
     });
 
-    fireEvent.click(slot.getByLabelText("Dismiss Failed · Second"));
+    fireEvent.click(slot.getByLabelText("Dismiss Failed to deploy"));
     await waitFor(() =>
       expect(slot.getAllByRole("listitem")).toHaveLength(3),
     );
@@ -191,7 +200,7 @@ describe("attention overlay", () => {
       expect.objectContaining({ tag: "bb-attention-a2" }),
     ]);
     expect(FakeNotification.instances[0]?.title).toBe(
-      "Question · Fix the flaky test",
+      "Fix the flaky test",
     );
 
     await act(async () => FakeNotification.instances[1]?.onclick?.());

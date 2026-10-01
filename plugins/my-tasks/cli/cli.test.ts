@@ -1330,6 +1330,74 @@ describe("bb my-tasks CLI", () => {
     await harness.dispose();
   });
 
+  it("lists the tasks and projects one thread is attached to with `bb my-tasks links`", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "tasks",
+      sdk: {
+        threads: {
+          get: async ({ threadId }: { threadId: string }) => ({
+            id: threadId,
+            title: `Worker ${threadId}`,
+            titleFallback: null,
+            status: "idle",
+          }),
+        },
+      },
+    });
+    await plugin(bb);
+    stdout(
+      await harness.runCli([
+        "project",
+        "create",
+        "--name",
+        "Linked work",
+        "--prefix",
+        "LNK",
+      ]),
+    );
+    stdout(
+      await harness.runCli(["create", "--project", "LNK", "--title", "Ship it"]),
+    );
+
+    expect(
+      stdout(await harness.runCli(["links", "--thread", "thr_linked"])),
+    ).toBe("Not attached to any task or project.");
+
+    stdout(
+      await harness.runCli(["attach", "LNK-1", "--thread", "thr_linked"]),
+    );
+    stdout(
+      await harness.runCli([
+        "project",
+        "attach",
+        "LNK",
+        "--thread",
+        "thr_linked",
+      ]),
+    );
+    stdout(
+      await harness.runCli(["attach", "LNK-1", "--thread", "thr_other"]),
+    );
+
+    const linked = JSON.parse(
+      stdout(
+        await harness.runCli(["links", "--thread", "thr_linked", "--json"]),
+      ),
+    );
+    expect(linked.threadId).toBe("thr_linked");
+    expect(linked.tasks.map((task: { key: string }) => task.key)).toEqual([
+      "LNK-1",
+    ]);
+    expect(
+      linked.projects.map((project: { prefix: string }) => project.prefix),
+    ).toEqual(["LNK"]);
+    expect(
+      stdout(await harness.runCli(["links", "--thread", "thr_linked"])),
+    ).toContain("task     LNK-1  Ship it");
+
+    await harness.dispose();
+  });
+
   it("creates a task with --attach files after validating every source path", async () => {
     const directory = await mkdtemp(join(tmpdir(), "bb-tasks-cli-"));
     const notesPath = join(directory, "notes.txt");

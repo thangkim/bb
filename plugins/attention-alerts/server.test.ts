@@ -223,7 +223,7 @@ describe("alert lifecycle", () => {
     await wait(BATCH_MS * 4);
 
     expect(await host.list()).toMatchObject([
-      { kind: "done", title: "Second", body: "All tests pass now." },
+      { kind: "done", title: "Finished “Second”", body: null },
       { kind: "plan", title: "First" },
     ]);
     expect(host.rings()).toHaveLength(1);
@@ -245,7 +245,11 @@ describe("alert lifecycle", () => {
       error: "Provider crashed",
     });
     expect(await host.list()).toMatchObject([
-      { kind: "error", body: "Provider crashed" },
+      {
+        kind: "error",
+        title: "Failed to fix the flaky test",
+        body: "Provider crashed",
+      },
     ]);
 
     await host.harness.behavior.emitThreadEvent("thread.active", {
@@ -313,7 +317,7 @@ describe("alert lifecycle", () => {
       error: null,
     });
     expect(await host.list()).toMatchObject([
-      { kind: "error", body: "The thread stopped on an error" },
+      { kind: "error", title: "Failed to fix the flaky test", body: null },
     ]);
     await host.harness.lifecycle.dispose();
   });

@@ -648,6 +648,15 @@ export const tasksRpcContract = defineRpcContract({
     input: z.object({ projectId: idSchema }).strict(),
     output: z.object({ projectThreads: z.array(projectThreadSchema) }).strict(),
   },
+  listThreadLinks: {
+    input: z.object({ threadId: z.string().startsWith("thr_") }).strict(),
+    output: z
+      .object({
+        tasks: z.array(taskSchema),
+        projects: z.array(projectSchema),
+      })
+      .strict(),
+  },
   listTaskPullRequests: {
     input: z.object({ taskId: idSchema }).strict(),
     output: z

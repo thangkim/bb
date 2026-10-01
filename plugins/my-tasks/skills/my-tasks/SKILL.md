@@ -98,6 +98,10 @@ For task dispatch and execution presets, read
    bb my-tasks detach ABC-12 --thread thr_dead_predecessor
    ```
 
+   `bb my-tasks links` lists the tasks and projects the current thread is
+   attached to. People attach from a thread's menu with **Attach to My
+   Tasks…**.
+
 ## Link tasks in responses
 
 When your answer refers the user to a task — including a task you just

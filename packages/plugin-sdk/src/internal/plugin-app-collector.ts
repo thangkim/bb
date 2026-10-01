@@ -27,6 +27,7 @@ import type {
   PluginSidebarFooterActionRegistration,
   ExperimentalSidebarNavigationRegistration,
   ExperimentalSidebarHeaderRegistration,
+  ExperimentalThreadMenuActionRegistration,
   PluginSourceCodeRendererRegistration,
   PluginThreadHeaderActionRegistration,
   ExperimentalPluginBrowserToolbarActionRegistration,
@@ -357,6 +358,7 @@ export interface CollectedPluginAppRegistrations {
   diffRenderers: PluginDiffRendererRegistration[];
   messageDirectives: PluginMessageDirectiveRegistration[];
   messageActions: PluginMessageActionRegistration[];
+  experimentalThreadMenuActions: ExperimentalThreadMenuActionRegistration[];
   commandPaletteActions: CollectedPluginCommandRegistration[];
   providerIcons: CollectedPluginProviderIconRegistration[];
   icons: ExperimentalIconRegistration[];
@@ -483,6 +485,7 @@ export function collectPluginAppRegistrations(
     diffRenderers: [],
     messageDirectives: [],
     messageActions: [],
+    experimentalThreadMenuActions: [],
     commandPaletteActions: [],
     providerIcons: [],
     icons: [],
@@ -512,6 +515,7 @@ export function collectPluginAppRegistrations(
     diffRenderer: new Set<string>(),
     messageDirective: new Set<string>(),
     messageAction: new Set<string>(),
+    threadMenuAction: new Set<string>(),
     command: new Set<string>(),
     providerIcon: new Set<string>(),
     timelineRenderer: new Set<string>(),
@@ -847,6 +851,24 @@ export function collectPluginAppRegistrations(
           throw new Error(`${kind}: "run" must be a function`);
         }
         collected.messageActions.push({
+          id,
+          title: requireNonEmptyString(kind, "title", registration.title),
+          ...(registration.icon !== undefined
+            ? {
+                icon: requireNonEmptyString(kind, "icon", registration.icon),
+              }
+            : {}),
+          run: registration.run,
+        });
+      },
+      experimental_threadMenuAction(registration) {
+        const kind = "slots.experimental_threadMenuAction";
+        const id = requireSlotId(kind, registration?.id);
+        requireUniqueId(kind, seenIds.threadMenuAction, id);
+        if (typeof registration.run !== "function") {
+          throw new Error(`${kind}: "run" must be a function`);
+        }
+        collected.experimentalThreadMenuActions.push({
           id,
           title: requireNonEmptyString(kind, "title", registration.title),
           ...(registration.icon !== undefined

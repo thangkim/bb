@@ -1832,6 +1832,47 @@ export interface PluginMessageActionRegistration {
   run(context: PluginMessageActionContext): void | Promise<void>;
 }
 
+/** Context handed to an `experimental_threadMenuAction`'s `run`. */
+export interface ExperimentalThreadMenuActionContext {
+  /** The thread whose menu surfaced the action. */
+  threadId: string;
+  /** The bb project the thread belongs to. */
+  projectId: string;
+}
+
+/**
+ * An entry in every thread's actions menu: the sidebar row's context menu
+ * and "…" button, and the thread header's menu. Host-rendered chrome — the
+ * plugin supplies title, icon hint, and `run` behavior only. A plugin that
+ * needs a picker opens its own UI from `run`, typically an
+ * `experimental_appOverlay` dialog.
+ */
+export interface ExperimentalThreadMenuActionRegistration {
+  /** Unique within the plugin; letters, digits, `-`, `_`. */
+  id: string;
+  /** Menu label for the action. */
+  title: string;
+  icon?: BbIconName;
+  /**
+   * Runs after the menu closes. Errors (sync or async) are contained and
+   * logged; they never break the menu.
+   */
+  run(context: ExperimentalThreadMenuActionContext): void | Promise<void>;
+}
+
+/**
+ * One registered `experimental_threadMenuAction`, bound for a plugin that
+ * renders its own thread menu (see `experimental_useThreadMenuActions`).
+ */
+export interface ExperimentalThreadMenuAction {
+  /** `<pluginId>:<id>`; stable while the registering plugin is loaded. */
+  key: string;
+  title: string;
+  icon?: BbIconName;
+  /** Runs the registration with the host's error containment. */
+  run(context: ExperimentalThreadMenuActionContext): void;
+}
+
 /** Current context for palette and keyboard command invocations. */
 export interface PluginCommandContext {
   /** The thread in view, or null on a surface without one. */
@@ -2155,6 +2196,14 @@ export interface PluginAppSlots {
   experimental_diffRenderer(registration: PluginDiffRendererRegistration): void;
   messageDirective(registration: PluginMessageDirectiveRegistration): void;
   messageAction(registration: PluginMessageActionRegistration): void;
+  /**
+   * Add an entry to every thread's actions menu (see
+   * {@link ExperimentalThreadMenuActionRegistration}). Experimental: see
+   * docs/api_to_audit.md.
+   */
+  experimental_threadMenuAction(
+    registration: ExperimentalThreadMenuActionRegistration,
+  ): void;
   /**
    * @deprecated Use `app.commands.register` with the same registration.
    * Both entry points share the same command registry and ID namespace.
@@ -3349,6 +3398,14 @@ export interface PluginSdkApp {
    * docs/api_to_audit.md.
    */
   experimental_useSidebarThreadActions(): PluginSidebarThreadActions;
+  /**
+   * Every plugin's `experimental_threadMenuAction` registrations, in plugin
+   * load order, for a plugin that renders its own thread menu. Render them
+   * after the built-in items and call `run` once the menu has closed. The
+   * array keeps its identity until a plugin registers or unregisters.
+   * Experimental: see docs/api_to_audit.md.
+   */
+  experimental_useThreadMenuActions(): readonly ExperimentalThreadMenuAction[];
   /**
    * The pull request for one thread's branch (see
    * {@link PluginSidebarThreadPullRequestState}).

@@ -85,6 +85,18 @@ openWorkspaceFile }` — register a leaf
   `useBbNavigate().openThreadPanel`. Errors from `run` (sync or
   async) are contained and
   logged, never breaking the timeline.
+- `experimental_threadMenuAction` → an entry in every thread's actions menu:
+  the sidebar row's context menu and "…" button, and the thread header's
+  menu. Host-rendered chrome, no plugin component — registration:
+  `{ id, title, icon?, run }`. Selecting it closes the menu, then calls
+  `run(context)` with `{ threadId, projectId }` (`projectId` is the bb
+  project the thread belongs to). Plugin entries render after Rename, in
+  plugin load order. For a picker, open your own UI from `run`, typically an
+  `experimental_appOverlay` dialog driven by a module-level store. Errors
+  from `run` (sync or async) are contained and logged. Reference
+  implementation: `plugins/my-tasks` ("Attach to My Tasks…"). A plugin that
+  replaces the thread list renders these entries in its own menu with
+  `experimental_useThreadMenuActions()`.
 - `app.commands.register` → a row in bb's quick palette (Mod+Shift+P), listed
   under "Plugins" beside bb's own commands. Host-rendered chrome, no plugin
   component — registration: `{ id, title, defaultShortcut?, isAvailable?, run }`. Both callbacks

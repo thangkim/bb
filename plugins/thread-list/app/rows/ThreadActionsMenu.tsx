@@ -28,6 +28,7 @@ import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport
 import { cn } from "@/lib/utils";
 import {
   experimental_useSidebarThreadActions,
+  experimental_useThreadMenuActions,
   useSdk,
 } from "@get-bb/plugin-sdk/app";
 import { ActionMenuItem, ActionMenuSeparator } from "../ui/action-menu-items.js";
@@ -204,6 +205,7 @@ function ThreadActionsMenuItems({
   surface,
 }: ThreadActionsMenuItemsProps) {
   const actions = experimental_useSidebarThreadActions();
+  const pluginActions = experimental_useThreadMenuActions();
   const unarchiveThread = useUnarchiveThread();
   const isCompactViewport = useIsCompactViewport();
   const isDrawer = surface === "dropdown" && isCompactViewport;
@@ -303,6 +305,20 @@ function ThreadActionsMenuItems({
       >
         Rename
       </ActionMenuItem>
+      {pluginActions.map((action) => (
+        <ActionMenuItem
+          key={action.key}
+          surface={surface}
+          icon={action.icon ?? "Zap"}
+          onSelect={() => {
+            window.setTimeout(() => {
+              action.run({ threadId: thread.id, projectId: thread.projectId });
+            }, 0);
+          }}
+        >
+          {action.title}
+        </ActionMenuItem>
+      ))}
       {showSeparators ? <ActionMenuSeparator surface={surface} /> : null}
       <ActionMenuItem
         surface={surface}

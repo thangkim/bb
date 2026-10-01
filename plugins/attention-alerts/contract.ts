@@ -19,7 +19,7 @@ export const alertSchema = z
     interactionId: z.string().min(1).nullable(),
     kind: alertKindSchema,
     title: z.string(),
-    body: z.string(),
+    body: z.string().nullable(),
     createdAt: z.number().int().nonnegative(),
   })
   .strict();

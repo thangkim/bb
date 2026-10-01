@@ -883,6 +883,12 @@ export function registerHandlers(
         projectThreads: store.tasks.listProjectThreads(input.projectId),
       };
     },
+    listThreadLinks(input) {
+      return {
+        tasks: apiTasks(store, store.tasks.listTasksByThreadId(input.threadId)),
+        projects: store.tasks.listProjectsByThreadId(input.threadId),
+      };
+    },
     listTaskRowMeta(input) {
       const meta = store.tasks.taskRowMeta(input.taskIds);
       return {

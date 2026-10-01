@@ -452,6 +452,9 @@ the sidebar.
 **Your row, your menu.** This API ships no components. Build your own context
 menu from `experimental_useSidebarThreadActions` — it exposes everything bb's
 own menu does, including `requestDelete`, which opens bb's confirmation.
+Render other plugins' `experimental_threadMenuAction` entries too:
+`experimental_useThreadMenuActions()` returns `{ key, title, icon?, run }`
+items; call `run({ threadId, projectId })` after your menu closes.
 
 **Keyboard support is a DOM contract.** bb's thread shortcuts find rows by
 query selector, not by React state. Put both attributes on each row's anchor or

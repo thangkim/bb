@@ -1634,6 +1634,32 @@ export function createTasksStore(db: PluginDatabase) {
       .map(taskThreadFromRow);
   }
 
+  function listTasksByThreadId(threadId: string): Task[] {
+    return db
+      .prepare<[string], TaskRow>(
+        `${taskSelect}
+        JOIN task_threads tt ON tt.task_id = t.id
+        WHERE tt.thread_id = ?
+        ORDER BY tt.attached_at DESC, t.id`,
+      )
+      .all(threadId)
+      .map(taskFromRow);
+  }
+
+  function listProjectsByThreadId(threadId: string): Project[] {
+    return db
+      .prepare<[string], ProjectRow>(
+        `
+        SELECT p.* FROM projects p
+        JOIN project_threads pt ON pt.project_id = p.id
+        WHERE pt.thread_id = ?
+        ORDER BY pt.attached_at DESC, p.id
+      `,
+      )
+      .all(threadId)
+      .map(projectFromRow);
+  }
+
   function requireTaskThread(id: string): TaskThread {
     const thread = getTaskThread(id);
     if (!thread) throw new Error(`Task thread not found: ${id}`);
@@ -1985,6 +2011,7 @@ export function createTasksStore(db: PluginDatabase) {
     getTaskThread,
     getTaskThreadByThreadId,
     listTaskThreadsByThreadId,
+    listTasksByThreadId,
     listTaskThreads,
     taskRowMeta,
     updateTaskThreadStatus,
@@ -1992,6 +2019,7 @@ export function createTasksStore(db: PluginDatabase) {
     upsertProjectThread,
     getProjectThreadByThreadId,
     listProjectThreads,
+    listProjectsByThreadId,
     deleteProjectThread,
     createPreset,
     getPreset,

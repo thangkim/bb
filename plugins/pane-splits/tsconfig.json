@@ -10,5 +10,12 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["server.ts", "app.tsx", "app.test.tsx", "vitest.config.ts"]
+  "include": [
+    "server.ts",
+    "app.tsx",
+    "app.test.tsx",
+    "closed-panes.ts",
+    "closed-panes.test.ts",
+    "vitest.config.ts"
+  ]
 }

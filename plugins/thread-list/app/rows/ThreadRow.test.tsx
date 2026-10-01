@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { getDefaultStore } from "jotai";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type {
+  ExperimentalThreadMenuAction,
   PluginSidebarProject,
   PluginSidebarSplitLayout,
   PluginSidebarThread,
@@ -110,6 +111,7 @@ interface RenderThreadRowArgs extends Omit<HarnessProps, "thread"> {
   projects?: PluginSidebarProject[];
   providers?: PluginProvidersState["providers"];
   sdk?: PluginSdkTestFakes;
+  threadMenuActions?: readonly ExperimentalThreadMenuAction[];
 }
 
 function renderThreadRow({
@@ -121,6 +123,7 @@ function renderThreadRow({
   projects = [],
   providers = [],
   sdk,
+  threadMenuActions,
   ...harness
 }: RenderThreadRowArgs = {}): RenderedSlot & {
   rerenderThreadRow(nextThread: PluginSidebarThread): void;
@@ -143,6 +146,7 @@ function renderThreadRow({
         : {},
       sidebarSplitLayout: splitLayout,
       sdk,
+      experimental_threadMenuActions: threadMenuActions,
     },
   );
   return Object.assign(slot, {
@@ -350,6 +354,26 @@ describe("ThreadRow", () => {
       expect(slot.inspection.sidebarActionCalls).toEqual([
         { method: "requestDelete", threadId: "thr_test" },
       ]),
+    );
+  });
+
+  it("runs plugin thread menu actions with the thread and its project", async () => {
+    const run = vi.fn();
+    renderThreadRow({
+      thread: createThread({ projectId: "proj_menu" }),
+      threadMenuActions: [
+        { key: "my-tasks:attach", title: "Attach to My Tasks…", run },
+      ],
+    });
+    openActionsMenu();
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Attach to My Tasks…" }),
+    );
+    await waitFor(() =>
+      expect(run).toHaveBeenCalledWith({
+        threadId: "thr_test",
+        projectId: "proj_menu",
+      }),
     );
   });
 

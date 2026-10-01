@@ -23,6 +23,13 @@ desktop dev run launched from an existing bb session still targets the current
 checkout. Set `BB_DESKTOP_USER_DATA_DIR` to override only Electron's user-data
 directory.
 
+On macOS, set `BB_DESKTOP_ELECTRON_APP` (for example
+`~/Applications/bb dev.app`) to launch Electron from a fixed app path instead
+of the checkout's `node_modules`. The launcher copies the installed Electron
+bundle there on first run and again whenever its `Info.plist` changes (an
+Electron upgrade), so per-app tools such as Logi Options+ that key custom apps
+by path keep matching across checkouts, worktrees, and upgrades.
+
 The launcher probes the checkout's Vite app port at startup and adapts:
 
 - **`pnpm dev` is already running** (Vite reachable): the shell loads the Vite

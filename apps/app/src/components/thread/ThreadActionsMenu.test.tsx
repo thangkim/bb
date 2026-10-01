@@ -26,6 +26,11 @@ import {
   ThreadSectionMoveProvider,
 } from "./ThreadSectionMoveProvider";
 import { useSidebarRename } from "../sidebar/SidebarInlineRename";
+import {
+  removePluginSlotRegistrations,
+  setPluginSlotRegistrations,
+} from "@/lib/plugin-slots";
+import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
 
 const moveThreadToSection = vi.hoisted(() => vi.fn());
 const copyToClipboardWithToast = vi.hoisted(() => vi.fn());
@@ -134,6 +139,7 @@ async function openMoveSubmenu() {
 
 afterEach(() => {
   cleanup();
+  removePluginSlotRegistrations("my-tasks");
   moveThreadToSection.mockReset();
   copyToClipboardWithToast.mockReset();
   for (const action of Object.values(threadActions)) {
@@ -200,6 +206,70 @@ describe("ThreadActionsMenu", () => {
         errorMessage: "Failed to copy thread link",
       },
     );
+  });
+});
+
+describe("ThreadActionsMenu plugin actions", () => {
+  it("runs a plugin thread menu action with the thread context after the menu closes", async () => {
+    const run = vi.fn();
+    setPluginSlotRegistrations(
+      "my-tasks",
+      makePluginRegistrationSet({
+        experimentalThreadMenuActions: [
+          { id: "attach", title: "Attach to My Tasks…", run },
+        ],
+      }),
+    );
+    renderWide(<ThreadActionsMenu thread={thread} />);
+
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Thread actions" }),
+      { button: 0 },
+    );
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Attach to My Tasks…" }),
+    );
+
+    expect(run).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(run).toHaveBeenCalledWith({
+        threadId: thread.id,
+        projectId: thread.projectId,
+      }),
+    );
+  });
+
+  it("contains a rejecting plugin action and keeps the menu usable", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    setPluginSlotRegistrations(
+      "my-tasks",
+      makePluginRegistrationSet({
+        experimentalThreadMenuActions: [
+          {
+            id: "attach",
+            title: "Attach to My Tasks…",
+            run: () => Promise.reject(new Error("offline")),
+          },
+        ],
+      }),
+    );
+    renderWide(<ThreadActionsMenu thread={thread} />);
+    const trigger = screen.getByRole("button", { name: "Thread actions" });
+
+    fireEvent.pointerDown(trigger, { button: 0 });
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Attach to My Tasks…" }),
+    );
+    await waitFor(() =>
+      expect(warn).toHaveBeenCalledWith(
+        '[plugin:my-tasks] threadMenuAction "attach" failed: offline',
+      ),
+    );
+    fireEvent.pointerDown(trigger, { button: 0 });
+    expect(
+      screen.getByRole("menuitem", { name: "Copy thread link" }),
+    ).toBeDefined();
+    warn.mockRestore();
   });
 });
 

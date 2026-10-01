@@ -3,14 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Keyboard commands that split a new-thread composer off the focused pane.",
+  "description": "Keyboard commands that split a new-thread composer off the focused pane or reopen the last closed thread pane.",
   "engines": {
     "bb": ">=0.0",
     "bbPluginSdk": ">=0.5.27"
   },
   "bb": {
     "name": "Pane Splits",
-    "description": "Open new threads beside the focused pane instead of replacing it, or split one off with Alt+A/D/W/S.",
+    "description": "Open new threads beside the focused pane instead of replacing it, split one off with Alt+A/D/W/S, or reopen a closed thread with Mod+Alt+T.",
     "branding": {
       "icon": "Columns2"
     },

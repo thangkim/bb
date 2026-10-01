@@ -915,6 +915,53 @@ describe("tasks storage", () => {
     }
   });
 
+  it("looks up the tasks and projects one thread is attached to", async () => {
+    const { harness, store } = setup();
+    try {
+      const project = createProject(store, "LNK");
+      const other = createProject(store, "OTH");
+      const linked = store.createTask({
+        projectId: project.id,
+        title: "Linked task",
+      });
+      const unlinked = store.createTask({
+        projectId: other.id,
+        title: "Different thread",
+      });
+      store.upsertTaskThread({
+        taskId: linked.id,
+        threadId: "thr_shared",
+        presetName: "Attached",
+        title: "Shared",
+        liveStatus: "idle",
+      });
+      store.upsertTaskThread({
+        taskId: unlinked.id,
+        threadId: "thr_elsewhere",
+        presetName: "Attached",
+        title: "Elsewhere",
+        liveStatus: "idle",
+      });
+      store.upsertProjectThread({
+        projectId: other.id,
+        threadId: "thr_shared",
+        title: "Shared",
+      });
+
+      const tasks = store.listTasksByThreadId("thr_shared");
+      expect(tasks.map((task) => [task.id, task.key])).toEqual([
+        [linked.id, "LNK-1"],
+      ]);
+      expect(
+        store.listProjectsByThreadId("thr_shared").map((item) => item.id),
+      ).toEqual([other.id]);
+      expect(store.listTasksByThreadId("thr_none")).toEqual([]);
+      expect(store.listProjectsByThreadId("thr_none")).toEqual([]);
+    } finally {
+      await harness.dispose();
+    }
+  });
+
   it("attaches, upserts, lists, and detaches project threads", async () => {
     const { harness, store } = setup();
     try {
