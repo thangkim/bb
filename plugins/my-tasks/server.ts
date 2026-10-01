@@ -7,6 +7,7 @@ import { registerTasksCli } from "./cli";
 import { registerDelegation } from "./delegate";
 import { registerLifecycle } from "./lifecycle";
 import { registerMentions } from "./mentions";
+import { registerProjectMentions } from "./mentions/project-mentions";
 
 const TASKS_PLUGIN_NAME = "My Tasks";
 export const TASKS_PLUGIN_VERSION = "0.1.0";
@@ -31,6 +32,7 @@ export default async function plugin(bb: BbPluginApi) {
   registerTasksCli(bb, store, statusPayload());
   registerDelegation(bb, store);
   registerMentions(bb, store);
+  registerProjectMentions(bb, store);
   await registerLifecycle(bb, store);
 
   bb.rpc.register(tasksRpcContract, {

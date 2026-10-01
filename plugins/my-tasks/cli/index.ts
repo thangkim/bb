@@ -732,6 +732,9 @@ export function registerTasksCli(
             ["show", "Show one tracker project"],
             ["update", "Change a project's status, priority, due date, or details"],
             ["move", "Move a project to a status column and position"],
+            ["attach", "Attach an existing agent thread to a project"],
+            ["detach", "Detach an agent thread from a project"],
+            ["threads", "List agent threads attached to a project"],
           ],
         ),
         "project create": cliCommand({
@@ -1106,6 +1109,134 @@ export function registerTasksCli(
               return input.options.json
                 ? JSON.stringify({ project: moved })
                 : `Moved project ${moved.prefix} to ${moved.status}`;
+            });
+          },
+        }),
+
+        "project attach": cliCommand({
+          summary: "Attach an existing agent thread to a project",
+          positionals: [
+            {
+              name: "prefix-or-id",
+              description: "Tracker project prefix such as ABC, or its ULID",
+              required: true,
+            },
+          ],
+          options: {
+            thread: {
+              type: "string",
+              placeholder: "thread-id",
+              aliases: ["thread-id"],
+              description:
+                "Thread to attach; defaults to BB_THREAD_ID or the invoking thread",
+            },
+            json: JSON_OPTION,
+          },
+          run(input, ctx) {
+            return guard(async () => {
+              const project = await resolveProject(
+                domain,
+                input.positionals["prefix-or-id"],
+              );
+              const threadId = resolveInvokingThreadId(
+                input.options.thread,
+                ctx,
+              );
+              const result =
+                delegationRpcContract.projectThreadsAttach.output.parse(
+                  await delegationHandlers(bb, store).projectThreadsAttach(
+                    delegationRpcContract.projectThreadsAttach.input.parse({
+                      projectId: project.id,
+                      threadId,
+                    }),
+                  ),
+                );
+              return input.options.json
+                ? JSON.stringify({ project, ...result })
+                : `Attached ${result.threadId} to ${project.prefix}`;
+            });
+          },
+        }),
+
+        "project detach": cliCommand({
+          summary: "Detach an agent thread from a project",
+          positionals: [
+            {
+              name: "prefix-or-id",
+              description: "Tracker project prefix such as ABC, or its ULID",
+              required: true,
+            },
+          ],
+          options: {
+            thread: {
+              type: "string",
+              placeholder: "thread-id",
+              aliases: ["thread-id"],
+              description:
+                "Thread to detach; defaults to BB_THREAD_ID or the invoking thread",
+            },
+            json: JSON_OPTION,
+          },
+          run(input, ctx) {
+            return guard(async () => {
+              const project = await resolveProject(
+                domain,
+                input.positionals["prefix-or-id"],
+              );
+              const threadId = resolveInvokingThreadId(
+                input.options.thread,
+                ctx,
+              );
+              const result =
+                delegationRpcContract.projectThreadsDetach.output.parse(
+                  await delegationHandlers(bb, store).projectThreadsDetach(
+                    delegationRpcContract.projectThreadsDetach.input.parse({
+                      projectId: project.id,
+                      threadId,
+                    }),
+                  ),
+                );
+              return input.options.json
+                ? JSON.stringify({ project, ...result })
+                : `Detached ${result.threadId} from ${project.prefix}`;
+            });
+          },
+        }),
+
+        "project threads": cliCommand({
+          summary: "List agent threads attached to a project",
+          positionals: [
+            {
+              name: "prefix-or-id",
+              description: "Tracker project prefix such as ABC, or its ULID",
+              required: true,
+            },
+          ],
+          options: { json: JSON_OPTION },
+          run(input) {
+            return guard(async () => {
+              const project = await resolveProject(
+                domain,
+                input.positionals["prefix-or-id"],
+              );
+              const result = tasksRpcContract.listProjectThreads.output.parse(
+                await domain.listProjectThreads(
+                  tasksRpcContract.listProjectThreads.input.parse({
+                    projectId: project.id,
+                  }),
+                ),
+              );
+              return input.options.json
+                ? JSON.stringify({ project, projectThreads: result.projectThreads })
+                : table(
+                    ["THREAD", "TITLE", "ATTACHED"],
+                    result.projectThreads.map((thread) => [
+                      thread.threadId,
+                      thread.title,
+                      thread.attachedAt,
+                    ]),
+                    "No attached threads.",
+                  );
             });
           },
         }),

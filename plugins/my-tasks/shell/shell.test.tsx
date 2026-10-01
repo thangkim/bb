@@ -795,7 +795,7 @@ describe("tasks app shell", () => {
     const title = await slot.findByRole("textbox", { name: "Project name" });
     expect(title.textContent).toBe("Tasks Plugin");
     await slot.findByText("TSK-2");
-    expect(slot.getAllByText("1/3").length).toBeGreaterThan(0);
+    expect(slot.getAllByText("33%").length).toBeGreaterThan(0);
 
     fireEvent.click(
       slot.getByRole("checkbox", { name: "Mark TSK-2 done" }),

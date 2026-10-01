@@ -84,6 +84,7 @@ machine; pass `--machine <id-or-name>` to target another enrolled machine.
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `bb my-tasks status`                              | Show the installed My Tasks plugin name and version.                                                                                       |
 | `bb my-tasks project create\|list\|show\|update`  | Manage projects: status, priority, due date, description, folder, color, prefix, and bb-project link. `list`/`show` report progress.      |
+| `bb my-tasks project attach\|detach\|threads <prefix>` | Attach the current thread (or `--thread <id>`) to a project, detach it, or list the threads attached at the project level.            |
 | `bb my-tasks project move <prefix>`               | Move a project to a status column, optionally `--after`/`--before` another project in that column.                                         |
 | `bb my-tasks folder create\|list\|update\|delete` | Organize tracker projects into nested folders. Deleting a folder moves its projects and subfolders to the top level; no tasks are deleted. |
 | `bb my-tasks create`                              | Create a task with description, priority, labels, due date, and file attachments (repeatable `--attach <path>`).                          |
@@ -144,7 +145,8 @@ newest first.
 
 ## Task mentions
 
-Type `@` in the bb composer and select **Tasks** to search by task key or title.
+Type `@` in the bb composer and select **Tasks** to search by task key or title. Select **My Tasks Projects** instead to send a whole project: its status,
+priority, due date, description, task checklist, and project-level threads.
 Sending the mention gives the agent the task's description, done state,
 priority, labels, the project's other tasks, attachments, recent comments, attached threads, and CLI
 action contract as context. Tasks linked to the current bb project rank first.

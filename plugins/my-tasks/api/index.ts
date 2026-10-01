@@ -878,6 +878,11 @@ export function registerHandlers(
     listTaskThreads(input) {
       return { taskThreads: store.tasks.listTaskThreads(input.taskId) };
     },
+    listProjectThreads(input) {
+      return {
+        projectThreads: store.tasks.listProjectThreads(input.projectId),
+      };
+    },
     listTaskRowMeta(input) {
       const meta = store.tasks.taskRowMeta(input.taskIds);
       return {

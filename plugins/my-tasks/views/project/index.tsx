@@ -31,7 +31,6 @@ import { TaskChecklist, ThreadRow } from "../tasks/checklist.js";
 import { DelayedLoading } from "@/components/ui/delayed-loading";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
 
 const DESCRIPTION_SAVE_DELAY_MS = 800;
 
@@ -206,16 +205,8 @@ function ProjectDetail({
                 onUpdate={(update) => void updateProject(update)}
               />
             </div>
-            <span
-              className={cn(
-                "flex items-center gap-2 text-xs text-subtle-foreground",
-                "ml-auto @[45rem]:ml-0",
-              )}
-            >
+            <span className="flex items-center gap-2 text-xs text-subtle-foreground">
               <ProgressBar done={done} total={total} active={working} />
-              <span className="tabular-nums">
-                {done}/{total}
-              </span>
             </span>
           </div>
 

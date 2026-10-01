@@ -310,6 +310,19 @@ export const TASKS_SCHEMA_MIGRATIONS = [
     CREATE INDEX idx_projects_status_position ON projects(status, position, id);
     CREATE INDEX idx_tasks_project_position ON tasks(project_id, position, id);
   `,
+  `
+    CREATE TABLE IF NOT EXISTS project_threads (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      thread_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      attached_at TEXT NOT NULL,
+      UNIQUE (project_id, thread_id),
+      CHECK (thread_id GLOB 'thr_*')
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_project_threads_thread ON project_threads(thread_id);
+  `,
 ] as const;
 
 export function initializeTasksSchema(db: PluginDatabase): void {

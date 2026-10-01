@@ -107,6 +107,14 @@ export interface TaskRowMeta {
   threads: TaskThread[];
 }
 
+export interface ProjectThread {
+  id: string;
+  projectId: string;
+  threadId: string;
+  title: string;
+  attachedAt: string;
+}
+
 export interface Preset {
   id: string;
   name: string;
@@ -260,6 +268,13 @@ export interface UpsertTaskThreadInput {
   presetName: string;
   title: string;
   liveStatus: TaskThreadLiveStatus;
+}
+
+export interface UpsertProjectThreadInput {
+  id?: string;
+  projectId: string;
+  threadId: string;
+  title: string;
 }
 
 export interface CreatePresetInput {

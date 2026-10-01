@@ -1240,6 +1240,96 @@ describe("bb my-tasks CLI", () => {
     await harness.dispose();
   });
 
+  it("attaches and detaches a thread with `bb my-tasks project attach/detach`", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "tasks",
+      sdk: {
+        threads: {
+          get: async ({ threadId }: { threadId: string }) => ({
+            id: threadId,
+            title: `Worker ${threadId}`,
+            titleFallback: null,
+            status: threadId === "thr_dead_worker" ? "error" : "idle",
+          }),
+        },
+      },
+    });
+    await plugin(bb);
+    stdout(
+      await harness.runCli([
+        "project",
+        "create",
+        "--name",
+        "Project threads",
+        "--prefix",
+        "PTH",
+      ]),
+    );
+
+    expect(stdout(await harness.runCli(["--help"]))).toContain(
+      "bb my-tasks project attach     Attach an existing agent thread to a project",
+    );
+
+    stdout(
+      await harness.runCli([
+        "project",
+        "attach",
+        "PTH",
+        "--thread",
+        "thr_dead_worker",
+      ]),
+    );
+    stdout(
+      await harness.runCli([
+        "project",
+        "attach",
+        "PTH",
+        "--thread",
+        "thr_live_worker",
+      ]),
+    );
+    const listed = JSON.parse(
+      stdout(await harness.runCli(["project", "threads", "PTH", "--json"])),
+    );
+    expect(
+      listed.projectThreads.map(
+        (thread: { threadId: string }) => thread.threadId,
+      ),
+    ).toEqual(["thr_live_worker", "thr_dead_worker"]);
+
+    expect(
+      stdout(
+        await harness.runCli([
+          "project",
+          "detach",
+          "PTH",
+          "--thread",
+          "thr_dead_worker",
+        ]),
+      ),
+    ).toBe("Detached thr_dead_worker from PTH");
+    await expect(
+      harness.runCli([
+        "project",
+        "detach",
+        "PTH",
+        "--thread",
+        "thr_dead_worker",
+      ]),
+    ).resolves.toMatchObject({
+      exitCode: 1,
+      stderr: "Thread thr_dead_worker is not attached to Project threads\n",
+    });
+
+    expect(
+      JSON.parse(
+        stdout(await harness.runCli(["project", "threads", "PTH", "--json"])),
+      ).projectThreads,
+    ).toEqual([expect.objectContaining({ threadId: "thr_live_worker" })]);
+
+    await harness.dispose();
+  });
+
   it("creates a task with --attach files after validating every source path", async () => {
     const directory = await mkdtemp(join(tmpdir(), "bb-tasks-cli-"));
     const notesPath = join(directory, "notes.txt");

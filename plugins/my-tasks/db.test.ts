@@ -915,6 +915,69 @@ describe("tasks storage", () => {
     }
   });
 
+  it("attaches, upserts, lists, and detaches project threads", async () => {
+    const { harness, store } = setup();
+    try {
+      const project = createProject(store, "PRJ");
+      const other = createProject(store, "OPS");
+
+      const attached = store.upsertProjectThread({
+        projectId: project.id,
+        threadId: "thr_worker",
+        title: "Working on it",
+      });
+      expect(attached.projectId).toBe(project.id);
+      expect(attached.threadId).toBe("thr_worker");
+      expect(attached.title).toBe("Working on it");
+
+      const upserted = store.upsertProjectThread({
+        projectId: project.id,
+        threadId: "thr_worker",
+        title: "Renamed thread",
+      });
+      expect(upserted.id).toBe(attached.id);
+      expect(upserted.title).toBe("Renamed thread");
+
+      store.upsertProjectThread({
+        projectId: other.id,
+        threadId: "thr_other",
+        title: "Unrelated project's thread",
+      });
+
+      expect(
+        store.listProjectThreads(project.id).map((thread) => thread.threadId),
+      ).toEqual(["thr_worker"]);
+      expect(
+        store.getProjectThreadByThreadId(project.id, "thr_worker"),
+      ).toEqual(upserted);
+      expect(
+        store.getProjectThreadByThreadId(project.id, "thr_other"),
+      ).toBeUndefined();
+
+      expect(store.deleteProjectThread(upserted.id)).toBe(true);
+      expect(store.listProjectThreads(project.id)).toEqual([]);
+      expect(store.deleteProjectThread(upserted.id)).toBe(false);
+    } finally {
+      await harness.dispose();
+    }
+  });
+
+  it("rejects a project thread whose thread id is not thr_-prefixed", async () => {
+    const { harness, store } = setup();
+    try {
+      const project = createProject(store, "BAD");
+      expect(() =>
+        store.upsertProjectThread({
+          projectId: project.id,
+          threadId: "not-a-thread-id",
+          title: "Invalid",
+        }),
+      ).toThrow();
+    } finally {
+      await harness.dispose();
+    }
+  });
+
   it("finds the latest agent comment by reply time and ignores other activity", async () => {
     const { db, harness, store } = setup();
     try {

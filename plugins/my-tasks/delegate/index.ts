@@ -441,6 +441,41 @@ export function handlers(
       publishTasksChanged(bb, task.id, task.projectId);
       return { threadId: taskThread.threadId };
     },
+
+    async projectThreadsAttach(input) {
+      const project = requireProject(store.tasks, input.projectId);
+      const thread = await bb.sdk.threads.get({ threadId: input.threadId });
+      const title = truncateToWidth(
+        thread.title ?? thread.titleFallback ?? project.name,
+        MAX_DELEGATED_THREAD_TITLE_WIDTH,
+      );
+
+      store.tasks.upsertProjectThread({
+        projectId: project.id,
+        threadId: thread.id,
+        title,
+      });
+
+      publishProjectsChanged(bb, project.id);
+      return { threadId: thread.id };
+    },
+
+    async projectThreadsDetach(input) {
+      const project = requireProject(store.tasks, input.projectId);
+      const projectThread = store.tasks.getProjectThreadByThreadId(
+        project.id,
+        input.threadId,
+      );
+      if (!projectThread) {
+        throw new Error(
+          `Thread ${input.threadId} is not attached to ${project.name}`,
+        );
+      }
+      store.tasks.deleteProjectThread(projectThread.id);
+
+      publishProjectsChanged(bb, project.id);
+      return { threadId: projectThread.threadId };
+    },
   };
 }
 

@@ -139,6 +139,10 @@ each renders its own card.
 - Use `done` only when the task's completion criteria are met.
 - Tasks have no sub-tasks; split larger work into more tasks in the same
   project.
+- Work that spans a whole project rather than one task attaches at the
+  project level: `bb my-tasks project attach ABC` (current thread, or
+  `--thread <id>`), `bb my-tasks project detach ABC`, and
+  `bb my-tasks project threads ABC`.
 - `bb my-tasks move ABC-12 --project XYZ` moves a task to another project and
   gives it a new key there (for example `XYZ-4`); use the new key afterwards.
 - Write one comment per meaningful milestone. Combine related facts into a

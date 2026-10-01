@@ -87,7 +87,7 @@ function attachmentManifest(
     .all(taskId, taskId);
 }
 
-function formatProjectTasks(tasks: readonly Task[]): string {
+export function formatProjectTasks(tasks: readonly Task[]): string {
   if (tasks.length === 0) return "None.";
   return tasks
     .map(

@@ -34,6 +34,7 @@ import type {
   Preset,
   PresetEnvironmentKind,
   Project,
+  ProjectThread,
   Task,
   TaskLabel,
   TaskRowMeta,
@@ -46,6 +47,7 @@ import type {
   UpdatePresetInput,
   UpdateProjectInput,
   UpdateTaskInput,
+  UpsertProjectThreadInput,
   UpsertTaskThreadInput,
 } from "./types";
 
@@ -153,6 +155,14 @@ interface TaskThreadRow {
   live_status: TaskThreadLiveStatus;
   attached_at: string;
   updated_at: string;
+}
+
+interface ProjectThreadRow {
+  id: string;
+  project_id: string;
+  thread_id: string;
+  title: string;
+  attached_at: string;
 }
 
 interface PresetRow {
@@ -431,6 +441,16 @@ function taskThreadFromRow(row: TaskThreadRow): TaskThread {
     liveStatus: row.live_status,
     attachedAt: row.attached_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function projectThreadFromRow(row: ProjectThreadRow): ProjectThread {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    threadId: row.thread_id,
+    title: row.title,
+    attachedAt: row.attached_at,
   };
 }
 
@@ -1731,6 +1751,64 @@ export function createTasksStore(db: PluginDatabase) {
     );
   }
 
+  function getProjectThreadByThreadId(
+    projectId: string,
+    threadId: string,
+  ): ProjectThread | undefined {
+    const row = db
+      .prepare<[string, string], ProjectThreadRow>(
+        `
+        SELECT * FROM project_threads WHERE project_id = ? AND thread_id = ?
+      `,
+      )
+      .get(projectId, threadId);
+    return row ? projectThreadFromRow(row) : undefined;
+  }
+
+  function upsertProjectThread(input: UpsertProjectThreadInput): ProjectThread {
+    requireProject(input.projectId);
+    const id = createOrValidateUlid(input.id);
+    const timestamp = nowIso();
+    db.prepare<[string, string, string, string, string]>(
+      `
+      INSERT INTO project_threads (
+        id, project_id, thread_id, title, attached_at
+      ) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (project_id, thread_id) DO UPDATE SET
+        title = excluded.title
+    `,
+    ).run(
+      id,
+      input.projectId,
+      validateThreadId(input.threadId),
+      requireNonEmpty(input.title, "Project thread title"),
+      timestamp,
+    );
+    const thread = getProjectThreadByThreadId(input.projectId, input.threadId);
+    if (!thread) throw new Error("Project thread upsert failed");
+    return thread;
+  }
+
+  function listProjectThreads(projectId: string): ProjectThread[] {
+    return db
+      .prepare<[string], ProjectThreadRow>(
+        `
+        SELECT * FROM project_threads
+        WHERE project_id = ?
+        ORDER BY attached_at DESC, id DESC
+      `,
+      )
+      .all(projectId)
+      .map(projectThreadFromRow);
+  }
+
+  function deleteProjectThread(id: string): boolean {
+    return (
+      db.prepare<[string]>("DELETE FROM project_threads WHERE id = ?").run(id)
+        .changes > 0
+    );
+  }
+
   function getPreset(id: string): Preset | undefined {
     const row = getPresetRow.get(id);
     return row ? presetFromRow(row) : undefined;
@@ -1911,6 +1989,10 @@ export function createTasksStore(db: PluginDatabase) {
     taskRowMeta,
     updateTaskThreadStatus,
     deleteTaskThread,
+    upsertProjectThread,
+    getProjectThreadByThreadId,
+    listProjectThreads,
+    deleteProjectThread,
     createPreset,
     getPreset,
     listPresets,
