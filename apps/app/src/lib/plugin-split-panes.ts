@@ -44,7 +44,14 @@ function composeSeedFor(
   queryClient: QueryClient,
   store: JotaiStore,
 ): ComposeSeed {
-  if (options.projectId !== undefined) return { projectId: options.projectId };
+  if (options.projectId !== undefined) {
+    return {
+      projectId: options.projectId,
+      ...(options.environmentId === undefined
+        ? {}
+        : { environmentId: options.environmentId }),
+    };
+  }
   if (focused?.kind === "thread") {
     const environmentId = queryClient.getQueryData<ThreadResponse>(
       threadQueryKey(focused.threadId),
@@ -82,10 +89,19 @@ export function useSplitPanes(): ExperimentalSplitPanes {
         reconcileLayoutForContent(null, routeContent);
       const focused = findPane(layout.root, layout.focusedPaneId)?.content;
       const seed = composeSeedFor(options, focused, queryClient, store);
+      const focusedComposerMatches =
+        focused?.kind === "new-thread" &&
+        (options.projectId === undefined ||
+          store.get(
+            rootComposeProjectIdAtomFor(
+              focused.composeId,
+              focused.seed?.projectId,
+            ),
+          ) === options.projectId);
       const reused =
         options.reuseComposer !== true
           ? undefined
-          : focused?.kind === "new-thread"
+          : focusedComposerMatches
             ? layout.focusedPaneId
             : listPanes(layout.root).find(
                 ({ content }) =>
@@ -114,9 +130,18 @@ export function useSplitPanes(): ExperimentalSplitPanes {
       if (store.get(maximizedPaneIdAtom) !== null) {
         store.set(maximizedPaneIdAtom, next.focusedPaneId);
       }
+      const state = {
+        ...(options.focusPrompt === false ? {} : { focusPrompt: true }),
+        ...(options.sectionId === undefined
+          ? {}
+          : { sectionId: options.sectionId }),
+        ...(options.environmentId === undefined
+          ? {}
+          : { reuseEnvironmentId: options.environmentId }),
+      };
       void navigate(getRootComposeRoutePath(), {
         replace: result === "focused",
-        state: options.focusPrompt === false ? null : { focusPrompt: true },
+        state: Object.keys(state).length > 0 ? state : null,
       });
       return result;
     },

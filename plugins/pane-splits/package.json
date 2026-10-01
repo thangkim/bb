@@ -10,7 +10,7 @@
   },
   "bb": {
     "name": "Pane Splits",
-    "description": "Split a new thread off the focused pane with Alt+A/D/W/S, or open one beside it.",
+    "description": "Open new threads beside the focused pane instead of replacing it, or split one off with Alt+A/D/W/S.",
     "branding": {
       "icon": "Columns2"
     },

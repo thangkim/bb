@@ -357,6 +357,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Own the widget's chrome, position, visibility, and responsive behavior",
           "Coexist with other overlays while crashes remain isolated to the overlay that failed",
           "Open a new-thread composer, with its own project and draft, in a pane beside the focused one with experimental_useSplitPanes, for example from a command the overlay listens for",
+          "Take over bb's own New thread buttons and command with experimental_useNewThreadHandler, for example to open them in a split pane",
         ],
         apiSymbols: [
           "ExperimentalAppOverlayRegistration",
@@ -365,6 +366,9 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "ExperimentalSplitPanes",
           "ExperimentalSplitPaneNewThreadOptions",
           "ExperimentalSplitPaneOpenResult",
+          "experimental_useNewThreadHandler",
+          "ExperimentalNewThreadHandler",
+          "ExperimentalNewThreadRequest",
         ],
         experimental: true,
       },

@@ -244,6 +244,24 @@ describe("useSplitPanes", () => {
       expect(composers(store)).toHaveLength(1);
     });
 
+    it("keeps a focused composer only when it is on the requested project", () => {
+      const { store, open } = renderSplitPanes({ layout: singlePane() });
+      open({ side: "right" });
+
+      expect(
+        open({ side: "right", projectId: "proj_open", reuseComposer: true }),
+      ).toBe("focused");
+      expect(
+        open({ side: "right", projectId: "proj_other", reuseComposer: true }),
+      ).toBe("opened");
+
+      expect(focusedContent(store)).toMatchObject({
+        kind: "new-thread",
+        seed: { projectId: "proj_other" },
+      });
+      expect(composers(store)).toHaveLength(2);
+    });
+
     it("opens a composer when none matches the focused thread", () => {
       const withDefault = splitPane(singlePane(), "pane-1", "right", {
         kind: "new-thread",
@@ -255,6 +273,29 @@ describe("useSplitPanes", () => {
       expect(open({ side: "right", reuseComposer: true })).toBe("opened");
 
       expect(composers(store)).toHaveLength(2);
+    });
+  });
+
+  it("hands the section and environment to the new composer", () => {
+    const { store, result, open } = renderSplitPanes({ layout: singlePane() });
+
+    expect(
+      open({
+        side: "right",
+        projectId: "proj_other",
+        sectionId: "sec_inbox",
+        environmentId: "env_reused",
+      }),
+    ).toBe("opened");
+
+    expect(focusedContent(store)).toMatchObject({
+      kind: "new-thread",
+      seed: { projectId: "proj_other", environmentId: "env_reused" },
+    });
+    expect(result.current.location.state).toEqual({
+      focusPrompt: true,
+      sectionId: "sec_inbox",
+      reuseEnvironmentId: "env_reused",
     });
   });
 

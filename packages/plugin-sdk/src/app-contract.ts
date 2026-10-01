@@ -1331,11 +1331,16 @@ export interface PluginCodeThemeState {
  * `"refuse"` (the default) changes nothing, `"replace"` shows the composer in
  * the focused pane instead. `reuseComposer: true` focuses a composer instead
  * of opening another when the focused pane already is one, or when one is
- * open for the same project and environment.
+ * open for the same project and environment. With an explicit `projectId`,
+ * the focused composer is only reused when it is on that project.
  */
 export interface ExperimentalSplitPaneNewThreadOptions {
   side: "left" | "right" | "top" | "bottom";
   projectId?: string;
+  /** Files the new thread under this sidebar section. */
+  sectionId?: string;
+  /** Reuses this environment; also part of the `reuseComposer` match. */
+  environmentId?: string;
   focusPrompt?: boolean;
   atPaneCap?: "replace" | "refuse";
   reuseComposer?: boolean;
@@ -1375,6 +1380,28 @@ export interface ExperimentalSplitPanes {
     options: ExperimentalSplitPaneNewThreadOptions,
   ): ExperimentalSplitPaneOpenResult;
 }
+
+/**
+ * A new thread asked for through one of bb's own New thread affordances: the
+ * sidebar's New thread item and project, section, and environment buttons,
+ * the `thread.new` command, and New thread in environment. Omitted fields
+ * keep the composer's current selection.
+ */
+export interface ExperimentalNewThreadRequest {
+  projectId?: string;
+  sectionId?: string;
+  environmentId?: string;
+  focusPrompt: boolean;
+}
+
+/**
+ * Handles an {@link ExperimentalNewThreadRequest}. Return true when the
+ * plugin opened the composer itself; false lets bb open its new-thread screen
+ * in the focused pane as usual.
+ */
+export type ExperimentalNewThreadHandler = (
+  request: ExperimentalNewThreadRequest,
+) => boolean;
 
 /**
  * The `threads` area of {@link PluginBrowserBbSdk}: bb's public thread API
@@ -3465,6 +3492,18 @@ export interface PluginSdkApp {
    * Experimental: see docs/api_to_audit.md.
    */
   experimental_useSplitPanes(): ExperimentalSplitPanes;
+  /**
+   * While the calling component is mounted, bb offers each of its own New
+   * thread requests to `handler` before opening the new-thread screen (see
+   * {@link ExperimentalNewThreadHandler}). Handlers run in mount order and the
+   * first one to return true wins; a handler that throws is skipped. Pass null
+   * to stop handling. Plugin-initiated navigation such as
+   * `useBbNavigate().toCompose` is never offered. Experimental: see
+   * docs/api_to_audit.md.
+   */
+  experimental_useNewThreadHandler(
+    handler: ExperimentalNewThreadHandler | null,
+  ): void;
   /**
    * The host-owned chat component (see {@link ThreadChatProps}). Together
    * with `Markdown`, the only components the SDK ships — everything else

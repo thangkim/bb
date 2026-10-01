@@ -1842,16 +1842,19 @@ while a palette switch resolves, so a consumer never paints an unthemed frame.
 ## `app.experimental_useSplitPanes` (`@get-bb/plugin-sdk/app`)
 
 **What it does.** Returns `{ isAvailable, openNewThread(options) }`.
-`openNewThread({ side, projectId?, focusPrompt?, atPaneCap?, reuseComposer? })`
+`openNewThread({ side, projectId?, sectionId?, environmentId?, focusPrompt?, atPaneCap?, reuseComposer? })`
 opens a new composer in a pane on `side` of the focused pane, focuses it, and
 navigates to it, the way a thread opens with `threads.open({ split })`. Each
 composer pane has its own compose id, stored with the pane, and keeps its own
 project, environment, section, fork target, and prompt draft; the composer
 bb shows without a split keeps the existing tab-persisted state. Omitting
 `projectId` seeds the pane with the focused thread's project and environment,
-or the focused composer's project. `reuseComposer: true` focuses the focused
-composer, or one seeded with the same project and environment, instead of
-opening another (`"focused"`). At the pane cap it refuses (`"at-cap"`) unless
+or the focused composer's project. `sectionId` and `environmentId` reach the
+new composer the way they do through `sidebarActions.openNewThread`.
+`reuseComposer: true` focuses the focused composer, or one seeded with the
+same project and environment, instead of opening another (`"focused"`); with
+an explicit `projectId` the focused composer is only kept when it is on that
+project. At the pane cap it refuses (`"at-cap"`) unless
 `atPaneCap: "replace"` puts the composer in the focused pane (`"replaced"`). `isAvailable` is false, and every call returns
 `"unavailable"`, on compact viewports and on routes that cannot be shown in a
 pane. It exists so a plugin can own the "split a new thread off" keyboard
@@ -1874,6 +1877,40 @@ commands (the `pane-splits` plugin) without core keybindings.
 4. **Layout reads.** Plugins read the layout through `useSidebarSplitLayout`,
    which reports null for a single pane and does not say which pane holds the
    composer. Decide whether this hook should expose the layout it acts on.
+
+## `app.experimental_useNewThreadHandler` (`@get-bb/plugin-sdk/app`)
+
+**What it does.** `experimental_useNewThreadHandler(handler)` offers each of
+bb's own New thread requests to `handler` while the calling component is
+mounted: the sidebar's New thread item, the project, section, and environment
+New thread buttons (`sidebarActions.openNewThread`), the `thread.new` command,
+and New thread in environment. The handler receives
+`{ projectId?, sectionId?, environmentId?, focusPrompt }` and returns true when
+it opened the composer itself; false, or no handler, keeps bb's default of
+opening the new-thread screen in the focused pane. Handlers run in mount order,
+the first true wins, a throwing handler is logged and skipped, and passing
+null stops handling. Plugin-initiated navigation (`useBbNavigate().toCompose`)
+is never offered, so a handler can fall back to it without recursion. It
+exists so the `pane-splits` plugin can open new threads beside the focused
+pane instead of replacing the thread on screen, without bb core taking a
+placement preference.
+
+**Audit before stabilizing.**
+
+1. **Competing handlers.** Mount order decides which plugin wins, and nothing
+   tells the user that a plugin took over New thread. Decide whether this needs
+   a user-visible owner (a setting, like the thread-list replacement), or
+   whether placement should be a host setting that plugins only contribute
+   options to.
+2. **Coverage.** Fork-from-message, skills, plugin-detail, and quick-create
+   project flows still navigate to the composer directly. Decide which of them
+   are New thread requests.
+3. **Request shape.** The request carries no source, so a handler cannot treat
+   a keyboard shortcut differently from a sidebar click. Decide whether it
+   should.
+4. **Registration style.** This is a hook, so handling stops when the
+   component unmounts. Compare with a setup-time `app.*` registration once a
+   second consumer exists.
 
 ## `app.experimental_usePluginId` (`@get-bb/plugin-sdk/app`)
 

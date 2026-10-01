@@ -22,6 +22,7 @@ import { SidebarPluginAttentionGlyph } from "./SidebarPluginAttentionGlyph";
 import { SidebarUpdatesBadge } from "./SidebarUpdatesBadge";
 import { SidebarResizeHandle, SidebarTopReserveRow } from "./SidebarChrome";
 import { SIDEBAR_FOOTER_ACTION_CLASS } from "./sidebarRowClasses";
+import { offerNewThreadRequest } from "@/lib/plugin-new-thread-handlers";
 import { getRootComposeRoutePath, getThreadRoutePath } from "@/lib/route-paths";
 import { openUrlInExternalBrowser } from "@/lib/url-open-routing";
 import {
@@ -85,6 +86,7 @@ export function AppSidebar({
 
   const handleNewChat = useCallback(() => {
     closeOnMobile();
+    if (offerNewThreadRequest({ focusPrompt: true })) return;
     void navigate(getRootComposeRoutePath(), {
       state: { focusPrompt: true },
     });

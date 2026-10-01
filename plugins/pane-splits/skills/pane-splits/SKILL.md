@@ -17,12 +17,11 @@ A split command opens a new composer in a new pane on that side of the focused p
 
 `new-thread-beside` does nothing but focus the prompt when the focused pane is already a composer, and focuses an open composer for the same project and environment. Otherwise it opens a composer to the right of the focused pane, or, at the pane maximum, in place of the focused pane. On compact screens and pages that cannot be split it navigates to the New thread screen.
 
+bb's own New thread affordances follow the same rule while the plugin is enabled: the sidebar's New thread item, the New thread buttons on projects, sections, and environments, Mod+Shift+O (`thread.new`), and New thread in environment. Instead of replacing the thread on screen, they open a composer to the right of the focused pane for the clicked project, section, or environment, or focus the focused composer when it is already on that project. On compact screens and pages that cannot be split, bb opens the New thread screen as usual. Disable the plugin to get the replacing behavior back.
+
 Bind or rebind a command in Settings → Keyboard, or with the CLI:
 
 ```sh
-bb settings keyboard set thread.new disabled
-bb settings keyboard set plugin:pane-splits/new-thread-beside mod+shift+o
+bb settings keyboard set plugin:pane-splits/new-thread-beside mod+alt+n
 bb settings keyboard reset plugin:pane-splits/split-left
 ```
-
-Mod+Shift+O is bb's own New thread shortcut. Settings → Keyboard offers Replace binding when you assign it; from the CLI, clear `thread.new` first as above.

@@ -1,11 +1,14 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import {
   definePluginApp,
+  experimental_useNewThreadHandler,
   experimental_useSplitPanes,
   useBbNavigate,
   type BbNavigate,
+  type ExperimentalNewThreadRequest,
   type ExperimentalSplitPaneNewThreadOptions,
+  type ExperimentalSplitPaneOpenResult,
   type ExperimentalSplitPanes,
 } from "@get-bb/plugin-sdk/app";
 
@@ -40,6 +43,12 @@ export function PaneSplitsController() {
       if (controller === current) controller = null;
     };
   }, [navigate, splitPanes]);
+  const handleNewThread = useCallback(
+    (request: ExperimentalNewThreadRequest) =>
+      openNewThreadBeside(splitPanes, request) !== "unavailable",
+    [splitPanes],
+  );
+  experimental_useNewThreadHandler(handleNewThread);
   return null;
 }
 
@@ -51,14 +60,21 @@ function splitNewThread(
   }
 }
 
-function openNewThreadBeside(): void {
-  if (controller === null) return;
-  const result = controller.splitPanes.openNewThread({
+function openNewThreadBeside(
+  splitPanes: ExperimentalSplitPanes,
+  request: Partial<ExperimentalNewThreadRequest> = {},
+): ExperimentalSplitPaneOpenResult {
+  return splitPanes.openNewThread({
+    ...request,
     side: "right",
     atPaneCap: "replace",
     reuseComposer: true,
   });
-  if (result === "unavailable") {
+}
+
+function runNewThreadBeside(): void {
+  if (controller === null) return;
+  if (openNewThreadBeside(controller.splitPanes) === "unavailable") {
     controller.navigate.toCompose({ focusPrompt: true });
   }
 }
@@ -83,6 +99,6 @@ export default definePluginApp((app) => {
     id: "new-thread-beside",
     title: "Panes: new thread beside the focused pane",
     isAvailable: () => controller !== null,
-    run: openNewThreadBeside,
+    run: runNewThreadBeside,
   });
 });

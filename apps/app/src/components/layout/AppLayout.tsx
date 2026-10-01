@@ -119,6 +119,7 @@ import { splitLayoutAtom } from "@/lib/split-layout/atoms";
 import { findPaneByThread } from "@/lib/split-layout";
 import { applyThreadOpenToLayout } from "@/views/thread-detail/splitThreadNavigation";
 import { useAppSettingsRouteMemory } from "@/hooks/useAppSettingsRouteMemory";
+import { offerNewThreadRequest } from "@/lib/plugin-new-thread-handlers";
 import { useSetRootComposeProjectId } from "@/lib/root-compose-selection";
 import { BackToAppCommandHandler } from "./BackToAppCommandHandler";
 
@@ -448,6 +449,14 @@ export function AppLayout({ children }: AppLayoutProps) {
     [isCompactViewport, navigate, store],
   );
   useAppCommandHandler("thread.new", () => {
+    if (
+      offerNewThreadRequest({
+        ...(projectId !== undefined ? { projectId } : {}),
+        focusPrompt: true,
+      })
+    ) {
+      return true;
+    }
     if (projectId !== undefined) {
       setRootComposeProjectId(projectId);
     }

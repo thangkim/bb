@@ -219,3 +219,6 @@ export const experimental_useCodeTheme = runtimeFunction(
 export const experimental_useSplitPanes = runtimeFunction(
   "experimental_useSplitPanes",
 );
+export const experimental_useNewThreadHandler = runtimeFunction(
+  "experimental_useNewThreadHandler",
+);

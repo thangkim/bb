@@ -175,3 +175,34 @@ describe("new-thread-beside", () => {
     ]);
   });
 });
+
+describe("bb's own New thread requests", () => {
+  const request = {
+    projectId: "proj_a",
+    sectionId: "sec_a",
+    environmentId: "env_a",
+    focusPrompt: true,
+  };
+
+  it("open beside the focused pane the way new-thread-beside does", () => {
+    const { openNewThread, view } = mountController(true, "opened");
+
+    expect(view.behavior.experimental_offerNewThread(request)).toBe(true);
+
+    expect(openNewThread).toHaveBeenCalledWith({
+      ...request,
+      side: "right",
+      atPaneCap: "replace",
+      reuseComposer: true,
+    });
+    expect(view.inspection.navigateCalls).toEqual([]);
+  });
+
+  it("are left to bb where splits are unavailable", () => {
+    const { view } = mountController(false, "unavailable");
+
+    expect(view.behavior.experimental_offerNewThread(request)).toBe(false);
+
+    expect(view.inspection.navigateCalls).toEqual([]);
+  });
+});

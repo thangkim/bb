@@ -3,6 +3,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -21,6 +22,8 @@ import {
   type ComposerView,
   type ExperimentalAppOverlayRegistration,
   type ExperimentalQuestionFormHost,
+  type ExperimentalNewThreadHandler,
+  type ExperimentalNewThreadRequest,
   type ExperimentalSplitPanes,
   type PluginAppDefinition,
   type PluginAppSetup,
@@ -279,6 +282,7 @@ interface SlotEnv {
   providers: PluginProvidersState;
   codeTheme: PluginCodeThemeState;
   splitPanes: ExperimentalSplitPanes;
+  newThreadHandlers: { current: ExperimentalNewThreadHandler | null }[];
   branchesState: BranchesState;
   checkoutState: CheckoutState;
 }
@@ -1053,6 +1057,25 @@ const testPluginSdkApp = {
   experimental_useSplitPanes(): ExperimentalSplitPanes {
     return useSlotEnv("experimental_useSplitPanes").splitPanes;
   },
+  experimental_useNewThreadHandler(
+    handler: ExperimentalNewThreadHandler | null,
+  ): void {
+    const { newThreadHandlers } = useSlotEnv(
+      "experimental_useNewThreadHandler",
+    );
+    const entryRef = useRef({ current: handler });
+    useLayoutEffect(() => {
+      entryRef.current.current = handler;
+    }, [handler]);
+    useEffect(() => {
+      const entry = entryRef.current;
+      newThreadHandlers.push(entry);
+      return () => {
+        const index = newThreadHandlers.indexOf(entry);
+        if (index !== -1) newThreadHandlers.splice(index, 1);
+      };
+    }, [newThreadHandlers]);
+  },
   experimental_useSidebarThreadActions(): PluginSidebarThreadActions {
     return useSlotEnv("experimental_useSidebarThreadActions").sidebarActions;
   },
@@ -1523,6 +1546,12 @@ export interface RenderedSlotBehaviorDrivers {
   setComposerText(text: string): Promise<void>;
   /** Replace the scope snapshots returned by composer hooks, wrapped in act. */
   setComposerScope(scope: PluginComposerScope): Promise<void>;
+  /**
+   * Offer a bb New thread request to mounted
+   * `experimental_useNewThreadHandler` handlers the way the host does, wrapped
+   * in act. True when a handler took it.
+   */
+  experimental_offerNewThread(request: ExperimentalNewThreadRequest): boolean;
 }
 
 /** Read-only call/write logs produced while the slot is mounted. */
@@ -2126,6 +2155,7 @@ export function renderSlot<
       openNewThread:
         options.experimental_splitPanes?.openNewThread ?? (() => "unavailable"),
     },
+    newThreadHandlers: [],
     branchesState: {
       branches: options.branchesState?.branches ?? [],
       remoteBranches: options.branchesState?.remoteBranches ?? [],
@@ -2199,6 +2229,25 @@ export function renderSlot<
       notifyComposerListeners();
     });
   };
+  const experimental_offerNewThread = (
+    request: ExperimentalNewThreadRequest,
+  ): boolean => {
+    let handled = false;
+    act(() => {
+      for (const entry of [...env.newThreadHandlers]) {
+        if (entry.current === null) continue;
+        try {
+          if (entry.current(request)) {
+            handled = true;
+            return;
+          }
+        } catch {
+          continue;
+        }
+      }
+    });
+    return handled;
+  };
   const unmountSlot = (): void => {
     if (!composerOwnership.active) return;
     result.unmount();
@@ -2213,6 +2262,7 @@ export function renderSlot<
     setRealtimeConnectionState,
     setComposerText,
     setComposerScope,
+    experimental_offerNewThread,
     navigateCalls,
     experimental_fixedTabOpenCalls,
     sidebarActionCalls,
@@ -2224,6 +2274,7 @@ export function renderSlot<
       setRealtimeConnectionState,
       setComposerText,
       setComposerScope,
+      experimental_offerNewThread,
     },
     inspection: {
       rpcCalls,

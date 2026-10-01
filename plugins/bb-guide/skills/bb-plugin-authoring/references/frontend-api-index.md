@@ -72,6 +72,8 @@ Read the installed SDK declarations for the exact current signatures.
 - `experimental_useCodeTheme`
 - `experimental_useSplitPanes` — open a new-thread composer in a pane
   beside the focused one
+- `experimental_useNewThreadHandler` — take bb's own New thread requests
+  (sidebar buttons, `thread.new`) before bb opens the composer
 
 ## Type exports
 

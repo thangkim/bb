@@ -47,4 +47,5 @@ export const {
   experimental_useProviders,
   experimental_useCodeTheme,
   experimental_useSplitPanes,
+  experimental_useNewThreadHandler,
 } = pluginSdkAppImplementation;

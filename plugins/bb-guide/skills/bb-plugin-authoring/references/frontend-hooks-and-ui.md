@@ -115,7 +115,7 @@ experimental_data })` submits now and carries plugin-owned JSON to dispatch
 - `experimental_useSplitPanes()` → `{ isAvailable, openNewThread(options) }`
   — host-owned split-pane actions for the main area. `isAvailable` is false
   on compact viewports and on routes that cannot be shown in a pane.
-  `openNewThread({ side, projectId?, focusPrompt?, atPaneCap?, reuseComposer? })`
+  `openNewThread({ side, projectId?, sectionId?, environmentId?, focusPrompt?, atPaneCap?, reuseComposer? })`
   opens a new composer in a pane on `side` (`"left" | "right" | "top" |
   "bottom"`) of the focused pane, focuses it, and navigates there. Every
   composer pane keeps its own project, environment, section, and prompt
@@ -124,12 +124,25 @@ experimental_data })` submits now and carries plugin-owned JSON to dispatch
   `focusPrompt: false`. At the pane cap, `atPaneCap: "refuse"` (the default)
   changes nothing and `"replace"` shows the composer in the focused pane.
   `reuseComposer: true` focuses the focused composer, or an open one for the
-  same project and environment, instead of opening another. It returns what
-  happened:
+  same project and environment, instead of opening another; with an explicit
+  `projectId` the focused composer is only kept when it is on that project.
+  It returns what happened:
   `"opened" | "focused" | "replaced" | "at-cap" | "unavailable"`; fall back
   to `useBbNavigate().toCompose()` on `"unavailable"`. Call the hook in a
   component (an `experimental_appOverlay` controller for keyboard commands)
   and invoke `openNewThread` from an event or command.
+- `experimental_useNewThreadHandler(handler | null)` — while the calling
+  component is mounted, bb offers its own New thread requests to `handler`
+  before opening the new-thread screen: the sidebar's New thread item and
+  project, section, and environment buttons, the `thread.new` command, and New
+  thread in environment. The handler receives
+  `{ projectId?, sectionId?, environmentId?, focusPrompt }` and returns true
+  when it opened the composer itself, false to let bb proceed. Handlers run in
+  mount order and the first true wins; a throwing handler is skipped.
+  `useBbNavigate().toCompose()` is never offered, so it is a safe fallback.
+  Pair it with `experimental_useSplitPanes`, returning
+  `openNewThread({ ...request, side: "right" }) !== "unavailable"`. In tests,
+  `renderSlot(...).behavior.experimental_offerNewThread(request)` drives it.
 
 ```tsx
 const composer = useComposer();

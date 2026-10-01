@@ -46,6 +46,7 @@ import {
   useUpdateThread,
 } from "@/hooks/mutations/thread-state-mutations";
 import { useRouteNavigate } from "@/components/ui/app-route-anchor";
+import { offerNewThreadRequest } from "./plugin-new-thread-handlers";
 import { toPluginSidebarThread } from "./plugin-sidebar-threads";
 import { useSetRootComposeProjectId } from "./root-compose-selection";
 import { openThreadInSplit } from "./split-layout/openThreadInSplit";
@@ -306,6 +307,20 @@ export function useSidebarThreadActions(): PluginSidebarThreadActions {
       },
       openNewThread(options) {
         const projectId = options?.projectId;
+        if (
+          offerNewThreadRequest({
+            ...(projectId !== undefined ? { projectId } : {}),
+            ...(options?.sectionId !== undefined
+              ? { sectionId: options.sectionId }
+              : {}),
+            ...(options?.environmentId !== undefined
+              ? { environmentId: options.environmentId }
+              : {}),
+            focusPrompt: options?.focusPrompt === true,
+          })
+        ) {
+          return;
+        }
         if (projectId !== undefined) {
           setRootComposeProjectId(projectId);
         }

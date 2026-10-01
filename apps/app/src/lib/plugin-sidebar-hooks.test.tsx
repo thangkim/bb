@@ -21,6 +21,7 @@ import {
   setPluginThreadRowStatus,
 } from "./plugin-thread-row-status";
 import { useEnvironmentProviders } from "./plugin-sdk-hooks";
+import { useNewThreadHandler } from "./plugin-new-thread-handlers";
 import { SidebarThreadShortcutKeysContext } from "@/components/sidebar/sidebarThreadShortcuts";
 
 const actions = vi.hoisted(() => ({
@@ -398,6 +399,31 @@ describe("useSidebarThreadActions", () => {
     expect(actions.navigate).toHaveBeenCalledWith("/", {
       state: { reuseEnvironmentId: "env_1" },
     });
+  });
+
+  it("lets a plugin new-thread handler take the request instead", () => {
+    state.data = payload([]);
+    const handler = vi.fn(() => true);
+    renderHook(() => useNewThreadHandler(handler));
+    const { result } = renderHook(() => useSidebarThreadActions());
+
+    act(() => {
+      result.current.openNewThread({
+        projectId: "proj_app",
+        sectionId: "sec_later",
+        environmentId: "env_1",
+        focusPrompt: true,
+      });
+    });
+
+    expect(handler).toHaveBeenCalledWith({
+      projectId: "proj_app",
+      sectionId: "sec_later",
+      environmentId: "env_1",
+      focusPrompt: true,
+    });
+    expect(actions.setRootComposeProjectId).not.toHaveBeenCalled();
+    expect(actions.navigate).not.toHaveBeenCalled();
   });
 
   it("navigates with no router state when no option is set", () => {
