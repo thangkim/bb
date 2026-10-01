@@ -70,6 +70,14 @@ export const appAnnotationTarget: AnnotationTarget = {
   },
 };
 
+export function canCopyOpenAnnotation(): boolean {
+  return installedController()?.canCopyPrompt() ?? false;
+}
+
+export function copyOpenAnnotation(): void {
+  installedController()?.copyPrompt();
+}
+
 export function requestAppAnnotationToggle(): void {
   for (const listener of toggleListeners) listener();
 }

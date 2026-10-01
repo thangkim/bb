@@ -7,19 +7,20 @@ Install the plugin from a bb checkout with `bb plugin install ./plugins/building
 
 ## Annotating bb itself
 
-Run the **Annotate bb interface** command (default Shift+Option+B on macOS, Shift+Alt+B elsewhere; also in the command palette) to annotate bb's own window. Hover to highlight an element, click it, write a comment, and choose **Add to prompt** (Ctrl+Enter, Command+Enter on macOS). A status pill shows while selection mode is on; Escape or the shortcut again stops it. Mentions go into the composer of the thread in the current route, or the new-thread composer.
+Run the **Annotate bb interface** command (default Shift+Option+B on macOS, Shift+Alt+B elsewhere; also in the command palette) to annotate bb's own window. Hover to highlight an element, click it, write a comment, and choose **Add to prompt** (Ctrl+Enter, Command+Enter on macOS). A status pill shows while selection mode is on; Escape or the shortcut again stops it. Mentions go into the composer of the thread in the current route, or the new-thread composer; when neither composer is on the page, the full feedback is copied to the clipboard instead. Pills are labelled `#1 …` so they keep their context when copied into another thread's composer.
 
-Click a numbered pin to edit its comment, including when selection mode is off. Save updates the saved comment; Cancel or Escape discards the edit. Blank comments cannot be saved. Delete in the pin editor removes that pin and its mention from the current unsent prompt. Successful local message submission or queueing clears the pins; failed sends keep them. Switching to another composer clears the pins, and closing or reloading the window removes them. Saved records remain available to previously sent messages.
+Click a numbered pin to edit its comment, including when selection mode is off. Save updates the saved comment; Cancel or Escape discards the edit. Blank comments cannot be saved. Delete in the pin editor removes that pin and its mention from the current unsent prompt. **Copy prompt** in the pin editor, or the **Copy all annotation prompts** command (default Control+C, including on macOS), copies every pin's full feedback as one text prompt, in pin order and with any unsaved edit in the open editor, for pasting into another AI chat. Successful local message submission or queueing clears the pins; failed sends keep them. Switching to another composer clears the pins, and closing or reloading the window removes them. Saved records remain available to previously sent messages.
 
-Rebind or disable the shortcut in Settings → Keyboard, or with the CLI:
+Rebind or disable either shortcut in Settings → Keyboard, or with the CLI:
 
 ```sh
 bb settings keyboard set plugin:building-mode/annotate-app alt+shift+x
 bb settings keyboard set plugin:building-mode/annotate-app disabled
 bb settings keyboard reset plugin:building-mode/annotate-app
+bb settings keyboard set plugin:building-mode/copy-annotation-prompt ctrl+shift+c
 ```
 
-The command follows the plugin-command defaults: it runs on the main surface and not while a modal is open. Selection mode that is already on keeps working inside dialogs.
+The copy command is available whenever there is at least one pin. Both commands follow the plugin-command defaults: they run on the main surface and not while a modal is open. Selection mode that is already on keeps working inside dialogs.
 
 ## Source locations
 

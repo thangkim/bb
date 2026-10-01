@@ -3,6 +3,7 @@ import {
   annotationMentionLabel,
   annotationRecordSchema,
   formatAnnotationContext,
+  formatAnnotationsContext,
   type AnnotationRecord,
 } from "./annotations.js";
 
@@ -31,6 +32,33 @@ const record: AnnotationRecord = {
 };
 
 describe("annotation formatting", () => {
+  it("combines several pins into one prompt, one header per page, in pin order", () => {
+    const combined = formatAnnotationsContext([
+      { ...record, number: 3, comment: "Third" },
+      { ...record, number: 1, comment: "First" },
+      {
+        ...record,
+        number: 2,
+        comment: "Second",
+        url: "http://127.0.0.1:26846/settings",
+      },
+    ]);
+    expect(
+      combined
+        .split("\n")
+        .filter((line) => line.startsWith("## ") || line.startsWith("### "))
+        .map((line) => line.split(" <")[0]),
+    ).toEqual([
+      "## bb UI feedback: /projects/proj_1/threads/thr_1?pane=2#end",
+      "### 1.",
+      "## bb UI feedback: /settings",
+      "### 2.",
+      "## bb UI feedback: /projects/proj_1/threads/thr_1?pane=2#end",
+      "### 3.",
+    ]);
+    expect(combined.match(/_Source paths are relative/gu)).toHaveLength(1);
+  });
+
   it("labels mentions with a stable element description", () => {
     expect(annotationMentionLabel(record)).toBe(
       '#2 <SendButton> button: "Send message"',

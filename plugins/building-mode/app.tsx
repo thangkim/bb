@@ -1,14 +1,26 @@
 import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { definePluginApp } from "@get-bb/plugin-sdk/app";
+import {
+  definePluginApp,
+  type PluginCommandRegistration,
+} from "@get-bb/plugin-sdk/app";
 import { useAnnotationSession } from "./annotation-session.js";
 import {
   appAnnotationTarget,
+  canCopyOpenAnnotation,
+  copyOpenAnnotation,
   onAppAnnotationToggle,
   requestAppAnnotationToggle,
 } from "./app-target.js";
 
 export const APP_ANNOTATION_COMMAND_ID = "annotate-app";
+export const copyAnnotationPromptCommand: PluginCommandRegistration = {
+  id: "copy-annotation-prompt",
+  title: "Copy all annotation prompts",
+  defaultShortcut: { key: "c", control: true },
+  isAvailable: canCopyOpenAnnotation,
+  run: copyOpenAnnotation,
+};
 
 export function AppAnnotationsOverlay() {
   const { state, error, notice, toggle, clear, scope } =
@@ -53,4 +65,5 @@ export default definePluginApp((app) => {
     defaultShortcut: { key: "b", alt: true, shift: true },
     run: requestAppAnnotationToggle,
   });
+  app.commands.register(copyAnnotationPromptCommand);
 });

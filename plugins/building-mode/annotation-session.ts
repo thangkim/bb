@@ -8,6 +8,7 @@ import {
   ANNOTATION_MENTION_PROVIDER_ID,
   annotationMentionLabel,
   formatAnnotationContext,
+  formatAnnotationsContext,
   pageMessageSchema,
   pageStateSchema,
   type AnnotationRecord,
@@ -79,6 +80,7 @@ export function useAnnotationSession(target: AnnotationTarget) {
   const rpc = useRpc<typeof buildingModeRpcContract>();
   const composerRef = useRef(composer);
   const pendingSaves = useRef(Promise.resolve());
+  const records = useRef(new Map<string, AnnotationRecord>());
   composerRef.current = composer;
   const [state, setState] = useState<PageState>(INACTIVE_STATE);
   const [error, setError] = useState<string | null>(null);
@@ -135,8 +137,36 @@ export function useAnnotationSession(target: AnnotationTarget) {
           return;
         }
         const message = parsed.data;
+        if (message.type === "annotation-copy") {
+          const ready = message.annotations.flatMap(({ id, comment }) => {
+            const saved = records.current.get(id);
+            return saved === undefined ? [] : [{ ...saved, comment }];
+          });
+          if (ready.length === 0) {
+            setError("These annotations are not ready to copy yet.");
+            return;
+          }
+          copyToClipboard(
+            Promise.resolve(formatAnnotationsContext(ready)),
+          ).then(
+            () => {
+              setError(null);
+              setNotice(
+                ready.length === 1
+                  ? `Copied feedback #${ready[0]?.number}.`
+                  : `Copied ${ready.length} feedback prompts.`,
+              );
+            },
+            (cause: unknown) => setError(errorMessage(cause)),
+          );
+          return;
+        }
         const record =
           message.type === "annotation" ? readRecord(message.annotation) : null;
+        record?.then(
+          (resolved) => records.current.set(resolved.id, resolved),
+          () => undefined,
+        );
         const copied =
           record !== null && !composerOnPage(composerRef.current.scope)
             ? copyToClipboard(record.then(formatAnnotationContext))
@@ -145,11 +175,19 @@ export function useAnnotationSession(target: AnnotationTarget) {
         pendingSaves.current = pendingSaves.current
           .then(async () => {
             if (message.type === "annotation-delete") {
+              records.current.delete(message.id);
               composerRef.current.experimental_removeMention({
                 provider: ANNOTATION_MENTION_PROVIDER_ID,
                 id: message.id,
               });
             } else if (message.type === "annotation-update") {
+              const saved = records.current.get(message.id);
+              if (saved !== undefined) {
+                records.current.set(message.id, {
+                  ...saved,
+                  comment: message.comment,
+                });
+              }
               await rpc.call("update", {
                 id: message.id,
                 comment: message.comment,
@@ -173,6 +211,7 @@ export function useAnnotationSession(target: AnnotationTarget) {
   useEffect(() => () => target.release(), [target]);
 
   const clear = useCallback(async () => {
+    records.current.clear();
     applyState(await target.control("clear"));
   }, [applyState, target]);
 

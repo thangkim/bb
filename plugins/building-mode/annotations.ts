@@ -71,6 +71,12 @@ export const pageMessageSchema = z.discriminatedUnion("type", [
   annotationUpdateSchema
     .extend({ type: z.literal("annotation-update") })
     .strict(),
+  z
+    .object({
+      type: z.literal("annotation-copy"),
+      annotations: z.array(annotationUpdateSchema).min(1).max(200),
+    })
+    .strict(),
   pageStateSchema.extend({ type: z.literal("state") }).strict(),
   z
     .object({
@@ -180,12 +186,29 @@ function primarySource(record: AnnotationRecord): string | null {
     : `\`${nearest}\` (nearest stamped ancestor)`;
 }
 
-export function formatAnnotationContext(record: AnnotationRecord): string {
-  const { element } = record;
-  const lines = [
+const SOURCE_PATH_NOTE =
+  "_Source paths are relative to the repository root; line:column points at the JSX tag or component declaration._";
+
+function contextHeader(record: AnnotationRecord): string[] {
+  return [
     `## bb UI feedback: ${routeOf(record)}`,
     `**Viewport:** ${record.viewport.width}×${record.viewport.height}`,
-    "",
+  ];
+}
+
+function hasSourcePaths(record: AnnotationRecord): boolean {
+  return (
+    record.element.sources.length > 0 ||
+    record.components.some(
+      (component) =>
+        component.source !== null && !/^[a-z]+:\/\//u.test(component.source),
+    )
+  );
+}
+
+function contextSection(record: AnnotationRecord): string[] {
+  const { element } = record;
+  const lines = [
     `### ${record.number}. ${summaryFor(record, 4, 40)}`,
     `**Location:** ${element.selector}`,
   ];
@@ -232,17 +255,32 @@ export function formatAnnotationContext(record: AnnotationRecord): string {
     lines.push(`**Context:** ${context}`);
   }
   lines.push(`**Feedback:** ${record.comment}`);
-  if (
-    element.sources.length > 0 ||
-    record.components.some(
-      (component) =>
-        component.source !== null && !/^[a-z]+:\/\//u.test(component.source),
-    )
-  ) {
-    lines.push(
-      "",
-      "_Source paths are relative to the repository root; line:column points at the JSX tag or component declaration._",
-    );
+  return lines;
+}
+
+export function formatAnnotationContext(record: AnnotationRecord): string {
+  return formatAnnotationsContext([record]);
+}
+
+export function formatAnnotationsContext(
+  records: readonly AnnotationRecord[],
+): string {
+  const lines: string[] = [];
+  let previousHeader: string | null = null;
+  for (const record of [...records].sort(
+    (left, right) => left.number - right.number,
+  )) {
+    const header = contextHeader(record);
+    const headerKey = header.join("\n");
+    if (headerKey !== previousHeader) {
+      if (lines.length > 0) lines.push("");
+      lines.push(...header);
+      previousHeader = headerKey;
+    }
+    lines.push("", ...contextSection(record));
+  }
+  if (records.some(hasSourcePaths)) {
+    lines.push("", SOURCE_PATH_NOTE);
   }
   return lines.join("\n");
 }

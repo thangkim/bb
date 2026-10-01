@@ -13,6 +13,8 @@ export interface AnnotationController {
   state(): AnnotationPageState;
   setTheme(theme: Record<string, string>): void;
   clear(): AnnotationPageState;
+  canCopyPrompt(): boolean;
+  copyPrompt(): boolean;
   dispose(): void;
 }
 
@@ -158,6 +160,9 @@ export function installBuildingMode(
     button { flex-shrink: 0; white-space: nowrap; height: 28px; padding: 0 11px; border: 1px solid transparent; border-radius: 7px; font: 500 12px/16px var(--bb-font-sans, system-ui, sans-serif); cursor: pointer; }
     button:focus-visible { outline: 2px solid var(--bb-ring); outline-offset: 1px; }
     .cancel { margin-left: auto; border-color: var(--bb-border); background: transparent; color: inherit; }
+    .copy { margin-left: auto; border-color: var(--bb-border); background: transparent; color: inherit; }
+    .copy:hover { background: var(--bb-state-hover); }
+    .copy + .cancel { margin-left: 0; }
     .delete { padding: 0 6px; margin-left: -6px; background: transparent; color: var(--bb-muted-foreground); }
     .delete:hover { color: var(--bb-destructive, var(--bb-ink)); background: color-mix(in oklab, var(--bb-destructive, var(--bb-ink)) 8%, transparent); }
     .cancel:hover { background: var(--bb-state-hover); }
@@ -187,6 +192,11 @@ export function installBuildingMode(
   let active = false;
   let hovered: Element | null = null;
   let editor: HTMLElement | null = null;
+  let openEdit: {
+    annotation: PinnedAnnotation;
+    textarea: HTMLTextAreaElement;
+    copy: HTMLElement;
+  } | null = null;
   let nextNumber = 1;
   let frame = 0;
   const annotations: PinnedAnnotation[] = [];
@@ -436,6 +446,40 @@ export function installBuildingMode(
   function closeEditor(): void {
     editor?.remove();
     editor = null;
+    openEdit = null;
+  }
+
+  function copyLabel(): string {
+    return annotations.length > 1
+      ? `Copy ${annotations.length} prompts`
+      : "Copy prompt";
+  }
+
+  function copyPrompts(): boolean {
+    if (annotations.length === 0) return false;
+    const edit = openEdit;
+    const edited = edit?.textarea.value.trim().slice(0, 4000) ?? "";
+    post({
+      type: "annotation-copy",
+      annotations: annotations.map((annotation) => ({
+        id: annotation.id,
+        comment:
+          annotation === edit?.annotation && edited.length > 0
+            ? edited
+            : annotation.comment,
+      })),
+    });
+    if (edit !== null) {
+      edit.copy.textContent = "Copied";
+      setTimeout(() => {
+        edit.copy.textContent = copyLabel();
+      }, 1500);
+    }
+    return true;
+  }
+
+  function passesThrough(event: KeyboardEvent): boolean {
+    return event.metaKey || event.ctrlKey;
   }
 
   function commit(element: Element, comment: string): void {
@@ -564,7 +608,13 @@ export function installBuildingMode(
       const deleteButton = part("button", "delete");
       deleteButton.textContent = "Delete";
       deleteButton.addEventListener("click", () => remove(annotation));
-      actions.append(deleteButton);
+      const copy = part("button", "copy");
+      openEdit = { annotation, textarea, copy };
+      copy.textContent = copyLabel();
+      copy.title =
+        "Copies every pin's feedback. Shortcut: Control+C by default; change it in Settings › Keyboard shortcuts.";
+      copy.addEventListener("click", () => copyPrompts());
+      actions.append(deleteButton, copy);
     }
     actions.append(cancel, save);
     panel.append(header, textarea, actions);
@@ -582,7 +632,7 @@ export function installBuildingMode(
       save.toggleAttribute("disabled", textarea.value.trim().length === 0);
     });
     textarea.addEventListener("keydown", (event) => {
-      event.stopPropagation();
+      if (!passesThrough(event)) event.stopPropagation();
       if (event.key === "Escape") {
         event.preventDefault();
         closeEditor();
@@ -594,7 +644,7 @@ export function installBuildingMode(
     cancel.addEventListener("click", () => closeEditor());
     save.addEventListener("click", submit);
     panel.addEventListener("keydown", (event) => {
-      event.stopPropagation();
+      if (!passesThrough(event)) event.stopPropagation();
       if (event.key === "Escape") {
         event.preventDefault();
         closeEditor();
@@ -725,6 +775,8 @@ export function installBuildingMode(
     state,
     setTheme,
     clear,
+    canCopyPrompt: () => annotations.length > 0,
+    copyPrompt: copyPrompts,
     dispose,
   };
   Reflect.set(globalThis, ANNOTATION_CONTROLLER_KEY, controller);
