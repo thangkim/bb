@@ -364,7 +364,10 @@ describe("useSidebarThreadActions", () => {
 
     expect(actions.setRootComposeProjectId).toHaveBeenCalledWith("proj_target");
     expect(actions.navigate).toHaveBeenCalledWith("/", {
-      state: { focusPrompt: true },
+      state: {
+        focusPrompt: true,
+        placement: { sectionId: null, pinned: false },
+      },
     });
   });
 
@@ -381,7 +384,11 @@ describe("useSidebarThreadActions", () => {
 
     expect(actions.setRootComposeProjectId).not.toHaveBeenCalled();
     expect(actions.navigate).toHaveBeenCalledWith("/", {
-      state: { focusPrompt: true, sectionId: "sec_later" },
+      state: {
+        focusPrompt: true,
+        sectionId: "sec_later",
+        placement: { sectionId: "sec_later", pinned: false },
+      },
     });
   });
 
@@ -397,7 +404,10 @@ describe("useSidebarThreadActions", () => {
     });
 
     expect(actions.navigate).toHaveBeenCalledWith("/", {
-      state: { reuseEnvironmentId: "env_1" },
+      state: {
+        reuseEnvironmentId: "env_1",
+        placement: { sectionId: null, pinned: false },
+      },
     });
   });
 
@@ -426,13 +436,53 @@ describe("useSidebarThreadActions", () => {
     expect(actions.navigate).not.toHaveBeenCalled();
   });
 
-  it("navigates with no router state when no option is set", () => {
+  it("passes a machine selection to the root composer", () => {
+    state.data = payload([]);
+    const { result } = renderHook(() => useSidebarThreadActions());
+
+    act(() => {
+      result.current.openNewThread({
+        projectId: "proj_app",
+        hostId: "host_homelab",
+        focusPrompt: true,
+      });
+    });
+
+    expect(actions.navigate).toHaveBeenCalledWith("/", {
+      state: {
+        focusPrompt: true,
+        newEnvironmentHostId: "host_homelab",
+        placement: { sectionId: null, pinned: false },
+      },
+    });
+  });
+
+  it("preserves explicit pinned placement over the legacy section", () => {
+    state.data = payload([]);
+    const { result } = renderHook(() => useSidebarThreadActions());
+    act(() =>
+      result.current.openNewThread({
+        sectionId: "sec_old",
+        experimental_placement: { sectionId: "sec_managers", pinned: true },
+      }),
+    );
+    expect(actions.navigate).toHaveBeenCalledWith("/", {
+      state: {
+        sectionId: "sec_old",
+        placement: { sectionId: "sec_managers", pinned: true },
+      },
+    });
+  });
+
+  it("clears placement when opening global new thread", () => {
     state.data = payload([]);
     const { result } = renderHook(() => useSidebarThreadActions());
     act(() => {
       result.current.openNewThread();
     });
-    expect(actions.navigate).toHaveBeenCalledWith("/", undefined);
+    expect(actions.navigate).toHaveBeenCalledWith("/", {
+      state: { placement: { sectionId: null, pinned: false } },
+    });
   });
 
   it("re-expands a collapsed conversation when opening its thread", () => {

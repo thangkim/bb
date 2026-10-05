@@ -98,8 +98,9 @@ describe("AppAnnotationsOverlay", () => {
     ).click();
 
     await waitFor(() =>
-      expect(slot.inspection.composer.mentions).toEqual([
+      expect(slot.inspection.composer.draft.mentions).toMatchObject([
         {
+          kind: "plugin",
           provider: "bb-ui-annotation",
           id: "ann_saved",
           label: '#1 <SendButton> button: "Send"',
@@ -184,7 +185,7 @@ describe("AppAnnotationsOverlay", () => {
       expect(copied[0]).toContain(
         "**Source trail:** `packages/shared-ui/src/button.tsx:52:5`",
       );
-      expect(slot.inspection.composer.mentions).toEqual([]);
+      expect(slot.inspection.composer.draft.mentions).toEqual([]);
       expect(slot.inspection.rpcCalls[0]).toMatchObject({ method: "save" });
     } finally {
       if (originalClipboard === undefined) {
@@ -238,7 +239,7 @@ describe("AppAnnotationsOverlay", () => {
         ).click();
       }
       await waitFor(() =>
-        expect(slot.inspection.composer.mentions).toHaveLength(3),
+        expect(slot.inspection.composer.draft.mentions).toHaveLength(3),
       );
 
       const pins = shadowRoot().querySelectorAll<HTMLButtonElement>(".pin");
@@ -319,9 +320,9 @@ describe("AppAnnotationsOverlay", () => {
       ).click();
     }
     await waitFor(() =>
-      expect(slot.inspection.composer.mentions).toHaveLength(2),
+      expect(slot.inspection.composer.draft.mentions).toHaveLength(2),
     );
-    const [first, second] = slot.inspection.composer.mentions;
+    const [first, second] = slot.inspection.composer.draft.mentions;
 
     requireElement(
       shadowRoot().querySelector<HTMLButtonElement>(".pin"),
@@ -332,7 +333,9 @@ describe("AppAnnotationsOverlay", () => {
     if (remove === undefined) throw new Error("Expected delete action");
     remove.click();
     await waitFor(() =>
-      expect(slot.inspection.composer.mentions).toEqual([second]),
+      expect(slot.inspection.composer.draft.mentions).toMatchObject([
+        { label: second?.label },
+      ]),
     );
     expect(first).toBeDefined();
     expect(shadowRoot().querySelectorAll(".pin")).toHaveLength(1);

@@ -8,17 +8,20 @@ interface UseCreateThreadInEnvironmentArgs {
   projectId: string;
   environmentId: string;
   sectionId: string | null;
+  pinned: boolean;
 }
 
 export function useCreateThreadInEnvironment({
   projectId,
   environmentId,
   sectionId,
+  pinned,
 }: UseCreateThreadInEnvironmentArgs): () => void {
   const navigate = useRouteNavigate();
   const setRootComposeProjectId = useSetRootComposeProjectId();
   return useCallback(() => {
     if (
+      !pinned &&
       offerNewThreadRequest({
         projectId,
         environmentId,
@@ -33,8 +36,15 @@ export function useCreateThreadInEnvironment({
       state: {
         focusPrompt: true,
         reuseEnvironmentId: environmentId,
-        sectionId,
+        placement: { sectionId, pinned },
       },
     });
-  }, [environmentId, navigate, projectId, sectionId, setRootComposeProjectId]);
+  }, [
+    environmentId,
+    navigate,
+    projectId,
+    sectionId,
+    pinned,
+    setRootComposeProjectId,
+  ]);
 }

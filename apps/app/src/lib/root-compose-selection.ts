@@ -1,3 +1,9 @@
+import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
+import {
+  DEFAULT_THREAD_CREATION_PLACEMENT,
+  readThreadCreationPlacement,
+  type ThreadCreationPlacement,
+} from "./thread-creation-placement";
 import {
   atom,
   useAtom,
@@ -9,7 +15,6 @@ import {
 } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
-import type { ForkThreadCreateSeed } from "@bb/client-core";
 import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { useOptionalPaneContext } from "@/views/thread-detail/PaneContext";
 import { createTabScopedStorage } from "./browser-storage";
@@ -40,11 +45,76 @@ const rootComposeProjectIdAtom = atomWithStorage<string>(
   { getOnInit: true },
 );
 
-const rootComposeReuseEnvironmentAtom = atom<string | null>(null);
+const rootComposeReuseEnvironmentAtom = atomWithStorage<string | null>(
+  "bb.root-compose.reuse-environment",
+  null,
+  createTabScopedStorage<string | null>({
+    parse: (storedValue) =>
+      storedValue !== null &&
+      parseEnvironmentValue(storedValue)?.type === "reuse"
+        ? storedValue
+        : null,
+    serialize: (value) => value ?? "",
+  }),
+  { getOnInit: true },
+);
 
-const rootComposeSectionIdAtom = atom<string | null>(null);
+const rootComposeStoredPlacementAtom = atomWithStorage<ThreadCreationPlacement>(
+  "bb.root-compose.placement",
+  DEFAULT_THREAD_CREATION_PLACEMENT,
+  createTabScopedStorage<ThreadCreationPlacement>({
+    parse: (storedValue, initialValue) => {
+      if (storedValue === null) return initialValue;
+      try {
+        return (
+          readThreadCreationPlacement({ placement: JSON.parse(storedValue) }) ??
+          initialValue
+        );
+      } catch {
+        return initialValue;
+      }
+    },
+    serialize: JSON.stringify,
+  }),
+  { getOnInit: true },
+);
 
-const rootComposeForkSeedAtom = atom<ForkThreadCreateSeed | null>(null);
+type PlacementAtom = WritableAtom<
+  ThreadCreationPlacement,
+  [ThreadCreationPlacement],
+  void
+>;
+
+function skipUnchangedPlacement(stored: PlacementAtom): PlacementAtom {
+  return atom(
+    (get) => get(stored),
+    (get, set, next: ThreadCreationPlacement) => {
+      const current = get(stored);
+      if (
+        current.sectionId === next.sectionId &&
+        current.pinned === next.pinned
+      )
+        return;
+      set(stored, next);
+    },
+  );
+}
+
+const rootComposePlacementAtom = skipUnchangedPlacement(
+  rootComposeStoredPlacementAtom,
+);
+
+const scopedPlacementAtoms = new Map<string, PlacementAtom>();
+
+function placementAtomFor(composeId: string | undefined): PlacementAtom {
+  if (composeId === undefined) return rootComposePlacementAtom;
+  let scoped = scopedPlacementAtoms.get(composeId);
+  if (scoped === undefined) {
+    scoped = skipUnchangedPlacement(atom(DEFAULT_THREAD_CREATION_PLACEMENT));
+    scopedPlacementAtoms.set(composeId, scoped);
+  }
+  return scoped;
+}
 
 type ValueAtom<T> = WritableAtom<T, [SetStateAction<T>], void>;
 
@@ -69,8 +139,6 @@ const reuseEnvironmentAtomFor = composeScoped(
   rootComposeReuseEnvironmentAtom,
   null,
 );
-const sectionIdAtomFor = composeScoped(rootComposeSectionIdAtom, null);
-const forkSeedAtomFor = composeScoped(rootComposeForkSeedAtom, null);
 
 const focusedComposerAtom = atom((get) => {
   const layout = get(splitLayoutAtom);
@@ -118,10 +186,6 @@ export function useRootComposeReuseEnvironment() {
   return useAtom(reuseEnvironmentAtomFor(useComposeScope().composeId));
 }
 
-export function useRootComposeSectionId() {
-  return useAtom(sectionIdAtomFor(useComposeScope().composeId));
-}
-
-export function useRootComposeForkSeed() {
-  return useAtom(forkSeedAtomFor(useComposeScope().composeId));
+export function useRootComposePlacement() {
+  return useAtom(placementAtomFor(useComposeScope().composeId));
 }

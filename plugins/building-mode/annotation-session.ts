@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ComposerDraftSnapshot } from "@get-bb/plugin-sdk";
 import {
   useComposer,
   useRpc,
@@ -30,6 +31,41 @@ export interface AnnotationTarget {
 }
 
 export const INACTIVE_STATE: PageState = { active: false, count: 0 };
+
+function withoutAnnotationMention(
+  draft: ComposerDraftSnapshot,
+  id: string,
+): ComposerDraftSnapshot {
+  const removed = draft.mentions
+    .filter(
+      (mention) =>
+        mention.kind === "plugin" &&
+        mention.provider === ANNOTATION_MENTION_PROVIDER_ID &&
+        mention.id === id,
+    )
+    .sort((a, b) => a.from - b.from);
+  if (removed.length === 0) return draft;
+  let text = "";
+  let cursor = 0;
+  for (const mention of removed) {
+    text += draft.text.slice(cursor, mention.from);
+    cursor = mention.to;
+  }
+  const removedSet = new Set(removed);
+  const mentions = draft.mentions
+    .filter((mention) => !removedSet.has(mention))
+    .map((mention) => {
+      const offset = removed.reduce(
+        (sum, item) =>
+          sum + (item.to <= mention.from ? item.to - item.from : 0),
+        0,
+      );
+      return offset === 0
+        ? mention
+        : { ...mention, from: mention.from - offset, to: mention.to - offset };
+    });
+  return { ...draft, text: text + draft.text.slice(cursor), mentions };
+}
 
 function readTheme(): Record<string, string> {
   const computed = getComputedStyle(document.documentElement);
@@ -116,11 +152,22 @@ export function useAnnotationSession(target: AnnotationTarget) {
         );
         return;
       }
-      composerRef.current.insertMention({
-        provider: ANNOTATION_MENTION_PROVIDER_ID,
-        id: saved.id,
-        label: annotationMentionLabel(resolved),
-      });
+      const current = composerRef.current;
+      const separator =
+        current.text.length === 0 || /\s$/u.test(current.text) ? "" : " ";
+      current.insert(
+        [
+          separator,
+          {
+            provider: ANNOTATION_MENTION_PROVIDER_ID,
+            id: saved.id,
+            label: annotationMentionLabel(resolved),
+          },
+          " ",
+        ],
+        { at: "end" },
+      );
+      current.focus();
     },
     [rpc],
   );
@@ -176,10 +223,9 @@ export function useAnnotationSession(target: AnnotationTarget) {
           .then(async () => {
             if (message.type === "annotation-delete") {
               records.current.delete(message.id);
-              composerRef.current.experimental_removeMention({
-                provider: ANNOTATION_MENTION_PROVIDER_ID,
-                id: message.id,
-              });
+              composerRef.current.replace((current) =>
+                withoutAnnotationMention(current, message.id),
+              );
             } else if (message.type === "annotation-update") {
               const saved = records.current.get(message.id);
               if (saved !== undefined) {
@@ -217,13 +263,13 @@ export function useAnnotationSession(target: AnnotationTarget) {
 
   useEffect(
     () =>
-      composer.experimental_onSubmitted(() => {
+      composer.onSubmitted(() => {
         pendingSaves.current = pendingSaves.current
           .then(clear)
           .catch((cause: unknown) => setError(errorMessage(cause)));
       }),
     // oxlint-disable-next-line react/exhaustive-deps
-    [composer.experimental_onSubmitted, clear],
+    [composer.onSubmitted, clear],
   );
 
   const toggle = useCallback(() => {

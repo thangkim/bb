@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { transcribeVoiceInput } from "@/lib/api";
+import type { PromptDraftState } from "@bb/client-core";
 import type { PromptBoxHandle, PromptVoiceConfig } from "./PromptBoxInternal";
 import type { PromptVoiceSession } from "./plugin-voice-input";
 
@@ -23,15 +24,55 @@ function createVoiceAbortError(): DOMException {
 
 export function usePromptVoice(
   promptBoxRef: RefObject<PromptBoxHandle | null>,
+  draft?: {
+    getCurrent: () => PromptDraftState;
+    setDraft: (draft: PromptDraftState) => void;
+  },
 ): PromptVoiceConfig {
   const pluginSessionRef = useRef<PromptVoiceSession | null>(null);
+  const sendPendingRef = useRef(false);
+  const stoppedRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      sendPendingRef.current = false;
+    };
+  }, []);
+
   const onTranscript = useCallback(
     (text: string) => {
+      const send = sendPendingRef.current;
+      sendPendingRef.current = false;
+      stoppedRef.current = false;
       const pluginSession = pluginSessionRef.current;
-      if (pluginSession) pluginSession.insert(text);
-      else promptBoxRef.current?.insertTextAtCursor(text);
+      const insertWithPlugin = pluginSession
+        ? (transcript: string) => pluginSession.insert(transcript)
+        : undefined;
+      if (mountedRef.current && promptBoxRef.current) {
+        if (send && insertWithPlugin) {
+          promptBoxRef.current.sendVoiceTranscript(text, insertWithPlugin);
+        } else if (send) {
+          promptBoxRef.current.sendVoiceTranscript(text);
+        } else if (insertWithPlugin) {
+          insertWithPlugin(text);
+        } else {
+          promptBoxRef.current.insertTextAtCursor(text);
+        }
+        return;
+      }
+      pluginSession?.end();
+      if (!draft) return;
+      const current = draft.getCurrent();
+      const separator =
+        current.text.length > 0 && !/\s$/.test(current.text) ? " " : "";
+      draft.setDraft({
+        ...current,
+        text: `${current.text}${separator}${text}`,
+      });
     },
-    [promptBoxRef],
+    [draft, promptBoxRef],
   );
 
   const getPromptContext = useCallback(
@@ -85,22 +126,51 @@ export function usePromptVoice(
     [],
   );
 
+  const stop = useCallback(() => {
+    if (voiceInput.state !== "recording" || stoppedRef.current) return;
+    stoppedRef.current = true;
+    sendPendingRef.current = false;
+    voiceInput.stop();
+  }, [voiceInput]);
+  const send = useCallback(() => {
+    if (voiceInput.state !== "recording" || stoppedRef.current) return;
+    stoppedRef.current = true;
+    sendPendingRef.current = true;
+    voiceInput.stop();
+  }, [voiceInput]);
+  const cancel = useCallback(() => {
+    sendPendingRef.current = false;
+    stoppedRef.current = false;
+    voiceInput.cancel();
+  }, [voiceInput]);
+  useEffect(() => {
+    if (
+      voiceInput.state !== "recording" &&
+      voiceInput.state !== "transcribing"
+    ) {
+      stoppedRef.current = false;
+      sendPendingRef.current = false;
+    }
+  }, [voiceInput.state]);
+
   return useMemo<PromptVoiceConfig>(
     () => ({
       state: voiceInput.state,
       isSupported: voiceInput.isSupported,
       stream: voiceInput.stream,
       start: voiceInput.start,
-      stop: voiceInput.stop,
-      cancel: voiceInput.cancel,
+      stop,
+      send,
+      cancel,
     }),
     [
       voiceInput.state,
       voiceInput.isSupported,
       voiceInput.stream,
       voiceInput.start,
-      voiceInput.stop,
-      voiceInput.cancel,
+      stop,
+      send,
+      cancel,
     ],
   );
 }

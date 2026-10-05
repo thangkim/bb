@@ -3,16 +3,15 @@ import { act, renderHook } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ForkThreadCreateSeed } from "@bb/client-core";
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import {
   PaneContext,
   type PaneContextValue,
 } from "@/views/thread-detail/PaneContext";
 import {
-  useRootComposeForkSeed,
+  useRootComposePlacement,
   useRootComposeProjectId,
-  useRootComposeSectionId,
+  useRootComposeReuseEnvironment,
 } from "./root-compose-selection";
 import type { ComposeSeed, SplitLayout } from "./split-layout";
 import { splitLayoutAtom } from "./split-layout/atoms";
@@ -45,48 +44,47 @@ function paneValue(
 
 const useSelection = () => ({
   project: useRootComposeProjectId(),
-  section: useRootComposeSectionId(),
+  placement: useRootComposePlacement(),
 });
 
 describe("root compose targets across layout remounts", () => {
-  it("retains section and fork targets when the composer remounts, then clears them", () => {
+  it("persists placement into a fresh store, then clears it", () => {
     const store = createStore();
     const wrapper = ({ children }: { children: ReactNode }) => (
       <Provider store={store}>{children}</Provider>
     );
     const useTargets = () => ({
-      section: useRootComposeSectionId(),
-      fork: useRootComposeForkSeed(),
+      placement: useRootComposePlacement(),
+      environment: useRootComposeReuseEnvironment(),
     });
-    const fork: ForkThreadCreateSeed = {
-      environmentId: "env_test",
-      model: "test-model",
-      permissionMode: "accept-edits",
-      projectId: "proj_test",
-      providerId: "test-provider",
-      reasoningLevel: "medium",
-      serviceTier: undefined,
-      sourceSeqEnd: undefined,
-      sourceThreadId: "thr_source",
-      sourceThreadTitle: "Source thread",
-    };
     const first = renderHook(useTargets, { wrapper });
     act(() => {
-      first.result.current.section[1]("sec_research");
-      first.result.current.fork[1](fork);
+      first.result.current.placement[1]({
+        sectionId: "sec_research",
+        pinned: true,
+      });
+      first.result.current.environment[1]("reuse:env_test");
     });
     first.unmount();
-    const remounted = renderHook(useTargets, { wrapper });
-    expect(remounted.result.current.section[0]).toBe("sec_research");
-    expect(remounted.result.current.fork[0]).toEqual(fork);
+    const reloadedWrapper = ({ children }: { children: ReactNode }) => (
+      <Provider store={createStore()}>{children}</Provider>
+    );
+    const remounted = renderHook(useTargets, { wrapper: reloadedWrapper });
+    expect(remounted.result.current.placement[0]).toEqual({
+      sectionId: "sec_research",
+      pinned: true,
+    });
+    expect(remounted.result.current.environment[0]).toBe("reuse:env_test");
     act(() => {
-      remounted.result.current.section[1](null);
-      remounted.result.current.fork[1](null);
+      remounted.result.current.placement[1]({ sectionId: null, pinned: false });
+      remounted.result.current.environment[1](null);
     });
     remounted.unmount();
-    const fresh = renderHook(useTargets, { wrapper });
-    expect(fresh.result.current.section[0]).toBeNull();
-    expect(fresh.result.current.fork[0]).toBeNull();
+    const fresh = renderHook(useTargets, { wrapper: reloadedWrapper });
+    expect(fresh.result.current.placement[0]).toEqual({
+      sectionId: null,
+      pinned: false,
+    });
   });
 });
 
@@ -122,14 +120,26 @@ describe("root compose selections per composer pane", () => {
 
     act(() => {
       left.result.current.project[1]("proj_c");
-      right.result.current.section[1]("sec_right");
+      right.result.current.placement[1]({
+        sectionId: "sec_right",
+        pinned: true,
+      });
     });
 
     expect(left.result.current.project[0]).toBe("proj_c");
     expect(right.result.current.project[0]).toBe("proj_b");
-    expect(left.result.current.section[0]).toBeNull();
-    expect(right.result.current.section[0]).toBe("sec_right");
-    expect(main.result.current.section[0]).toBeNull();
+    expect(left.result.current.placement[0]).toEqual({
+      sectionId: null,
+      pinned: false,
+    });
+    expect(right.result.current.placement[0]).toEqual({
+      sectionId: "sec_right",
+      pinned: true,
+    });
+    expect(main.result.current.placement[0]).toEqual({
+      sectionId: null,
+      pinned: false,
+    });
   });
 
   it("keeps the default composer's project in its existing tab storage", () => {

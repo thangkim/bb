@@ -132,9 +132,7 @@ async function startDesktopSmokeServer(
           dataDir: args.dataDir,
           experiments: {
             changelogPreview: false,
-            mobileApp: false,
             serverMove: false,
-            sidebarProgressiveDisclosure: false,
           },
           featureFlags: {
             placeholder: false,
