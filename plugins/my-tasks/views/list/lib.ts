@@ -10,7 +10,7 @@ import type { TaskSort } from "../../shared/pagination.js";
 export const STATUS_LABELS: Record<ProjectStatus, string> = {
   backlog: "Backlog",
   todo: "Todo",
-  in_progress: "In Progress",
+  in_progress: "In progress",
   in_review: "In Review",
   done: "Done",
   canceled: "Canceled",

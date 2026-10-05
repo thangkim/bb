@@ -221,7 +221,11 @@ export function ListView({ activeOnly = false }: ListViewProps) {
             data-status-group-header={group.status}
             aria-expanded={!collapsed}
             onClick={() => toggleStatusCollapsed(group.status)}
-            className="sticky top-0 z-20 isolate flex w-full cursor-pointer items-center gap-2 bg-background px-3.5 pb-1.5 pt-4 text-left text-xs font-normal text-muted-foreground"
+            className={`sticky top-0 z-20 isolate flex w-full cursor-pointer items-center gap-2 bg-background px-3.5 pb-1.5 pt-4 text-left text-xs font-normal ${
+              group.status === "in_progress"
+                ? "text-blue-600 dark:text-blue-400"
+                : "text-muted-foreground"
+            }`}
           >
             {STATUS_LABELS[group.status]}
           </button>

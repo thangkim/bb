@@ -816,7 +816,7 @@ describe("projects list", () => {
     await projectRow(slot, PLANNED.id);
     fireEvent.click(slot.getByRole("button", { name: /Status/ }));
     fireEvent.click(
-      await slot.findByRole("menuitemcheckbox", { name: /In Progress/ }),
+      await slot.findByRole("menuitemcheckbox", { name: /In progress/ }),
     );
     await waitFor(() =>
       expect(
