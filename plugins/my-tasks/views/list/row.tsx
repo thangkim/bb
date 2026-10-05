@@ -101,7 +101,9 @@ export function ProjectRow({
         }}
         className={cn(
           "group/project relative w-full text-left",
-          activeThreadProject ? "bg-surface-selected" : "hover:bg-state-hover",
+          activeThreadProject || expanded
+            ? "bg-surface-selected"
+            : "hover:bg-state-hover",
           !isLastInSection && "border-b border-border-hairline",
           taskDragOver &&
             "bg-surface-selected outline-2 -outline-offset-2 outline-dashed outline-input",
@@ -123,8 +125,9 @@ export function ProjectRow({
         >
           <button
             type="button"
-            aria-label={`Open ${project.name}`}
-            onClick={onOpen}
+            aria-expanded={expanded}
+            aria-label={`${expanded ? "Collapse" : "Expand"} ${project.name}`}
+            onClick={() => setExpanded((open) => !open)}
             onKeyDown={(event) => {
               if (!isBareKey(event)) return;
               if (event.key.toLowerCase() === "p") {
@@ -149,22 +152,36 @@ export function ProjectRow({
           <span className="col-start-2 row-start-1 min-w-0 truncate pt-0.5 text-sm">
             {project.name}
           </span>
-          <button
-            type="button"
-            aria-expanded={expanded}
-            aria-label={expanded ? "Hide tasks" : "Show tasks"}
-            onClick={() => setExpanded((open) => !open)}
+          <div
             className={cn(
-              "relative z-10 col-start-3 row-start-1 mt-0.5 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-sm p-0 transition-opacity hover:bg-state-active focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring group-hover/project:opacity-100 pointer-coarse:opacity-100",
-              working ? "text-timeline-accent" : "text-muted-foreground",
+              "relative z-10 col-start-3 row-start-1 mt-0.5 flex shrink-0 items-center gap-1 transition-opacity focus-within:opacity-100 group-hover/project:opacity-100 pointer-coarse:opacity-100",
               !expanded && "opacity-0",
             )}
           >
-            <Icon
-              name={expanded ? "ChevronUp" : "ChevronDown"}
-              className="size-3.5"
-            />
-          </button>
+            <button
+              type="button"
+              aria-label={`Open ${project.name} details`}
+              onClick={onOpen}
+              className="flex h-5 cursor-pointer items-center rounded-sm px-1.5 text-xs text-muted-foreground hover:bg-state-active hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              Details
+            </button>
+            <button
+              type="button"
+              aria-expanded={expanded}
+              aria-label={expanded ? "Hide tasks" : "Show tasks"}
+              onClick={() => setExpanded((open) => !open)}
+              className={cn(
+                "flex size-5 cursor-pointer items-center justify-center rounded-sm p-0 hover:bg-state-active focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                working ? "text-timeline-accent" : "text-muted-foreground",
+              )}
+            >
+              <Icon
+                name={expanded ? "ChevronUp" : "ChevronDown"}
+                className="size-3.5"
+              />
+            </button>
+          </div>
           <div className="col-span-2 col-start-2 row-start-2 flex min-w-0 items-center gap-1.5 text-xs text-subtle-foreground">
             <PriorityEditor
               priority={project.priority}

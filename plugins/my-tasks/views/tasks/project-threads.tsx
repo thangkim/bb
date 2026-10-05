@@ -21,6 +21,36 @@ export function useBusyThreadIds(): ReadonlySet<string> {
   );
 }
 
+const SIDE_CHAT_PLUGIN_ID = "side-chat";
+
+interface SideChat {
+  id: string;
+  title: string;
+}
+
+export function useSideChatsByThread(): ReadonlyMap<
+  string,
+  readonly SideChat[]
+> {
+  const { threads } = experimental_useSidebarThreads();
+  return useMemo(() => {
+    const byParent = new Map<string, SideChat[]>();
+    for (const thread of threads) {
+      if (
+        thread.originKind !== "fork" ||
+        thread.originPluginId !== SIDE_CHAT_PLUGIN_ID ||
+        thread.sourceThreadId === null
+      ) {
+        continue;
+      }
+      const siblings = byParent.get(thread.sourceThreadId) ?? [];
+      siblings.push({ id: thread.id, title: thread.displayTitle });
+      byParent.set(thread.sourceThreadId, siblings);
+    }
+    return byParent;
+  }, [threads]);
+}
+
 interface ProjectThreadLinksProps {
   projectId: string;
   threads: readonly ProjectThread[];
@@ -38,6 +68,7 @@ export function ProjectThreadLinks({
   className,
   children,
 }: ProjectThreadLinksProps) {
+  const sideChats = useSideChatsByThread();
   return (
     <div
       data-project-threads={projectId}
@@ -49,13 +80,27 @@ export function ProjectThreadLinks({
       {threads.map((thread) => {
         const working = busyThreadIds.has(thread.threadId);
         return (
-          <ThreadLink
-            key={thread.id}
-            threadId={thread.threadId}
-            title={thread.title}
-            statusLabel={working ? "Working" : null}
-            working={working}
-          />
+          <div key={thread.id} className="flex flex-col gap-0.5">
+            <ThreadLink
+              threadId={thread.threadId}
+              title={thread.title}
+              statusLabel={working ? "Working" : null}
+              working={working}
+            />
+            {(sideChats.get(thread.threadId) ?? []).map((sideChat) => {
+              const sideWorking = busyThreadIds.has(sideChat.id);
+              return (
+                <div key={sideChat.id} className="flex flex-col pl-4">
+                  <ThreadLink
+                    threadId={sideChat.id}
+                    title={sideChat.title}
+                    statusLabel={sideWorking ? "Working" : null}
+                    working={sideWorking}
+                  />
+                </div>
+              );
+            })}
+          </div>
         );
       })}
       {children}
