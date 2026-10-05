@@ -6,6 +6,7 @@ import type { DelegationRpcContract } from "../../delegate/contract.js";
 import type { Preset } from "../../shared/contract.js";
 import { errorMessage } from "../../shared/errors.js";
 import { useTasksRpc } from "../../shell/data.js";
+import { useOpenNewThreadInSplit } from "../../components/use-open-thread-in-split.js";
 import { PresetDialog, savePresetDraft } from "../manage/preset-dialog.js";
 import {
   defaultPreset,
@@ -60,6 +61,7 @@ export function NewThreadMenu({
 }) {
   const rpc = useRpc<DelegationRpcContract>();
   const tasksRpc = useTasksRpc();
+  const openNewThread = useOpenNewThreadInSplit();
   const [dispatching, setDispatching] = useState(false);
   const [lastPresetId, setLastPresetId] = useState(loadLastPresetId);
   const [createDialogKey, setCreateDialogKey] = useState<number | null>(null);
@@ -70,7 +72,11 @@ export function NewThreadMenu({
     storeLastPresetId(preset.id);
     setDispatching(true);
     try {
-      await rpc.call("delegate", { taskId, presetId: preset.id });
+      const { threadId } = await rpc.call("delegate", {
+        taskId,
+        presetId: preset.id,
+      });
+      openNewThread(threadId);
     } catch (error) {
       onError(errorMessage(error));
     } finally {
@@ -80,40 +86,58 @@ export function NewThreadMenu({
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild disabled={dispatching}>
-          <button type="button" className={cn(ACTION_CLASS, className)}>
-            <Icon name="Plus" className="size-3 shrink-0" />
-            {dispatching ? "Starting…" : "New thread"}
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          className="min-w-52"
-          mobileTitle="New thread"
+      <div className={cn("flex items-center", className)}>
+        <button
+          type="button"
+          className={ACTION_CLASS}
+          disabled={dispatching || presets === undefined}
+          title={current ? `Start with ${current.name}` : undefined}
+          onClick={() => {
+            if (current) void dispatch(current);
+            else setCreateDialogKey(Date.now());
+          }}
         >
-          <DropdownMenuLabel>Start a thread with preset</DropdownMenuLabel>
-          {(presets ?? []).map((preset) => (
-            <DropdownMenuItem
-              key={preset.id}
-              onSelect={() => void dispatch(preset)}
+          <Icon name="Plus" className="size-3 shrink-0" />
+          {dispatching ? "Starting…" : "New thread"}
+        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild disabled={dispatching}>
+            <button
+              type="button"
+              aria-label="Choose thread preset"
+              className={cn(ACTION_CLASS, "px-0.5")}
             >
-              <span className="min-w-0 flex-1 truncate">{preset.name}</span>
-              <span className="text-xs text-muted-foreground">
-                {preset.modelId}
-              </span>
-              {preset.id === current?.id ? (
-                <Icon name="Check" className="size-3.5" />
-              ) : null}
+              <Icon name="ChevronDown" className="size-3 shrink-0" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            className="min-w-52"
+            mobileTitle="New thread"
+          >
+            <DropdownMenuLabel>Start a thread with preset</DropdownMenuLabel>
+            {(presets ?? []).map((preset) => (
+              <DropdownMenuItem
+                key={preset.id}
+                onSelect={() => void dispatch(preset)}
+              >
+                <span className="min-w-0 flex-1 truncate">{preset.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {preset.modelId}
+                </span>
+                {preset.id === current?.id ? (
+                  <Icon name="Check" className="size-3.5" />
+                ) : null}
+              </DropdownMenuItem>
+            ))}
+            {(presets ?? []).length > 0 ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuItem onSelect={() => setCreateDialogKey(Date.now())}>
+              <Icon name="Plus" className="size-3.5" />
+              Add a preset…
             </DropdownMenuItem>
-          ))}
-          {(presets ?? []).length > 0 ? <DropdownMenuSeparator /> : null}
-          <DropdownMenuItem onSelect={() => setCreateDialogKey(Date.now())}>
-            <Icon name="Plus" className="size-3.5" />
-            Add a preset…
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
       {createDialogKey !== null ? (
         <PresetDialog
           key={createDialogKey}

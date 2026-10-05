@@ -6,7 +6,7 @@ import {
   renderSlot,
 } from "@get-bb/plugin-sdk/testing/app";
 import { COMPACT_VIEWPORT_QUERY } from "@/components/ui/hooks/use-compact-viewport";
-import { rpcInput } from "../../test-fixtures.js";
+import { makeSidebarThread, rpcInput } from "../../test-fixtures.js";
 
 window.matchMedia = (query: string) => ({
   matches: query === COMPACT_VIEWPORT_QUERY,
@@ -26,9 +26,8 @@ window.ResizeObserver ??= class {
 Element.prototype.scrollIntoView ??= () => {};
 
 installTestPluginRuntime();
-const { AttachThreadPicker, NewThreadMenu } = await import(
-  "./thread-actions.js"
-);
+const { AttachThreadPicker, NewThreadMenu } =
+  await import("./thread-actions.js");
 
 afterEach(cleanup);
 
@@ -50,33 +49,80 @@ const preset = {
   createdAt: "2026-07-15T00:00:00.000Z",
 };
 
+const otherPreset = {
+  ...preset,
+  id: "01HZZZZZZZZZZZZZZZZZZZZZE2",
+  name: "Opus · max",
+  modelId: "claude-opus-5",
+};
+
+function delegateInputs(slot: {
+  rpcCalls: { method: string; input: unknown }[];
+}) {
+  return slot.rpcCalls
+    .filter((call) => call.method === "delegate")
+    .map((call) => rpcInput(call.input));
+}
+
 describe("new thread menu", () => {
-  it("dispatches a new thread for the task with the chosen preset", async () => {
+  it("starts a thread with the default preset in one click and opens it beside the list", async () => {
+    window.localStorage.clear();
     const errors: string[] = [];
     const slot = renderSlot(
       { component: NewThreadMenu },
       {
         taskId: TASK_ID,
-        presets: [preset],
+        presets: [preset, otherPreset],
         onError: (message: string) => errors.push(message),
       },
-      { rpc: { delegate: () => ({ threadId: "thr_new" }) } },
+      {
+        rpc: { delegate: () => ({ threadId: "thr_new" }) },
+        sidebarThreads: { threads: [makeSidebarThread("thr_new")] },
+      },
     );
     fireEvent.click(slot.getByRole("button", { name: "New thread" }));
+    await waitFor(() =>
+      expect(slot.sidebarActionCalls).toEqual([
+        { method: "open", threadId: "thr_new", options: { split: true } },
+      ]),
+    );
+    expect(delegateInputs(slot)).toEqual([
+      { taskId: TASK_ID, presetId: otherPreset.id },
+    ]);
+    expect(slot.navigateCalls).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  it("starts a thread with a preset picked from the menu and remembers it", async () => {
+    const slot = renderSlot(
+      { component: NewThreadMenu },
+      { taskId: TASK_ID, presets: [preset, otherPreset], onError: () => {} },
+      {
+        rpc: { delegate: () => ({ threadId: "thr_new" }) },
+        sidebarThreads: { threads: [makeSidebarThread("thr_new")] },
+      },
+    );
+    fireEvent.click(slot.getByRole("button", { name: "Choose thread preset" }));
     fireEvent.click(
       await slot.findByRole("menuitem", { name: /Sonnet · high/ }),
     );
     await waitFor(() =>
-      expect(
-        slot.rpcCalls
-          .filter((call) => call.method === "delegate")
-          .map((call) => rpcInput(call.input)),
-      ).toEqual([{ taskId: TASK_ID, presetId: preset.id }]),
+      expect(delegateInputs(slot)).toEqual([
+        { taskId: TASK_ID, presetId: preset.id },
+      ]),
     );
-    expect(errors).toEqual([]);
+    await waitFor(() => expect(slot.sidebarActionCalls).toHaveLength(1));
+
+    fireEvent.click(slot.getByRole("button", { name: "New thread" }));
+    await waitFor(() =>
+      expect(delegateInputs(slot)).toEqual([
+        { taskId: TASK_ID, presetId: preset.id },
+        { taskId: TASK_ID, presetId: preset.id },
+      ]),
+    );
   });
 
-  it("reports a failed dispatch", async () => {
+  it("reports a failed dispatch without opening anything", async () => {
     const errors: string[] = [];
     const slot = renderSlot(
       { component: NewThreadMenu },
@@ -94,10 +140,9 @@ describe("new thread menu", () => {
       },
     );
     fireEvent.click(slot.getByRole("button", { name: "New thread" }));
-    fireEvent.click(
-      await slot.findByRole("menuitem", { name: /Sonnet · high/ }),
-    );
     await waitFor(() => expect(errors).toEqual(["project is not linked"]));
+    expect(slot.sidebarActionCalls).toEqual([]);
+    expect(slot.navigateCalls).toEqual([]);
   });
 });
 
