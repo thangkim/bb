@@ -1,0 +1,21 @@
+{
+  "name": "bb-plugin-plugin-creation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Gives every thread the plugin-creation skill: rules for building and changing bb plugins in this fork.",
+  "engines": {
+    "bb": ">=0.0"
+  },
+  "bb": {
+    "name": "Plugin creation rules",
+    "description": "Gives every thread, in any checkout or worktree, the plugin-creation skill: reuse existing plugins first, never change bb core, keep plugins fast and correct.",
+    "branding": {
+      "icon": "Puzzle"
+    },
+    "server": "./server.ts"
+  },
+  "keywords": [
+    "bb-plugin"
+  ]
+}

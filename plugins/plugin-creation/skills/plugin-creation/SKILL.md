@@ -1,6 +1,6 @@
 ---
 name: plugin-creation
-description: "Rules for creating or changing any bb plugin in this fork: check existing and community plugins first, never change bb core, and keep plugins fast, scalable, and correct. Use before building a new plugin, adding a feature to a plugin, or changing an official bb plugin."
+description: "Required rules for any bb plugin work in the bb repository (the user's fork of get-bb/bb, in any checkout or worktree): check existing and community plugins first, never change bb core, keep plugins fast, scalable, and correct. Load this BEFORE reading or editing code whenever the user asks to build, create, make, write, add, update, change, extend, fix, refactor, or remove a bb plugin, or asks for any behavior inside a named bb plugin (\"do X in plugin Z\", \"add X to my-tasks\", \"make attention-alerts do Y\", \"the focused-diff plugin should Z\"). Also load it when the user asks for a new bb feature, UI tweak, shortcut, command, or agent tool that would be built as a plugin, or when the task touches files under the bb repo's plugins/ directory. Not for plugins of other projects or frameworks."
 ---
 
 # Plugin creation
@@ -10,6 +10,9 @@ bb customizations as plugins on top of upstream bb (`origin/main`). The user
 merges upstream regularly. Every change outside a plugin the user owns becomes
 a merge conflict later, and every slow or leaky plugin slows the bb they use
 all day, on desktop and on their phone.
+
+This skill ships in `plugins/plugin-creation` so every thread gets it, in any
+checkout or worktree. Edit it there.
 
 Use `bb-plugin-authoring` for SDK mechanics. This skill sets the user's rules,
 and it overrides that skill where they disagree: here you do not add Plugin
@@ -84,8 +87,11 @@ git diff --name-only HEAD
 git status --short
 ```
 
-Every path must be under `plugins/<user-plugin>/` or `.bb/skills/`. Anything
-else is a violation: revert it or ask the user.
+Every path must be under `plugins/<user-plugin>/` or `.bb/skills/`. The one
+exception is the `pnpm-lock.yaml` importer entry for that plugin, written by
+`pnpm install` run outside the sandbox (inside it, pnpm asks to purge every
+`node_modules` and writes nothing). Anything else is a violation: revert it or
+ask the user.
 
 ## 4. Performance: cost to bb when the plugin is idle
 
