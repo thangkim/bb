@@ -5,7 +5,10 @@ import {
   type ExperimentalProviderModelPickerValue,
 } from "@get-bb/plugin-sdk/app";
 import type { Preset, PresetPermissionMode } from "../../shared/contract.js";
-import { PRESET_ENVIRONMENT_KINDS } from "../../shared/contract.js";
+import {
+  PRESET_ENVIRONMENT_KINDS,
+  presetServiceTierSchema,
+} from "../../shared/contract.js";
 import { errorMessage } from "../../shared/errors.js";
 import type { TasksRpc } from "../../shell/data.js";
 import { useTasksQuery } from "../../shell/data.js";
@@ -113,12 +116,20 @@ export async function savePresetDraft(
   const worktree = draft.environmentKind === "new-worktree";
   const baseBranch = draft.baseBranch.trim();
   const machineId = draft.machineId.trim();
+  const serviceTier = presetServiceTierSchema
+    .nullable()
+    .safeParse(draft.serviceTier ?? null);
+  if (!serviceTier.success) {
+    throw new Error(
+      "My Tasks presets support only the default and fast service tiers.",
+    );
+  }
   const fields = {
     name: draft.name.trim(),
     providerId: draft.providerId.trim(),
     modelId: draft.modelId.trim(),
     reasoningLevel: draft.reasoningLevel,
-    serviceTier: draft.serviceTier ?? null,
+    serviceTier: serviceTier.data,
     permissionMode: draft.permissionMode,
     environmentKind: draft.environmentKind,
     baseBranch: worktree && baseBranch !== "" ? baseBranch : null,

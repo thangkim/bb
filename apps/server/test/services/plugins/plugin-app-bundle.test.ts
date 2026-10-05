@@ -376,6 +376,7 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
       rootDir,
       version: "0.1.0",
       enabled: true,
+      enabledFollowsDefault: false,
     });
     await harness.pluginService.reload("oldie");
 
@@ -418,6 +419,7 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
       rootDir,
       version: "0.1.0",
       enabled: true,
+      enabledFollowsDefault: false,
     });
     await harness.pluginService.reload("devy");
     const before = harness.pluginService
@@ -499,6 +501,7 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
       rootDir,
       version: "0.1.0",
       enabled: true,
+      enabledFollowsDefault: false,
     });
     await harness.pluginService.reload("meta");
     const before = harness.pluginService
@@ -535,6 +538,7 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
       rootDir,
       version: "0.1.0",
       enabled: true,
+      enabledFollowsDefault: false,
     });
     const badMetas = [
       { sdkMajor: -1, sdkVersion: "0.0.0" },
@@ -577,6 +581,7 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
       rootDir,
       version: "0.1.0",
       enabled: true,
+      enabledFollowsDefault: false,
     });
     await harness.pluginService.reload("gated");
     const bundle = harness.pluginService
@@ -603,6 +608,7 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
       rootDir,
       version: "0.1.0",
       enabled: true,
+      enabledFollowsDefault: false,
     });
     await harness.pluginService.reload("bare");
 
