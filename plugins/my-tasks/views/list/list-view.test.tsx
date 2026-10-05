@@ -289,10 +289,10 @@ function sectionOrder(slot: ReturnType<typeof renderList>) {
 }
 
 describe("projects list", () => {
-  it("groups projects by status in workflow order, in manual order within a section", async () => {
+  it("groups projects by status with in progress first, in manual order within a section", async () => {
     const slot = renderList();
     await projectRow(slot, LAUNCH.id);
-    expect(sectionOrder(slot)).toEqual(["todo", "in_progress"]);
+    expect(sectionOrder(slot)).toEqual(["in_progress", "todo"]);
     const inProgress = slot.container.querySelector(
       '[data-status-section="in_progress"]',
     ) as HTMLElement;

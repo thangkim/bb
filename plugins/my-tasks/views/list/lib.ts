@@ -1,9 +1,8 @@
-import {
-  PROJECT_STATUSES,
-  type Label,
-  type Priority,
-  type Project,
-  type ProjectStatus,
+import type {
+  Label,
+  Priority,
+  Project,
+  ProjectStatus,
 } from "../../shared/contract.js";
 import type { TaskSort } from "../../shared/pagination.js";
 
@@ -30,6 +29,15 @@ export const SORT_LABELS: Record<TaskSort, string> = {
   due: "Due date",
 };
 
+const LIST_STATUS_ORDER: readonly ProjectStatus[] = [
+  "in_progress",
+  "in_review",
+  "todo",
+  "backlog",
+  "done",
+  "canceled",
+];
+
 interface StatusGroup {
   status: ProjectStatus;
   projects: Project[];
@@ -44,7 +52,7 @@ export function groupProjectsByStatus(
     if (bucket) bucket.push(project);
     else byStatus.set(project.status, [project]);
   }
-  return PROJECT_STATUSES.flatMap((status) => {
+  return LIST_STATUS_ORDER.flatMap((status) => {
     const bucket = byStatus.get(status);
     return bucket ? [{ status, projects: bucket }] : [];
   });

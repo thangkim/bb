@@ -13,15 +13,23 @@ const ULID_B = "01ARZ3NDEKTSV4RRFFQ69G5FAB";
 const ULID_C = "01ARZ3NDEKTSV4RRFFQ69G5FAC";
 
 describe("groupProjectsByStatus", () => {
-  it("orders groups by workflow and hides empty ones", () => {
+  it("puts active work first and hides empty groups", () => {
     const groups = groupProjectsByStatus([
       makeProject({ id: ULID_A, status: "done" }),
       makeProject({ id: ULID_B, status: "in_progress" }),
       makeProject({ id: ULID_C, status: "in_progress" }),
+      makeProject({ status: "backlog" }),
+      makeProject({ status: "canceled" }),
+      makeProject({ status: "todo" }),
+      makeProject({ status: "in_review" }),
     ]);
     expect(groups.map((group) => group.status)).toEqual([
       "in_progress",
+      "in_review",
+      "todo",
+      "backlog",
       "done",
+      "canceled",
     ]);
     expect(groups[0]?.projects.map((project) => project.id)).toEqual([
       ULID_B,
