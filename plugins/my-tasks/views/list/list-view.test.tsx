@@ -121,6 +121,7 @@ interface Fixture {
   threadsByProject?: Record<string, ProjectThread[]>;
   presets?: Preset[];
   sidebarThreadIds?: string[];
+  sideChats?: { id: string; title: string; sourceThreadId: string }[];
   settings?: Record<string, boolean>;
   threadLinks?: Record<string, { tasks: Task[]; projects: Project[] }>;
   focusedThreadId?: string;
@@ -155,7 +156,17 @@ function renderList(fixture: Fixture = {}) {
             },
           }),
       sidebarThreads: {
-        threads: (fixture.sidebarThreadIds ?? []).map(makeSidebarThread),
+        threads: [
+          ...(fixture.sidebarThreadIds ?? []).map(makeSidebarThread),
+          ...(fixture.sideChats ?? []).map((sideChat) => ({
+            ...makeSidebarThread(sideChat.id),
+            displayTitle: sideChat.title,
+            sourceThreadId: sideChat.sourceThreadId,
+            originKind: "fork" as const,
+            originPluginId: "side-chat",
+            isHidden: true,
+          })),
+        ],
       },
       rpc: {
         listProjects: () => ({ projects }),
@@ -464,6 +475,42 @@ describe("projects list", () => {
     });
   });
 
+  it("nests each project thread's side chats under it and opens them in a split", async () => {
+    const slot = renderList({
+      threadsByProject: {
+        [LAUNCH.id]: [
+          projectThread(LAUNCH.id, "P1"),
+          projectThread(LAUNCH.id, "P2"),
+        ],
+      },
+      sidebarThreadIds: ["thr_P1", "thr_P2"],
+      sideChats: [
+        { id: "thr_S1", title: "Side question", sourceThreadId: "thr_P1" },
+      ],
+    });
+    const row = await projectRow(slot, LAUNCH.id);
+    const projectThreads = row.querySelector(
+      `[data-project-threads="${LAUNCH.id}"]`,
+    ) as HTMLElement;
+    const parent = await within(projectThreads).findByRole("button", {
+      name: "Project worker P1",
+    });
+    const sideChat = within(projectThreads).getByRole("button", {
+      name: "Side question",
+    });
+    const other = within(projectThreads).getByRole("button", {
+      name: "Project worker P2",
+    });
+    expect(parent.parentElement?.contains(sideChat)).toBe(true);
+    expect(other.parentElement?.contains(sideChat)).toBe(false);
+    fireEvent.click(sideChat);
+    expect(slot.sidebarActionCalls).toContainEqual({
+      method: "open",
+      threadId: "thr_S1",
+      options: { split: true },
+    });
+  });
+
   it("shows project threads below the row and icon-only thread actions beside the due date", async () => {
     const slot = renderList({
       threadsByProject: { [LAUNCH.id]: [projectThread(LAUNCH.id, "P1")] },
@@ -613,10 +660,27 @@ describe("projects list", () => {
     });
   });
 
-  it("opens the project page from the row", async () => {
+  it("expands the project from the row instead of opening its page", async () => {
     const slot = renderList();
     const row = await projectRow(slot, LAUNCH.id);
-    fireEvent.click(within(row).getByRole("button", { name: "Open Launch" }));
+    fireEvent.click(within(row).getByRole("button", { name: "Expand Launch" }));
+    expect(
+      within(row)
+        .getByRole("button", { name: "Collapse Launch" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+    within(row).getByRole("button", { name: "Hide tasks" });
+    expect(slot.navigateCalls).not.toContainEqual(
+      expect.objectContaining({ method: "toPluginPanel" }),
+    );
+  });
+
+  it("opens the project page from the Details button", async () => {
+    const slot = renderList();
+    const row = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(
+      within(row).getByRole("button", { name: "Open Launch details" }),
+    );
     expect(slot.navigateCalls).toContainEqual({
       method: "toPluginPanel",
       path: "tasks",
@@ -671,13 +735,16 @@ describe("projects list", () => {
     expect(checkbox.getAttribute("aria-checked")).toBe("false");
     const toggle = within(row).getByRole("button", { name: "Show tasks" });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(toggle.className).toContain("col-start-3");
-    expect(toggle.className).toContain("opacity-0");
-    expect(toggle.className).toContain("group-hover/project:opacity-100");
+    const controls = toggle.parentElement as HTMLElement;
+    expect(controls.className).toContain("col-start-3");
+    expect(controls.className).toContain("opacity-0");
+    expect(controls.className).toContain("group-hover/project:opacity-100");
     fireEvent.click(toggle);
     const hide = within(row).getByRole("button", { name: "Hide tasks" });
     expect(hide.getAttribute("aria-expanded")).toBe("true");
-    expect(hide.className).not.toContain("opacity-0");
+    expect((hide.parentElement as HTMLElement).className).not.toContain(
+      "opacity-0",
+    );
     fireEvent.click(hide);
     within(row).getByRole("button", { name: "Show tasks" });
   });
