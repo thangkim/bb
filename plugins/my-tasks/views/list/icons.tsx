@@ -199,7 +199,14 @@ export function TaskCheckbox({
     >
       {done ? (
         <>
-          <rect x="0.5" y="0.5" width="13" height="13" rx="3.5" fill="currentColor" />
+          <rect
+            x="0.5"
+            y="0.5"
+            width="13"
+            height="13"
+            rx="3.5"
+            fill="currentColor"
+          />
           <path
             d="M4 7.2 l2 2 4-4.4"
             fill="none"

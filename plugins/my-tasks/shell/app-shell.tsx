@@ -21,6 +21,7 @@ import { EmptyState } from "../components/empty-state.js";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { TasksRefreshProvider } from "./refresh.js";
+import { ActiveThreadProvider } from "../components/active-thread.js";
 
 const BOARD_MIN_WIDTH = 448;
 
@@ -178,7 +179,9 @@ function TasksAppShellContent({ subPath }: PluginNavPanelProps) {
               }
             />
           ) : (
-            <RouteOutlet route={route} boardUsable={boardUsable} />
+            <ActiveThreadProvider>
+              <RouteOutlet route={route} boardUsable={boardUsable} />
+            </ActiveThreadProvider>
           )}
         </div>
       </main>

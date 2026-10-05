@@ -579,6 +579,33 @@ export function registerHandlers(
       publishProjectsChanged(bb, project.id);
       return { project };
     },
+    completeProject(input) {
+      const result = store.transaction(() => {
+        const open = store.tasks.listTasks({
+          projectId: input.projectId,
+          statuses: ["todo"],
+        });
+        for (const task of open) {
+          store.tasks.updateTask(task.id, { status: "done" });
+          writeSystemComments(store, task.id, input.authorName, [
+            `Marked done by ${input.authorName}`,
+          ]);
+        }
+        const project = store.tasks.updateProject(input.projectId, {
+          status: "done",
+        });
+        return { project, completedTaskIds: open.map((task) => task.id) };
+      });
+      publishProjectsChanged(bb, result.project.id);
+      const [first] = result.completedTaskIds;
+      if (first !== undefined) {
+        publishTasksChanged(bb, first, result.project.id);
+      }
+      for (const taskId of result.completedTaskIds) {
+        publishCommentsChanged(bb, taskId);
+      }
+      return result;
+    },
     moveProject(input) {
       const project = store.tasks.moveProject(input.projectId, {
         status: input.status,
@@ -881,6 +908,13 @@ export function registerHandlers(
     listProjectThreads(input) {
       return {
         projectThreads: store.tasks.listProjectThreads(input.projectId),
+      };
+    },
+    listProjectThreadsBatch(input) {
+      return {
+        projectThreads: store.tasks.listProjectThreadsForProjects(
+          input.projectIds,
+        ),
       };
     },
     listThreadLinks(input) {

@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useSettings } from "@get-bb/plugin-sdk/app";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Tag01Icon from "@hugeicons/core-free-icons/Tag01Icon";
 import type {
@@ -9,11 +10,17 @@ import type {
   TaskThread,
 } from "../../shared/contract.js";
 import { errorMessage } from "../../shared/errors.js";
+import { readShowCompletedTasks } from "../../shared/settings.js";
 import { useTasksRpc } from "../../shell/data.js";
 import { useTasksNavigation } from "../../shell/routes.js";
 import { useOpenThreadInSplit } from "../../components/use-open-thread-in-split.js";
+import { useActiveThread } from "../../components/active-thread.js";
 import { isActiveThread, THREAD_STATUS_META } from "../detail/meta.js";
-import { useProjectTasks, useTaskListMeta, type TaskRowMeta } from "../list/data.js";
+import {
+  useProjectTasks,
+  useTaskListMeta,
+  type TaskRowMeta,
+} from "../list/data.js";
 import { TaskCheckbox } from "../list/icons.js";
 import { partitionLabels } from "../list/lib.js";
 import { editedTasks } from "../list/optimistic.js";
@@ -98,18 +105,44 @@ function LabelChips({
 }
 
 export function ThreadRow({ thread }: { thread: TaskThread }) {
+  return (
+    <ThreadLink
+      threadId={thread.threadId}
+      title={thread.title}
+      statusLabel={THREAD_STATUS_META[thread.liveStatus].label}
+      working={isActiveThread(thread)}
+    />
+  );
+}
+
+export function ThreadLink({
+  threadId,
+  title,
+  statusLabel,
+  working,
+}: {
+  threadId: string;
+  title: string;
+  statusLabel: string | null;
+  working: boolean;
+}) {
   const openThread = useOpenThreadInSplit();
-  const statusMeta = THREAD_STATUS_META[thread.liveStatus];
-  const working = isActiveThread(thread);
+  const active = useActiveThread().threadId === threadId;
   return (
     <button
       type="button"
-      aria-label={`${thread.title} — ${statusMeta.label}`}
-      onClick={() => openThread(thread.threadId)}
-      className="relative z-10 flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-left text-xs text-subtle-foreground hover:bg-state-hover hover:text-foreground"
+      aria-label={statusLabel === null ? title : `${title} — ${statusLabel}`}
+      data-active-thread={active || undefined}
+      onClick={() => openThread(threadId)}
+      className={cn(
+        "relative z-10 flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-left text-xs hover:text-foreground",
+        active
+          ? "bg-state-active text-foreground"
+          : "text-subtle-foreground hover:bg-state-hover",
+      )}
     >
       <Icon name="MessageSquare" className="size-3 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+      <span className="min-w-0 flex-1 truncate">{title}</span>
       {working ? (
         <Icon
           name="RotateCcw"
@@ -127,6 +160,7 @@ interface TaskChecklistRowProps {
   projectLabels: readonly Label[];
   presets: Preset[] | undefined;
   otherProjects: readonly Project[];
+  unlinkedProjectId: string | null;
   pending: boolean;
   onEdit: TaskEditFn;
   onDelete: () => void;
@@ -141,6 +175,7 @@ function TaskChecklistRow({
   projectLabels,
   presets,
   otherProjects,
+  unlinkedProjectId,
   pending,
   onEdit,
   onDelete,
@@ -152,6 +187,7 @@ function TaskChecklistRow({
   const done = task.status === "done";
   const threads = meta?.threads ?? [];
   const working = (meta?.activeThreads.length ?? 0) > 0;
+  const activeThreadTask = useActiveThread().taskIds.has(task.id);
   return (
     <TaskContextMenu
       task={task}
@@ -172,7 +208,12 @@ function TaskChecklistRow({
             projectId: task.projectId,
           });
         }}
-        className={cn("py-1", pending && "opacity-70")}
+        data-active-thread-task={activeThreadTask || undefined}
+        className={cn(
+          "-mx-1.5 rounded-md px-1.5 py-1",
+          activeThreadTask && "bg-surface-selected",
+          pending && "opacity-70",
+        )}
       >
         <div className="flex min-w-0 items-center gap-2">
           <button
@@ -234,12 +275,13 @@ function TaskChecklistRow({
             ))}
             <div className="flex items-center gap-1">
               <NewThreadMenu
-                taskId={task.id}
+                target={{ kind: "task", taskId: task.id }}
                 presets={presets}
                 onError={onError}
+                unlinkedProjectId={unlinkedProjectId}
               />
               <AttachThreadPicker
-                taskId={task.id}
+                target={{ kind: "task", taskId: task.id }}
                 attachedThreadIds={threads.map((thread) => thread.threadId)}
                 onError={onError}
               />
@@ -343,13 +385,28 @@ export function TaskChecklist({
   const tasks = useProjectTasks(projectId);
   const meta = useTaskListMeta(tasks.data);
   const edits = useListTaskEdits(tasks.data, onError);
-  const displayTasks = useMemo(
-    () =>
-      tasks.data === undefined
-        ? undefined
-        : editedTasks(tasks.data, edits.entries),
-    [tasks.data, edits.entries],
+  const showCompleted = readShowCompletedTasks(useSettings().values);
+  const [completedHere, setCompletedHere] = useState<ReadonlySet<string>>(
+    () => new Set(),
   );
+  const { edit } = edits;
+  const editTask = useCallback<TaskEditFn>(
+    (task, patch) => {
+      if (patch.status === "done") {
+        setCompletedHere((current) => new Set(current).add(task.id));
+      }
+      edit(task, patch);
+    },
+    [edit],
+  );
+  const displayTasks = useMemo(() => {
+    if (tasks.data === undefined) return undefined;
+    const edited = editedTasks(tasks.data, edits.entries);
+    if (showCompleted) return edited;
+    return edited.filter(
+      (task) => task.status !== "done" || completedHere.has(task.id),
+    );
+  }, [tasks.data, edits.entries, showCompleted, completedHere]);
   const projectLabels = useMemo(
     () => (labels ?? []).filter((label) => label.projectId === projectId),
     [labels, projectId],
@@ -362,6 +419,11 @@ export function TaskChecklist({
     () => (projects ?? []).filter((project) => project.id !== projectId),
     [projects, projectId],
   );
+  const unlinkedProjectId =
+    projects?.find((project) => project.id === projectId)?.linkedBbProjectId ===
+    null
+      ? projectId
+      : null;
   const moveTask = useMoveTaskToProject(onError);
 
   if (displayTasks === undefined) {
@@ -390,8 +452,9 @@ export function TaskChecklist({
           projectLabels={projectLabels}
           presets={presets}
           otherProjects={otherProjects}
+          unlinkedProjectId={unlinkedProjectId}
           pending={edits.pending.has(task.id)}
-          onEdit={edits.edit}
+          onEdit={editTask}
           onDelete={() => edits.remove(task)}
           onMoveToProject={(targetId) => moveTask(task.id, targetId)}
           onError={onError}

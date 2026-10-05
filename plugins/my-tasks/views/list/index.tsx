@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ProjectStatus } from "../../shared/contract.js";
+import type { ProjectStatus, ProjectThread } from "../../shared/contract.js";
 import { usePresets, useProjects } from "../../shell/data.js";
 import { useTasksNavigation } from "../../shell/routes.js";
 import { NewProjectDialog } from "../manage/new-project-dialog.js";
@@ -11,7 +11,11 @@ import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { sortItems } from "../../shared/sort.js";
 import type { TaskSort } from "../../shared/pagination.js";
-import { useLabels, useProjectSummaries } from "./data.js";
+import {
+  useLabels,
+  useProjectSummaries,
+  useProjectThreadsByProject,
+} from "./data.js";
 import {
   EMPTY_FILTERS,
   hasActiveFilters,
@@ -30,10 +34,10 @@ import {
 import { groupProjectsByStatus, STATUS_LABELS } from "./lib.js";
 import { useProjectEdits } from "./use-project-edits.js";
 import { ProjectRow } from "./row.js";
-import {
-  PROJECT_DRAG_TYPE,
-  useMoveTaskToProject,
-} from "../tasks/move-task.js";
+import { PROJECT_DRAG_TYPE, useMoveTaskToProject } from "../tasks/move-task.js";
+import { useBusyThreadIds } from "../tasks/project-threads.js";
+
+const NO_THREADS: readonly ProjectThread[] = [];
 
 interface ListViewProps {
   activeOnly?: boolean;
@@ -118,6 +122,12 @@ export function ListView({ activeOnly = false }: ListViewProps) {
     () => groupProjectsByStatus(sortItems(visibleProjects ?? [], sort)),
     [visibleProjects, sort],
   );
+  const visibleProjectIds = useMemo(
+    () => (visibleProjects ?? []).map((project) => project.id).sort(),
+    [visibleProjects],
+  );
+  const projectThreads = useProjectThreadsByProject(visibleProjectIds);
+  const busyThreadIds = useBusyThreadIds();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useListScrollRestoration(
@@ -225,7 +235,11 @@ export function ListView({ activeOnly = false }: ListViewProps) {
                   summary={summaries.get(project.id)}
                   labels={labels.data}
                   presets={presets.data}
+                  threads={projectThreads.data?.get(project.id) ?? NO_THREADS}
+                  threadsError={projectThreads.error}
+                  busyThreadIds={busyThreadIds}
                   onEdit={edits.edit}
+                  onComplete={() => edits.complete(project)}
                   onDelete={() => edits.remove(project)}
                   onOpen={() =>
                     navigation.go({ kind: "project", projectId: project.id })
@@ -248,10 +262,16 @@ export function ListView({ activeOnly = false }: ListViewProps) {
         sort={sort}
         onSortChange={setSort}
       />
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto @container">
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-y-auto @container"
+      >
         {body}
       </div>
-      <NewProjectDialog open={newProjectOpen} onOpenChange={setNewProjectOpen} />
+      <NewProjectDialog
+        open={newProjectOpen}
+        onOpenChange={setNewProjectOpen}
+      />
       <DetailToasts toasts={toasts} onDismiss={dismiss} />
     </div>
   );

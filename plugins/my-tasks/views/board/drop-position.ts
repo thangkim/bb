@@ -1,7 +1,4 @@
-import {
-  PROJECT_STATUSES,
-  type ProjectStatus,
-} from "../../shared/contract.js";
+import { PROJECT_STATUSES, type ProjectStatus } from "../../shared/contract.js";
 
 export const BOARD_STATUSES = [
   "backlog",

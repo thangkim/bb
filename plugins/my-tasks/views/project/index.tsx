@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useBbNavigate } from "@get-bb/plugin-sdk/app";
-import type { Project, ProjectStatus, Priority } from "../../shared/contract.js";
+import type {
+  Preset,
+  Project,
+  ProjectStatus,
+  Priority,
+} from "../../shared/contract.js";
 import { errorMessage } from "../../shared/errors.js";
 import {
   useMentionItems,
@@ -26,8 +31,13 @@ import {
   RAIL_ROW_CLASS,
 } from "../detail/rail.js";
 import { DetailToasts, useDetailToasts } from "../detail/toast.js";
-import { useProjectSummaries, useProjectTasks, useTaskListMeta } from "../list/data.js";
+import {
+  useProjectSummaries,
+  useProjectTasks,
+  useTaskListMeta,
+} from "../list/data.js";
 import { TaskChecklist, ThreadRow } from "../tasks/checklist.js";
+import { ProjectThreadList } from "../tasks/project-threads.js";
 import { DelayedLoading } from "@/components/ui/delayed-loading";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -72,7 +82,17 @@ function ProjectProperties({
   );
 }
 
-function ProjectThreads({ projectId }: { projectId: string }) {
+function ProjectThreads({
+  projectId,
+  linked,
+  presets,
+  onError,
+}: {
+  projectId: string;
+  linked: boolean;
+  presets: Preset[] | undefined;
+  onError: (message: string) => void;
+}) {
   const tasks = useProjectTasks(projectId);
   const meta = useTaskListMeta(tasks.data);
   const rows = useMemo(
@@ -85,12 +105,18 @@ function ProjectThreads({ projectId }: { projectId: string }) {
       ),
     [tasks.data, meta.data],
   );
-  if (rows.length === 0) return null;
   return (
     <section className="mt-8">
       <h2 className="mb-2 text-xs font-semibold text-muted-foreground">
         Threads
       </h2>
+      <ProjectThreadList
+        projectId={projectId}
+        linked={linked}
+        presets={presets}
+        onError={onError}
+        className={rows.length > 0 ? "mb-1" : undefined}
+      />
       <div className="flex flex-col gap-0.5">
         {rows.map(({ task, thread }) => (
           <div key={thread.id} className="flex min-w-0 items-center gap-2">
@@ -236,7 +262,12 @@ function ProjectDetail({
             />
           </section>
 
-          <ProjectThreads projectId={project.id} />
+          <ProjectThreads
+            projectId={project.id}
+            linked={project.linkedBbProjectId !== null}
+            presets={presets.data}
+            onError={push}
+          />
         </div>
 
         <aside className="hidden w-56 shrink-0 py-10 pl-2 pr-6 @[45rem]:block">

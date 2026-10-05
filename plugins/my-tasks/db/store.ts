@@ -1828,6 +1828,28 @@ export function createTasksStore(db: PluginDatabase) {
       .map(projectThreadFromRow);
   }
 
+  function listProjectThreadsForProjects(
+    projectIds: readonly string[],
+  ): ProjectThread[] {
+    const threads: ProjectThread[] = [];
+    for (let offset = 0; offset < projectIds.length; offset += 500) {
+      const ids = projectIds.slice(offset, offset + 500);
+      if (ids.length === 0) continue;
+      const placeholders = ids.map(() => "?").join(", ");
+      const rows = db
+        .prepare<string[], ProjectThreadRow>(
+          `
+          SELECT * FROM project_threads
+          WHERE project_id IN (${placeholders})
+          ORDER BY project_id, attached_at DESC, id DESC
+        `,
+        )
+        .all(...ids);
+      threads.push(...rows.map(projectThreadFromRow));
+    }
+    return threads;
+  }
+
   function deleteProjectThread(id: string): boolean {
     return (
       db.prepare<[string]>("DELETE FROM project_threads WHERE id = ?").run(id)
@@ -2019,6 +2041,7 @@ export function createTasksStore(db: PluginDatabase) {
     upsertProjectThread,
     getProjectThreadByThreadId,
     listProjectThreads,
+    listProjectThreadsForProjects,
     listProjectsByThreadId,
     deleteProjectThread,
     createPreset,

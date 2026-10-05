@@ -164,8 +164,7 @@ export function BoardView({ activeOnly = false }: { activeOnly?: boolean }) {
     return groupColumns(
       activeOnly
         ? edits.projects.filter(
-            (project) =>
-              (summaries.get(project.id)?.activeAgentCount ?? 0) > 0,
+            (project) => (summaries.get(project.id)?.activeAgentCount ?? 0) > 0,
           )
         : edits.projects,
     );

@@ -102,6 +102,25 @@ For task dispatch and execution presets, read
    attached to. People attach from a thread's menu with **Attach to My
    Tasks…**.
 
+## Keep the project brief current
+
+A project's description is its brief, with the sections Problem, Context,
+Priority, Solution, and Decisions (a bullet list). Threads attached to a project,
+or to a task in it, get a reminder in their instructions.
+
+- When a decision in the thread adds, changes, or drops any part of the brief,
+  ask the user once whether to update it, naming the exact change. Update only
+  after they agree.
+- When the user says "summarize thread into project" or "update project
+  summary", read the brief with `my_tasks_project_brief`, then call
+  `my_tasks_update_project_brief` with only what changed, and report it.
+- Delete decisions that were dropped or reversed (`removeDecisions`); do not
+  keep superseded ones. Reword in place with `replaceDecisions`.
+- Pass `project` (a prefix) when the thread is linked to several projects or
+  none. Without the tools, use `bb my-tasks project brief ABC` to read it and
+  `--problem`, `--context`, `--priority-note`, `--solution`, `--clear`,
+  `--add-decision`, and `--remove-decision` to change it.
+
 ## Link tasks in responses
 
 When your answer refers the user to a task — including a task you just
@@ -127,6 +146,8 @@ each renders its own card.
 - `bb my-tasks status` reports the plugin's name and version. A project's
   workflow status is set with `bb my-tasks project update ABC --status <status>`
   or `bb my-tasks project move ABC --status <status> [--after XYZ | --before XYZ]`;
+  `bb my-tasks project complete ABC` marks the project done and every open
+  task in it done, matching the checkbox on the project's list row;
   `bb my-tasks project list` and `project show` report status, priority, due
   date, and progress. A task's done state is `bb my-tasks update ABC-12
   --status done|todo`.
@@ -146,7 +167,8 @@ each renders its own card.
 - Work that spans a whole project rather than one task attaches at the
   project level: `bb my-tasks project attach ABC` (current thread, or
   `--thread <id>`), `bb my-tasks project detach ABC`, and
-  `bb my-tasks project threads ABC`.
+  `bb my-tasks project threads ABC`. Start a new project-level thread with
+  `bb my-tasks project dispatch ABC --preset <name>`.
 - `bb my-tasks move ABC-12 --project XYZ` moves a task to another project and
   gives it a new key there (for example `XYZ-4`); use the new key afterwards.
 - Write one comment per meaningful milestone. Combine related facts into a

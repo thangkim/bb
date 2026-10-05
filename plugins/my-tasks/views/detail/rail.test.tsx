@@ -74,7 +74,10 @@ describe("task completion rail control", () => {
     const updates: unknown[] = [];
     const slot = renderSlot(
       { component: RailHarness },
-      { ...railProps(null), onUpdate: (update: unknown) => updates.push(update) },
+      {
+        ...railProps(null),
+        onUpdate: (update: unknown) => updates.push(update),
+      },
       { rpc: { listBbProjects: () => ({ bbProjects: [] }) } },
     );
     const toggle = slot.getByRole("checkbox", { name: "Not done" });

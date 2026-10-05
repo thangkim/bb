@@ -3,7 +3,13 @@ import { cleanup, fireEvent, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { COMPACT_VIEWPORT_QUERY } from "@/components/ui/hooks/use-compact-viewport";
-import type { Project, Task, TaskThread } from "../../shared/contract.js";
+import type {
+  Preset,
+  Project,
+  ProjectThread,
+  Task,
+  TaskThread,
+} from "../../shared/contract.js";
 import {
   makeProject,
   makeSidebarThread,
@@ -37,6 +43,7 @@ const LAUNCH = makeProject({
   id: "01HZZZZZZZZZZZZZZZZZZZZZP1",
   name: "Launch",
   prefix: "LCH",
+  linkedBbProjectId: "proj_launch",
   status: "in_progress",
   priority: "high",
   position: 1024,
@@ -81,28 +88,95 @@ function thread(taskId: string, suffix: string): TaskThread {
   };
 }
 
+function projectThread(projectId: string, suffix: string): ProjectThread {
+  return {
+    id: `01HZZZZZZZZZZZZZZZZZZZZZJ${suffix}`,
+    projectId,
+    threadId: `thr_${suffix}`,
+    title: `Project worker ${suffix}`,
+    attachedAt: "2026-07-15T00:00:00.000Z",
+  };
+}
+
+const PRESET: Preset = {
+  id: "01HZZZZZZZZZZZZZZZZZZZZZE1",
+  name: "Sonnet · high",
+  providerId: "claude-code",
+  modelId: "claude-sonnet-5",
+  reasoningLevel: "high",
+  serviceTier: null,
+  permissionMode: "accept-edits",
+  environmentKind: "project-default",
+  baseBranch: null,
+  machineId: null,
+  instructions: "",
+  builtin: false,
+  createdAt: "2026-07-15T00:00:00.000Z",
+};
+
 interface Fixture {
   projects?: Project[];
   tasks?: Task[];
   threadsByTask?: Record<string, TaskThread[]>;
+  threadsByProject?: Record<string, ProjectThread[]>;
+  presets?: Preset[];
   sidebarThreadIds?: string[];
+  settings?: Record<string, boolean>;
+  threadLinks?: Record<string, { tasks: Task[]; projects: Project[] }>;
+  focusedThreadId?: string;
 }
 
 function renderList(fixture: Fixture = {}) {
   const projects = fixture.projects ?? [LAUNCH, POLISH, PLANNED];
-  const tasks = fixture.tasks ?? [task(1), task(2, "done")];
+  const tasks = [...(fixture.tasks ?? [task(1), task(2, "done")])];
   return renderSlot(
     app.navPanels[0]!,
     { subPath: "all" },
     {
+      ...(fixture.settings === undefined ? {} : { settings: fixture.settings }),
+      ...(fixture.focusedThreadId === undefined
+        ? {}
+        : {
+            sidebarSplitLayout: {
+              panes: [
+                {
+                  paneId: "pane_tasks",
+                  rect: { x: 0, y: 0, width: 0.5, height: 1 },
+                  threadId: null,
+                  isFocused: false,
+                },
+                {
+                  paneId: "pane_thread",
+                  rect: { x: 0.5, y: 0, width: 0.5, height: 1 },
+                  threadId: fixture.focusedThreadId,
+                  isFocused: true,
+                },
+              ],
+            },
+          }),
       sidebarThreads: {
         threads: (fixture.sidebarThreadIds ?? []).map(makeSidebarThread),
       },
       rpc: {
         listProjects: () => ({ projects }),
         listFolders: () => ({ folders: [] }),
-        listPresets: () => ({ presets: [] }),
+        listPresets: () => ({ presets: fixture.presets ?? [] }),
         listLabels: () => ({ labels: [] }),
+        listProjectThreadsBatch: (raw: unknown) => ({
+          projectThreads: (rpcInput(raw).projectIds as string[]).flatMap(
+            (projectId) => fixture.threadsByProject?.[projectId] ?? [],
+          ),
+        }),
+        delegateProject: () => ({ threadId: "thr_project_new" }),
+        listThreadLinks: (raw: unknown) =>
+          fixture.threadLinks?.[rpcInput(raw).threadId as string] ?? {
+            tasks: [],
+            projects: [],
+          },
+        searchThreads: () => ({
+          threads: [{ id: "thr_free", title: "Refactor pass", status: "idle" }],
+        }),
+        projectThreadsAttach: () => ({ threadId: "thr_free" }),
         sidebarSummary: () => ({
           projects: [
             {
@@ -125,10 +199,26 @@ function renderList(fixture: Fixture = {}) {
             threads: fixture.threadsByTask?.[taskId] ?? [],
           })),
         }),
+        listBbProjects: () => ({
+          bbProjects: [{ id: "proj_mono", name: "bb monorepo" }],
+        }),
         updateProject: (raw: unknown) => {
           const input = rpcInput(raw);
           const current = projects.find((p) => p.id === input.projectId)!;
           return { project: { ...current, ...input } };
+        },
+        completeProject: (raw: unknown) => {
+          const input = rpcInput(raw);
+          const current = projects.find((p) => p.id === input.projectId)!;
+          return {
+            project: { ...current, status: "done" },
+            completedTaskIds: tasks
+              .filter(
+                (entry) =>
+                  entry.projectId === current.id && entry.status === "todo",
+              )
+              .map((entry) => entry.id),
+          };
         },
         moveProject: (raw: unknown) => {
           const input = rpcInput(raw);
@@ -145,8 +235,10 @@ function renderList(fixture: Fixture = {}) {
         },
         updateTask: (raw: unknown) => {
           const input = rpcInput(raw);
-          const current = tasks.find((entry) => entry.id === input.taskId)!;
-          return { ok: true, task: { ...current, ...input } };
+          const index = tasks.findIndex((entry) => entry.id === input.taskId);
+          const updated = { ...tasks[index]!, ...input };
+          tasks[index] = updated;
+          return { ok: true, task: updated };
         },
       },
     },
@@ -158,7 +250,9 @@ async function projectRow(
   projectId: string,
 ): Promise<HTMLElement> {
   return waitFor(() => {
-    const row = slot.container.querySelector(`[data-project-id="${projectId}"]`);
+    const row = slot.container.querySelector(
+      `[data-project-id="${projectId}"]`,
+    );
     if (row === null) throw new Error(`row ${projectId} not found`);
     return row as HTMLElement;
   });
@@ -231,10 +325,8 @@ describe("projects list", () => {
     });
     expect(open.getAttribute("aria-checked")).toBe("false");
     expect(
-      within(row)
-        .getByRole("checkbox", { name: "Mark Task 2 not done" })
-        .getAttribute("aria-checked"),
-    ).toBe("true");
+      within(row).queryByRole("checkbox", { name: "Mark Task 2 not done" }),
+    ).toBeNull();
 
     fireEvent.click(open);
     await waitFor(() =>
@@ -247,6 +339,76 @@ describe("projects list", () => {
       ).toBe(true),
     );
     await within(row).findByRole("checkbox", { name: "Mark Task 1 not done" });
+  });
+
+  it("shows done tasks when the Show completed tasks setting is on", async () => {
+    const slot = renderList({ settings: { showCompletedTasks: true } });
+    const row = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(row).getByRole("button", { name: "Show tasks" }));
+    const done = await within(row).findByRole("checkbox", {
+      name: "Mark Task 2 not done",
+    });
+    expect(done.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("hides a task checked off here only after the project is collapsed", async () => {
+    const slot = renderList();
+    const row = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(row).getByRole("button", { name: "Show tasks" }));
+    fireEvent.click(
+      await within(row).findByRole("checkbox", { name: "Mark Task 1 done" }),
+    );
+    await within(row).findByRole("checkbox", { name: "Mark Task 1 not done" });
+
+    fireEvent.click(within(row).getByRole("button", { name: "Hide tasks" }));
+    fireEvent.click(within(row).getByRole("button", { name: "Show tasks" }));
+    await within(row).findByRole("button", { name: "Add task" });
+    expect(within(row).queryByRole("checkbox", { name: /Task 1/ })).toBeNull();
+  });
+
+  it("highlights the project a focused thread is attached to at the project level", async () => {
+    const slot = renderList({
+      focusedThreadId: "thr_P1",
+      threadLinks: { thr_P1: { tasks: [], projects: [POLISH] } },
+      threadsByProject: { [POLISH.id]: [projectThread(POLISH.id, "P1")] },
+    });
+    const polish = await projectRow(slot, POLISH.id);
+    await waitFor(() =>
+      expect(polish.hasAttribute("data-active-thread-project")).toBe(true),
+    );
+    const launch = await projectRow(slot, LAUNCH.id);
+    expect(launch.hasAttribute("data-active-thread-project")).toBe(false);
+
+    fireEvent.click(within(polish).getByRole("button", { name: "Show tasks" }));
+    const link = await within(polish).findByRole("button", {
+      name: "Project worker P1",
+    });
+    expect(link.hasAttribute("data-active-thread")).toBe(true);
+  });
+
+  it("highlights the project and task of a focused task thread", async () => {
+    const first = task(1);
+    const slot = renderList({
+      tasks: [first, task(3)],
+      focusedThreadId: "thr_W1",
+      threadLinks: { thr_W1: { tasks: [first], projects: [] } },
+    });
+    const launch = await projectRow(slot, LAUNCH.id);
+    await waitFor(() =>
+      expect(launch.hasAttribute("data-active-thread-project")).toBe(true),
+    );
+    fireEvent.click(within(launch).getByRole("button", { name: "Show tasks" }));
+    await within(launch).findByRole("checkbox", { name: "Mark Task 3 done" });
+    expect(
+      launch
+        .querySelector(`[data-task-key="${first.key}"]`)
+        ?.hasAttribute("data-active-thread-task"),
+    ).toBe(true);
+    expect(
+      launch
+        .querySelector('[data-task-key="LCH-3"]')
+        ?.hasAttribute("data-active-thread-task"),
+    ).toBe(false);
   });
 
   it("opens a task's thread in a split pane when the sidebar knows it", async () => {
@@ -270,6 +432,165 @@ describe("projects list", () => {
       options: { split: true },
     });
     expect(slot.navigateCalls).toEqual([]);
+  });
+
+  it("lists project-level threads above the tasks and opens one beside the list", async () => {
+    const slot = renderList({
+      tasks: [task(1)],
+      threadsByProject: { [LAUNCH.id]: [projectThread(LAUNCH.id, "P1")] },
+      sidebarThreadIds: ["thr_P1"],
+    });
+    const row = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(row).getByRole("button", { name: "Show tasks" }));
+    const threadButton = await within(row).findByRole("button", {
+      name: "Project worker P1",
+    });
+    const checkbox = await within(row).findByRole("checkbox", {
+      name: "Mark Task 1 done",
+    });
+    expect(
+      threadButton.compareDocumentPosition(checkbox) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      slot.rpcCalls.some((call) => call.method === "listProjectThreads"),
+    ).toBe(false);
+
+    fireEvent.click(threadButton);
+    expect(slot.sidebarActionCalls).toContainEqual({
+      method: "open",
+      threadId: "thr_P1",
+      options: { split: true },
+    });
+  });
+
+  it("shows project threads below the row and icon-only thread actions beside the due date", async () => {
+    const slot = renderList({
+      threadsByProject: { [LAUNCH.id]: [projectThread(LAUNCH.id, "P1")] },
+    });
+    const row = await projectRow(slot, LAUNCH.id);
+    expect(
+      within(row).getByRole("button", { name: "Show tasks" }),
+    ).toBeTruthy();
+    const projectThreads = row.querySelector(
+      `[data-project-threads="${LAUNCH.id}"]`,
+    ) as HTMLElement;
+    expect(
+      await within(projectThreads).findByRole("button", {
+        name: "Project worker P1",
+      }),
+    ).toBeTruthy();
+    const actions = row.querySelector(
+      `[data-project-thread-actions="${LAUNCH.id}"]`,
+    ) as HTMLElement;
+    const dueDate = within(row).getByRole("button", { name: /due date/i });
+    expect(
+      dueDate.compareDocumentPosition(actions) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      within(actions).getByRole("button", { name: "New thread" }).textContent,
+    ).toBe("");
+    expect(
+      within(actions).getByRole("button", { name: "Attach thread" })
+        .textContent,
+    ).toBe("");
+    expect(
+      within(actions).queryByRole("button", { name: "Choose thread preset" }),
+    ).toBeNull();
+    const batches = slot.rpcCalls.filter(
+      (call) => call.method === "listProjectThreadsBatch",
+    );
+    expect(batches).toHaveLength(1);
+    expect(rpcInput(batches[0]!.input).projectIds).toContain(LAUNCH.id);
+  });
+
+  it("starts a new thread for the whole project from its collapsed row", async () => {
+    const slot = renderList({ presets: [PRESET] });
+    const row = await projectRow(slot, LAUNCH.id);
+    const projectThreads = await waitFor(() => {
+      const element = row.querySelector(
+        `[data-project-thread-actions="${LAUNCH.id}"]`,
+      );
+      if (element === null)
+        throw new Error("project thread actions not rendered");
+      return element as HTMLElement;
+    });
+    const newThread = within(projectThreads).getByRole("button", {
+      name: "New thread",
+    });
+    await waitFor(() => expect(newThread.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(newThread);
+    await waitFor(() =>
+      expect(
+        slot.rpcCalls
+          .filter((call) => call.method === "delegateProject")
+          .map((call) => rpcInput(call.input)),
+      ).toEqual([{ projectId: LAUNCH.id, presetId: PRESET.id }]),
+    );
+    expect(slot.rpcCalls.some((call) => call.method === "delegate")).toBe(
+      false,
+    );
+  });
+
+  it("asks for a bb project before starting a thread in an unlinked project", async () => {
+    const slot = renderList({ presets: [PRESET] });
+    const row = await projectRow(slot, POLISH.id);
+    const actions = await waitFor(() => {
+      const element = row.querySelector(
+        `[data-project-thread-actions="${POLISH.id}"]`,
+      );
+      if (element === null)
+        throw new Error("project thread actions not rendered");
+      return element as HTMLElement;
+    });
+    const newThread = within(actions).getByRole("button", {
+      name: "New thread",
+    });
+    await waitFor(() => expect(newThread.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(newThread);
+    expect(
+      slot.rpcCalls.some((call) => call.method === "delegateProject"),
+    ).toBe(false);
+    fireEvent.click(await slot.findByLabelText("Linked bb project"));
+    fireEvent.click(await slot.findByRole("option", { name: "bb monorepo" }));
+    fireEvent.click(slot.getByRole("button", { name: "Link and start" }));
+    await waitFor(() =>
+      expect(
+        slot.rpcCalls
+          .filter((call) => call.method === "delegateProject")
+          .map((call) => rpcInput(call.input)),
+      ).toEqual([{ projectId: POLISH.id, presetId: PRESET.id }]),
+    );
+    expect(
+      slot.rpcCalls
+        .filter((call) => call.method === "updateProject")
+        .map((call) => rpcInput(call.input)),
+    ).toEqual([{ projectId: POLISH.id, linkedBbProjectId: "proj_mono" }]);
+  });
+
+  it("attaches an existing thread to the project from its collapsed row", async () => {
+    const slot = renderList();
+    const row = await projectRow(slot, LAUNCH.id);
+    const projectThreads = await waitFor(() => {
+      const element = row.querySelector(
+        `[data-project-thread-actions="${LAUNCH.id}"]`,
+      );
+      if (element === null)
+        throw new Error("project thread actions not rendered");
+      return element as HTMLElement;
+    });
+    fireEvent.click(
+      within(projectThreads).getByRole("button", { name: "Attach thread" }),
+    );
+    fireEvent.click(await slot.findByRole("option", { name: /Refactor pass/ }));
+    await waitFor(() =>
+      expect(
+        slot.rpcCalls
+          .filter((call) => call.method === "projectThreadsAttach")
+          .map((call) => rpcInput(call.input)),
+      ).toEqual([{ projectId: LAUNCH.id, threadId: "thr_free" }]),
+    );
   });
 
   it("navigates to a thread the sidebar does not know", async () => {
@@ -341,19 +662,69 @@ describe("projects list", () => {
     );
   });
 
-  it("shows a chevron instead of a status icon and toggles it with the tasks", async () => {
+  it("shows a done checkbox on the left and a hover chevron on the right that toggles the tasks", async () => {
     const slot = renderList();
     const row = await projectRow(slot, PLANNED.id);
-    expect(
-      within(row).queryByRole("button", { name: /Change status/ }),
-    ).toBeNull();
+    const checkbox = within(row).getByRole("checkbox", {
+      name: "Mark Planned done",
+    });
+    expect(checkbox.getAttribute("aria-checked")).toBe("false");
     const toggle = within(row).getByRole("button", { name: "Show tasks" });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.className).toContain("col-start-3");
+    expect(toggle.className).toContain("opacity-0");
+    expect(toggle.className).toContain("group-hover/project:opacity-100");
     fireEvent.click(toggle);
     const hide = within(row).getByRole("button", { name: "Hide tasks" });
     expect(hide.getAttribute("aria-expanded")).toBe("true");
+    expect(hide.className).not.toContain("opacity-0");
     fireEvent.click(hide);
     within(row).getByRole("button", { name: "Show tasks" });
+  });
+
+  it("completes a project and its open tasks from the row checkbox", async () => {
+    const slot = renderList();
+    const row = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(
+      within(row).getByRole("checkbox", { name: "Mark Launch done" }),
+    );
+    await waitFor(() =>
+      expect(
+        slot.rpcCalls
+          .filter((call) => call.method === "completeProject")
+          .map((call) => rpcInput(call.input)),
+      ).toEqual([{ projectId: LAUNCH.id }]),
+    );
+    expect(
+      slot.rpcCalls.filter((call) => call.method === "updateTask"),
+    ).toEqual([]);
+    await waitFor(() => expect(sectionOrder(slot)).toContain("done"));
+    const done = await projectRow(slot, LAUNCH.id);
+    expect(
+      within(done)
+        .getByRole("checkbox", { name: "Mark Launch not done" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+  });
+
+  it("reopens a done project without touching its tasks", async () => {
+    const slot = renderList({
+      projects: [{ ...PLANNED, status: "done" }],
+    });
+    const row = await projectRow(slot, PLANNED.id);
+    fireEvent.click(
+      within(row).getByRole("checkbox", { name: "Mark Planned not done" }),
+    );
+    await waitFor(() =>
+      expect(
+        slot.rpcCalls
+          .filter((call) => call.method === "updateProject")
+          .map((call) => rpcInput(call.input)),
+      ).toEqual([{ projectId: PLANNED.id, status: "todo" }]),
+    );
+    expect(
+      slot.rpcCalls.filter((call) => call.method === "completeProject"),
+    ).toEqual([]);
   });
 
   it("changes a project's status from its right-click menu", async () => {

@@ -22,7 +22,9 @@ export function isTaskDrag(dataTransfer: DataTransfer): boolean {
   return Array.from(dataTransfer.types ?? []).includes(TASK_DRAG_TYPE);
 }
 
-export function readDraggedTask(dataTransfer: DataTransfer): DraggedTask | null {
+export function readDraggedTask(
+  dataTransfer: DataTransfer,
+): DraggedTask | null {
   const raw = dataTransfer.getData(TASK_DRAG_TYPE);
   if (!raw) return null;
   try {

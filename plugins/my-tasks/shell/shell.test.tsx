@@ -78,6 +78,8 @@ function seededRpc(overrides: Record<string, unknown> = {}) {
     sidebarSummary: () => ({ projects: [summary] }),
     listTasks: () => ({ tasks: [], nextCursor: null }),
     listTaskRowMeta: () => ({ rowMeta: [] }),
+    listProjectThreads: () => ({ projectThreads: [] }),
+    listProjectThreadsBatch: () => ({ projectThreads: [] }),
     getTaskByKey: () => ({ task: null }),
     ...overrides,
   };

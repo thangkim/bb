@@ -1,9 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  PRIORITIES,
-  type Task,
-  type Priority,
-} from "../../shared/contract.js";
+import { PRIORITIES, type Task, type Priority } from "../../shared/contract.js";
 import { errorMessage } from "../../shared/errors.js";
 import {
   AttachmentChip,

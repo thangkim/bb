@@ -7,7 +7,11 @@ import { createStore } from "../api";
 import type { Comment, Project, Task } from "../db";
 import { displayWidth } from "../shared/text-measure";
 import { delegationRpcContract } from "./contract";
-import { buildSeedPrompt, registerDelegation } from ".";
+import {
+  buildProjectSeedPrompt,
+  buildSeedPrompt,
+  registerDelegation,
+} from ".";
 
 function createTestPreset(
   store: ReturnType<typeof createStore>,
@@ -416,7 +420,7 @@ describe("task delegation", () => {
       harness.callRpc("delegate", { taskId: task.id, presetId: preset.id }),
     ).rejects.toMatchObject({
       code: "handler_error",
-      message: 'Task project "Unlinked" is not linked to a bb project',
+      message: 'Project "Unlinked" is not linked to a bb project',
     });
     expect(harness.sdk.callsTo("threads.spawn")).toEqual([]);
 
@@ -554,6 +558,144 @@ describe("task thread detach", () => {
     ).rejects.toThrow(`Thread thr_dead is not attached to ${task.key}`);
 
     await harness.dispose();
+  });
+});
+
+describe("project delegation", () => {
+  it("spawns a project-level thread, attaches it to the project, starts the project, and invalidates", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "tasks",
+      sdk: { threads: { spawn: async () => ({ id: "thr_project" }) } },
+    });
+    const store = createStore(bb);
+    const project = store.tasks.createProject({
+      name: "Tasks plugin",
+      prefix: "TASK",
+      color: "blue",
+      linkedBbProjectId: "proj_bb",
+    });
+    const task = store.tasks.createTask({
+      projectId: project.id,
+      title: "Implement delegation",
+      status: "todo",
+    });
+    registerDelegation(bb, store);
+    const preset = createTestPreset(store);
+
+    const result = delegationRpcContract.delegateProject.output.parse(
+      await harness.callRpc("delegateProject", {
+        projectId: project.id,
+        presetId: preset.id,
+        extraInstructions: "Plan the next milestone.",
+      }),
+    );
+
+    expect(result).toEqual({ threadId: "thr_project" });
+    expect(harness.sdk.callsTo("threads.spawn")).toEqual([
+      [
+        expect.objectContaining({
+          projectId: "proj_bb",
+          environment: { type: "project-default" },
+          model: "claude-sonnet-5",
+          title: "TASK · Tasks plugin",
+          prompt: expect.stringContaining("Plan the next milestone."),
+        }),
+      ],
+    ]);
+    expect(store.tasks.listProjectThreads(project.id)).toEqual([
+      expect.objectContaining({
+        threadId: "thr_project",
+        title: "TASK · Tasks plugin",
+      }),
+    ]);
+    expect(store.tasks.listTaskThreads(task.id)).toEqual([]);
+    expect(store.tasks.listComments(task.id)).toEqual([]);
+    expect(store.tasks.getProject(project.id)?.status).toBe("in_progress");
+    expect(harness.realtimeSignals).toEqual([
+      { channel: "projects:changed", payload: { projectId: project.id } },
+    ]);
+
+    await harness.dispose();
+  });
+
+  it("fails before spawning when the project is not linked to bb", async () => {
+    const { bb, harness } = createFakePluginHost({ pluginId: "tasks" });
+    const store = createStore(bb);
+    const project = store.tasks.createProject({
+      name: "Unlinked",
+      prefix: "UNL",
+      color: "blue",
+    });
+    registerDelegation(bb, store);
+    const preset = createTestPreset(store);
+
+    await expect(
+      harness.callRpc("delegateProject", {
+        projectId: project.id,
+        presetId: preset.id,
+      }),
+    ).rejects.toMatchObject({
+      message: 'Project "Unlinked" is not linked to a bb project',
+    });
+    expect(harness.sdk.callsTo("threads.spawn")).toEqual([]);
+    expect(store.tasks.listProjectThreads(project.id)).toEqual([]);
+
+    await harness.dispose();
+  });
+
+  it("seeds the project context, its tasks, and the project report-back contract", () => {
+    const project: Project = {
+      id: "01J00000000000000000000009",
+      name: "Operations",
+      prefix: "OPS",
+      nextTaskNumber: 3,
+      color: "blue",
+      folderId: null,
+      linkedBbProjectId: "proj_ops",
+      status: "todo",
+      priority: "high",
+      dueDate: "2026-10-31",
+      description: "Keep the lights on.",
+      position: 1_024,
+      createdAt: "2026-07-15T17:00:00.000Z",
+    };
+    const done: Task = {
+      id: "01J0000000000000000000000A",
+      projectId: project.id,
+      number: 1,
+      key: "OPS-1",
+      title: "Rotate keys",
+      description: "",
+      status: "done",
+      priority: "none",
+      dueDate: null,
+      position: 1_024,
+      createdAt: "2026-07-15T17:01:00.000Z",
+      updatedAt: "2026-07-15T17:01:00.000Z",
+    };
+    const open: Task = {
+      ...done,
+      id: "01J0000000000000000000000B",
+      number: 2,
+      key: "OPS-2",
+      title: "Patch hosts",
+      status: "todo",
+    };
+    const prompt = buildProjectSeedPrompt({
+      project,
+      projectTasks: [done, open],
+      presetInstructions: "Be careful.",
+    });
+
+    expect(prompt).toContain("# OPS · Operations");
+    expect(prompt).toContain("Keep the lights on.");
+    expect(prompt).toContain("- Due: 2026-10-31");
+    expect(prompt).toContain("- [x] OPS-1 · Rotate keys");
+    expect(prompt).toContain("- [ ] OPS-2 · Patch hosts");
+    expect(prompt).toContain("bb my-tasks create --project OPS");
+    expect(prompt).toContain("Your thread is already attached to the project.");
+    expect(prompt).toContain("## Preset instructions\n\nBe careful.");
+    expect(prompt).not.toContain("Additional instructions");
   });
 });
 

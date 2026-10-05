@@ -51,6 +51,7 @@ export function positionBetween(
 export interface ProjectEditController {
   projects: Project[] | undefined;
   edit: (project: Project, patch: ProjectEdit) => void;
+  complete: (project: Project) => void;
   move: (
     project: Project,
     status: ProjectStatus,
@@ -134,6 +135,19 @@ export function useProjectEdits(
     [rpc, track],
   );
 
+  const complete = useCallback(
+    (project: Project) => {
+      track(
+        project.id,
+        { status: "done" },
+        rpc
+          .call("completeProject", { projectId: project.id })
+          .then((result) => result.project),
+      );
+    },
+    [rpc, track],
+  );
+
   const move = useCallback(
     (
       project: Project,
@@ -145,11 +159,7 @@ export function useProjectEdits(
         project.id,
         {
           status,
-          position: positionBetween(
-            before,
-            after,
-            Number.MAX_SAFE_INTEGER,
-          ),
+          position: positionBetween(before, after, Number.MAX_SAFE_INTEGER),
         },
         rpc
           .call("moveProject", {
@@ -187,5 +197,5 @@ export function useProjectEdits(
     });
   }, [serverProjects, overrides]);
 
-  return { projects, edit, move, remove };
+  return { projects, edit, complete, move, remove };
 }

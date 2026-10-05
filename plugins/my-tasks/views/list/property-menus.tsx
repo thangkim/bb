@@ -31,7 +31,12 @@ import {
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import type { TaskEdit } from "./optimistic.js";
-import { PriorityIcon, PriorityTag, StatusIcon, TaskCheckbox } from "./icons.js";
+import {
+  PriorityIcon,
+  PriorityTag,
+  StatusIcon,
+  TaskCheckbox,
+} from "./icons.js";
 import {
   DUE_DATE_PRESETS,
   formatDueDate,

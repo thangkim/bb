@@ -15,6 +15,16 @@ export const delegationRpcContract = defineRpcContract({
       .strict(),
     output: z.object({ threadId: threadIdSchema }).strict(),
   },
+  delegateProject: {
+    input: z
+      .object({
+        projectId: idSchema,
+        presetId: idSchema,
+        extraInstructions: z.string().optional(),
+      })
+      .strict(),
+    output: z.object({ threadId: threadIdSchema }).strict(),
+  },
   taskThreadsAttach: {
     input: z.object({ taskId: idSchema, threadId: threadIdSchema }).strict(),
     output: z.object({ threadId: threadIdSchema }).strict(),

@@ -994,6 +994,107 @@ describe("Tasks RPC domain API", () => {
     await harness.dispose();
   });
 
+  it("completes a project and every open task in it in one call", async () => {
+    const { bb, harness } = createFakePluginHost({ pluginId: "tasks" });
+    const store = createStore(bb);
+    registerTasksApi(bb, store);
+    const project = store.tasks.createProject({
+      name: "Finish",
+      prefix: "FIN",
+      color: "blue",
+    });
+    const other = store.tasks.createProject({
+      name: "Other",
+      prefix: "OTH",
+      color: "green",
+    });
+    const open = store.tasks.createTask({
+      projectId: project.id,
+      title: "Open",
+    });
+    const finished = store.tasks.createTask({
+      projectId: project.id,
+      title: "Finished",
+      status: "done",
+    });
+    const elsewhere = store.tasks.createTask({
+      projectId: other.id,
+      title: "Elsewhere",
+    });
+
+    const result = tasksRpcContract.completeProject.output.parse(
+      await harness.callRpc("completeProject", {
+        projectId: project.id,
+        authorName: "Sawyer",
+      }),
+    );
+
+    expect(result.project.status).toBe("done");
+    expect(result.completedTaskIds).toEqual([open.id]);
+    expect(store.tasks.getTask(open.id)?.status).toBe("done");
+    expect(store.tasks.getTask(elsewhere.id)?.status).toBe("todo");
+    expect(store.tasks.listComments(open.id)).toEqual([
+      expect.objectContaining({
+        kind: "system",
+        body: "Marked done by Sawyer",
+      }),
+    ]);
+    expect(store.tasks.listComments(finished.id)).toEqual([]);
+    expect(harness.realtimeSignals).toEqual(
+      expect.arrayContaining([
+        { channel: "projects:changed", payload: { projectId: project.id } },
+        {
+          channel: "tasks:changed",
+          payload: { taskId: open.id, projectId: project.id },
+        },
+        { channel: "comments:changed", payload: { taskId: open.id } },
+      ]),
+    );
+
+    const again = tasksRpcContract.completeProject.output.parse(
+      await harness.callRpc("completeProject", { projectId: project.id }),
+    );
+    expect(again.completedTaskIds).toEqual([]);
+
+    await harness.dispose();
+  });
+
+  it("lists project threads for many projects in one call, newest first per project", async () => {
+    const { bb, harness } = createFakePluginHost({ pluginId: "tasks" });
+    const store = createStore(bb);
+    registerTasksApi(bb, store);
+    const [alpha, beta, gamma] = ["Alpha", "Beta", "Gamma"].map((name) =>
+      store.tasks.createProject({
+        name,
+        prefix: name.slice(0, 3).toUpperCase(),
+        color: "blue",
+      }),
+    );
+    const attach = (projectId: string, threadId: string) =>
+      store.tasks.upsertProjectThread({ projectId, threadId, title: threadId });
+    attach(alpha!.id, "thr_a1");
+    attach(beta!.id, "thr_b1");
+    attach(alpha!.id, "thr_a2");
+    attach(gamma!.id, "thr_g1");
+
+    const result = tasksRpcContract.listProjectThreadsBatch.output.parse(
+      await harness.callRpc("listProjectThreadsBatch", {
+        projectIds: [alpha!.id, beta!.id],
+      }),
+    );
+
+    const threadIdsFor = (projectId: string) =>
+      result.projectThreads
+        .filter((thread) => thread.projectId === projectId)
+        .map((thread) => thread.threadId);
+    expect(threadIdsFor(alpha!.id).sort()).toEqual(["thr_a1", "thr_a2"]);
+    expect(threadIdsFor(beta!.id)).toEqual(["thr_b1"]);
+    expect(threadIdsFor(gamma!.id)).toEqual([]);
+    expect(result.projectThreads).toHaveLength(3);
+
+    await harness.dispose();
+  });
+
   it("resolves task keys case-insensitively and degrades bad keys to null", async () => {
     const { bb, harness } = createFakePluginHost({ pluginId: "tasks" });
     const store = createStore(bb);

@@ -486,6 +486,20 @@ export const tasksRpcContract = defineRpcContract({
     input: updateProjectInputSchema,
     output: z.object({ project: projectSchema }).strict(),
   },
+  completeProject: {
+    input: z
+      .object({
+        projectId: idSchema,
+        authorName: nonBlankStringSchema.default("You"),
+      })
+      .strict(),
+    output: z
+      .object({
+        project: projectSchema,
+        completedTaskIds: z.array(idSchema),
+      })
+      .strict(),
+  },
   moveProject: {
     input: z
       .object({
@@ -646,6 +660,10 @@ export const tasksRpcContract = defineRpcContract({
   },
   listProjectThreads: {
     input: z.object({ projectId: idSchema }).strict(),
+    output: z.object({ projectThreads: z.array(projectThreadSchema) }).strict(),
+  },
+  listProjectThreadsBatch: {
+    input: z.object({ projectIds: z.array(idSchema).min(1).max(500) }).strict(),
     output: z.object({ projectThreads: z.array(projectThreadSchema) }).strict(),
   },
   listThreadLinks: {

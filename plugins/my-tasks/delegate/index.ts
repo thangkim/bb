@@ -52,6 +52,13 @@ class DelegationError extends Error {
   }
 }
 
+interface ProjectSeedPromptInput {
+  project: Project;
+  projectTasks: readonly Task[];
+  presetInstructions: string;
+  extraInstructions?: string;
+}
+
 interface SeedPromptInput {
   task: Task;
   project: Project;
@@ -129,21 +136,71 @@ export function buildSeedPrompt(input: SeedPromptInput): string {
     ),
   ];
 
-  if (input.presetInstructions.trim()) {
-    sections.push(
-      markdownSection("Preset instructions", input.presetInstructions.trim()),
-    );
-  }
-  if (input.extraInstructions?.trim()) {
-    sections.push(
-      markdownSection(
-        "Additional instructions",
-        input.extraInstructions.trim(),
-      ),
-    );
-  }
+  appendInstructions(
+    sections,
+    input.presetInstructions,
+    input.extraInstructions,
+  );
 
   return `${sections.join("\n\n")}\n`;
+}
+
+function appendInstructions(
+  sections: string[],
+  presetInstructions: string,
+  extraInstructions: string | undefined,
+): void {
+  if (presetInstructions.trim()) {
+    sections.push(
+      markdownSection("Preset instructions", presetInstructions.trim()),
+    );
+  }
+  if (extraInstructions?.trim()) {
+    sections.push(
+      markdownSection("Additional instructions", extraInstructions.trim()),
+    );
+  }
+}
+
+export function buildProjectSeedPrompt(input: ProjectSeedPromptInput): string {
+  const { project } = input;
+  const sections = [
+    `# ${project.prefix} · ${project.name}`,
+    markdownSection(
+      "Description",
+      project.description.trim() || "No description provided.",
+    ),
+    markdownSection(
+      "Project details",
+      [
+        `- Status: ${displayName(project.status)}`,
+        `- Priority: ${displayName(project.priority)}`,
+        `- Due: ${project.dueDate ?? "None"}`,
+        `- Linked bb project: ${project.linkedBbProjectId ?? "Not linked"}`,
+      ].join("\n"),
+    ),
+    markdownSection(
+      "Tasks in this project",
+      formatProjectTasks(input.projectTasks),
+    ),
+    markdownSection(
+      "Report-back contract",
+      `You are working on project ${project.prefix} as a whole, not on one task. Use the bb my-tasks CLI: add tasks for new work (bb my-tasks create --project ${project.prefix} --title ...), comment substantive updates on the task they concern (bb my-tasks comment <key> --body ...), and mark tasks done when their work is complete (bb my-tasks update <key> --status done). Your thread is already attached to the project.`,
+    ),
+  ];
+  appendInstructions(
+    sections,
+    input.presetInstructions,
+    input.extraInstructions,
+  );
+  return `${sections.join("\n\n")}\n`;
+}
+
+function projectThreadTitle(project: Project): string {
+  return truncateToWidth(
+    `${project.prefix} · ${project.name}`,
+    MAX_DELEGATED_THREAD_TITLE_WIDTH,
+  );
 }
 
 function delegatedThreadTitle(task: Task): string {
@@ -175,7 +232,7 @@ function requireLinkedBbProject(project: Project): string {
   if (project.linkedBbProjectId) return project.linkedBbProjectId;
   throw new DelegationError(
     "project_not_linked",
-    `Task project "${project.name}" is not linked to a bb project`,
+    `Project "${project.name}" is not linked to a bb project`,
   );
 }
 
@@ -227,6 +284,36 @@ async function presetSpawnEnvironment(
           : { kind: "named", name: preset.baseBranch },
     },
   };
+}
+
+async function spawnPresetThread(
+  bb: BbPluginApi,
+  preset: Preset,
+  input: { projectId: string; title: string; prompt: string },
+): Promise<{ id: string }> {
+  const execution = presetExecutionSchema.parse({
+    providerId: preset.providerId,
+    model: preset.modelId,
+    reasoningLevel: preset.reasoningLevel,
+    serviceTier: preset.serviceTier,
+    permissionMode: preset.permissionMode,
+  });
+  const environment = await presetSpawnEnvironment(bb, preset);
+  return bb.sdk.threads
+    .spawn({
+      projectId: input.projectId,
+      environment,
+      providerId: execution.providerId,
+      model: execution.model,
+      reasoningLevel: execution.reasoningLevel,
+      ...(execution.serviceTier === null
+        ? {}
+        : { serviceTier: execution.serviceTier }),
+      permissionMode: execution.permissionMode,
+      title: input.title,
+      prompt: input.prompt,
+    })
+    .catch((error: unknown) => mapSpawnTargetError(error, preset));
 }
 
 function isBbHttpError(
@@ -324,13 +411,6 @@ export function handlers(
       const comments = store.tasks.listComments(task.id);
       const recentComments = comments.slice(-5);
       const title = delegatedThreadTitle(task);
-      const execution = presetExecutionSchema.parse({
-        providerId: preset.providerId,
-        model: preset.modelId,
-        reasoningLevel: preset.reasoningLevel,
-        serviceTier: preset.serviceTier,
-        permissionMode: preset.permissionMode,
-      });
       const prompt = buildSeedPrompt({
         task,
         project,
@@ -343,22 +423,11 @@ export function handlers(
         extraInstructions: input.extraInstructions,
       });
 
-      const environment = await presetSpawnEnvironment(bb, preset);
-      const thread = await bb.sdk.threads
-        .spawn({
-          projectId: linkedBbProjectId,
-          environment,
-          providerId: execution.providerId,
-          model: execution.model,
-          reasoningLevel: execution.reasoningLevel,
-          ...(execution.serviceTier === null
-            ? {}
-            : { serviceTier: execution.serviceTier }),
-          permissionMode: execution.permissionMode,
-          title,
-          prompt,
-        })
-        .catch((error: unknown) => mapSpawnTargetError(error, preset));
+      const thread = await spawnPresetThread(bb, preset, {
+        projectId: linkedBbProjectId,
+        title,
+        prompt,
+      });
 
       const taskThread = store.transaction(() => {
         const attached = store.tasks.upsertTaskThread({
@@ -400,6 +469,39 @@ export function handlers(
       publishTasksChanged(bb, task.id, task.projectId);
       publishProjectsChanged(bb, project.id);
       publishCommentsChanged(bb, task.id);
+      return { threadId: thread.id };
+    },
+
+    async delegateProject(input) {
+      const project = requireProject(store.tasks, input.projectId);
+      const linkedBbProjectId = requireLinkedBbProject(project);
+      const preset = requirePreset(store.tasks, input.presetId);
+      const title = projectThreadTitle(project);
+      const prompt = buildProjectSeedPrompt({
+        project,
+        projectTasks: store.tasks.listTasks({ projectId: project.id }),
+        presetInstructions: preset.instructions,
+        extraInstructions: input.extraInstructions,
+      });
+
+      const thread = await spawnPresetThread(bb, preset, {
+        projectId: linkedBbProjectId,
+        title,
+        prompt,
+      });
+
+      store.transaction(() => {
+        store.tasks.upsertProjectThread({
+          projectId: project.id,
+          threadId: thread.id,
+          title,
+        });
+        if (project.status === "backlog" || project.status === "todo") {
+          store.tasks.updateProject(project.id, { status: "in_progress" });
+        }
+      });
+
+      publishProjectsChanged(bb, project.id);
       return { threadId: thread.id };
     },
 

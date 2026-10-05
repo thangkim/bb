@@ -6,6 +6,7 @@ import {
 } from "../../shell/data.js";
 import type {
   Label,
+  ProjectThread,
   SidebarProjectSummary,
   Task,
   TaskThread,
@@ -29,6 +30,46 @@ export function useProjectTasks(projectId: string) {
     async (rpc) => sortItems(await listAllTasks(rpc, { projectId }), "manual"),
     ["tasks:changed", "threads:changed"],
     [projectId],
+  );
+}
+
+export function useProjectThreads(projectId: string) {
+  return useTasksQuery<ProjectThread[]>(
+    async (rpc) =>
+      (await rpc.call("listProjectThreads", { projectId })).projectThreads,
+    ["projects:changed"],
+    [projectId],
+  );
+}
+
+const PROJECT_THREADS_BATCH_SIZE = 500;
+
+export function useProjectThreadsByProject(projectIds: readonly string[]) {
+  return useTasksQuery<Map<string, ProjectThread[]>>(
+    async (rpc) => {
+      const byProject = new Map<string, ProjectThread[]>();
+      for (
+        let offset = 0;
+        offset < projectIds.length;
+        offset += PROJECT_THREADS_BATCH_SIZE
+      ) {
+        const batch = projectIds.slice(
+          offset,
+          offset + PROJECT_THREADS_BATCH_SIZE,
+        );
+        const { projectThreads } = await rpc.call("listProjectThreadsBatch", {
+          projectIds: batch,
+        });
+        for (const thread of projectThreads) {
+          const list = byProject.get(thread.projectId);
+          if (list) list.push(thread);
+          else byProject.set(thread.projectId, [thread]);
+        }
+      }
+      return byProject;
+    },
+    ["projects:changed"],
+    [projectIds.join()],
   );
 }
 

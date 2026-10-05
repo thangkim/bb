@@ -2164,7 +2164,7 @@ describe("bb my-tasks CLI", () => {
     expect(result).toEqual({
       exitCode: 1,
       stdout: "",
-      stderr: 'Task project "Unlinked CLI" is not linked to a bb project\n',
+      stderr: 'Project "Unlinked CLI" is not linked to a bb project\n',
     });
     const aliased = await harness.runCli([
       "delegate",
@@ -2173,9 +2173,75 @@ describe("bb my-tasks CLI", () => {
       "CLI worker",
     ]);
     expect(aliased.stderr).toBe(
-      'Task project "Unlinked CLI" is not linked to a bb project\n',
+      'Project "Unlinked CLI" is not linked to a bb project\n',
     );
     expect(harness.sdk.callsTo("threads.spawn")).toEqual([]);
+
+    await harness.dispose();
+  });
+
+  it("dispatches a new thread for a whole project with `bb my-tasks project dispatch`", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "tasks",
+      sdk: { threads: { spawn: async () => ({ id: "thr_project_cli" }) } },
+    });
+    await plugin(bb);
+    stdout(
+      await harness.runCli([
+        "project",
+        "create",
+        "--name",
+        "Linked CLI",
+        "--prefix",
+        "LNK",
+        "--link-bb-project",
+        "proj_linked",
+      ]),
+    );
+    stdout(
+      await harness.runCli([
+        "preset",
+        "create",
+        "--name",
+        "CLI worker",
+        "--provider",
+        "codex",
+        "--model",
+        "gpt-5.6-sol",
+        "--reasoning",
+        "high",
+        "--permission",
+        "full",
+      ]),
+    );
+
+    expect(stdout(await harness.runCli(["--help"]))).toContain(
+      "bb my-tasks project dispatch   Start a new agent thread for a whole project",
+    );
+    expect(
+      stdout(
+        await harness.runCli([
+          "project",
+          "dispatch",
+          "LNK",
+          "--preset",
+          "CLI worker",
+        ]),
+      ),
+    ).toBe("thr_project_cli");
+    expect(harness.sdk.callsTo("threads.spawn")).toEqual([
+      [
+        expect.objectContaining({
+          projectId: "proj_linked",
+          title: "LNK · Linked CLI",
+        }),
+      ],
+    ]);
+    expect(
+      JSON.parse(
+        stdout(await harness.runCli(["project", "threads", "LNK", "--json"])),
+      ).projectThreads,
+    ).toEqual([expect.objectContaining({ threadId: "thr_project_cli" })]);
 
     await harness.dispose();
   });

@@ -22,6 +22,8 @@ import {
 } from "../attachments";
 import { delegationRpcContract } from "../delegate/contract";
 import { handlers as delegationHandlers } from "../delegate";
+import { briefText, updateProjectBrief } from "../brief";
+import { BRIEF_TEXT_SECTIONS } from "../brief/brief";
 import {
   presetReasoningLevelSchema,
   tasksRpcContract,
@@ -732,6 +734,9 @@ export function registerTasksCli(
             ["show", "Show one tracker project"],
             ["update", "Change a project's status, priority, due date, or details"],
             ["move", "Move a project to a status column and position"],
+            ["complete", "Mark a project and all of its open tasks done"],
+            ["brief", "Show or update a project's brief and decisions"],
+            ["dispatch", "Start a new agent thread for a whole project"],
             ["attach", "Attach an existing agent thread to a project"],
             ["detach", "Detach an agent thread from a project"],
             ["threads", "List agent threads attached to a project"],
@@ -1055,6 +1060,121 @@ export function registerTasksCli(
             });
           },
         }),
+        "project complete": cliCommand({
+          summary: "Mark a tracker project done and finish every open task in it",
+          positionals: [
+            {
+              name: "prefix-or-id",
+              description: "Tracker project prefix such as ABC, or its ULID",
+              required: true,
+            },
+          ],
+          options: { json: JSON_OPTION },
+          run(input, ctx) {
+            return guard(async () => {
+              const project = await resolveProject(
+                domain,
+                input.positionals["prefix-or-id"],
+              );
+              const result = tasksRpcContract.completeProject.output.parse(
+                await domain.completeProject(
+                  tasksRpcContract.completeProject.input.parse({
+                    projectId: project.id,
+                    authorName: taskAuthor(ctx),
+                  }),
+                ),
+              );
+              return input.options.json
+                ? JSON.stringify(result)
+                : `Completed project ${result.project.prefix} and ${result.completedTaskIds.length} open task(s)`;
+            });
+          },
+        }),
+        "project brief": cliCommand({
+          summary:
+            "Show a project's brief, or update its Problem, Context, Priority, Solution, and Decisions",
+          positionals: [
+            {
+              name: "prefix-or-id",
+              description: "Tracker project prefix such as ABC, or its ULID",
+              required: true,
+            },
+          ],
+          options: {
+            problem: { type: "string", description: "New Problem section" },
+            context: { type: "string", description: "New Context section" },
+            "priority-note": {
+              type: "string",
+              description:
+                "New Priority section; set the priority field with project update --priority",
+            },
+            solution: { type: "string", description: "New Solution section" },
+            clear: {
+              type: "enum",
+              values: BRIEF_TEXT_SECTIONS,
+              repeatable: true,
+              split: ",",
+              placeholder: "section",
+              description: "Remove these sections; repeat or comma-separate",
+            },
+            "add-decision": {
+              type: "string",
+              repeatable: true,
+              placeholder: "text",
+              description: "Add a decision; repeat for several",
+            },
+            "remove-decision": {
+              type: "string",
+              repeatable: true,
+              placeholder: "match",
+              description:
+                "Delete a decision by its text, a unique part of it, or its number; repeat for several",
+            },
+            json: JSON_OPTION,
+          },
+          run(input) {
+            return guard(async () => {
+              const project = await resolveProject(
+                domain,
+                input.positionals["prefix-or-id"],
+              );
+              const options = input.options;
+              const cleared = new Set(options.clear ?? []);
+              const sections = {
+                problem: cleared.has("problem") ? null : options.problem,
+                context: cleared.has("context") ? null : options.context,
+                priority: cleared.has("priority")
+                  ? null
+                  : options["priority-note"],
+                solution: cleared.has("solution") ? null : options.solution,
+              };
+              const addDecisions = options["add-decision"] ?? [];
+              const removeDecisions = options["remove-decision"] ?? [];
+              const updating =
+                Object.values(sections).some((value) => value !== undefined) ||
+                addDecisions.length + removeDecisions.length > 0;
+              if (!updating) {
+                return options.json
+                  ? JSON.stringify({ project })
+                  : briefText(project);
+              }
+              const result = updateProjectBrief(
+                bb,
+                store,
+                project.id,
+                { sections, addDecisions, removeDecisions },
+                undefined,
+              );
+              if (options.json) return JSON.stringify(result);
+              return result.changes.length === 0
+                ? `No changes to the ${result.project.prefix} brief`
+                : [
+                    `Updated the ${result.project.prefix} brief:`,
+                    ...result.changes.map((line) => `- ${line}`),
+                  ].join("\n");
+            });
+          },
+        }),
         "project move": cliCommand({
           summary: "Move a project to a status column, optionally between two neighbors",
           positionals: [
@@ -1109,6 +1229,58 @@ export function registerTasksCli(
               return input.options.json
                 ? JSON.stringify({ project: moved })
                 : `Moved project ${moved.prefix} to ${moved.status}`;
+            });
+          },
+        }),
+
+        "project dispatch": cliCommand({
+          summary: "Start a new agent thread for a whole project",
+          positionals: [
+            {
+              name: "prefix-or-id",
+              description: "Tracker project prefix such as ABC, or its ULID",
+              required: true,
+            },
+          ],
+          options: {
+            preset: {
+              type: "string",
+              required: true,
+              placeholder: "name-or-id",
+              description:
+                "Dispatch preset name or id; run bb my-tasks preset list to see them",
+            },
+            instructions: {
+              type: "string",
+              placeholder: "text",
+              aliases: ["extra-instructions"],
+              description: "Extra instructions for this dispatch only",
+            },
+            json: JSON_OPTION,
+          },
+          run(input) {
+            return guard(async () => {
+              const project = await resolveProject(
+                domain,
+                input.positionals["prefix-or-id"],
+              );
+              const preset = resolvePreset(
+                await listPresets(domain),
+                input.options.preset,
+              );
+              const result =
+                delegationRpcContract.delegateProject.output.parse(
+                  await delegationHandlers(bb, store).delegateProject(
+                    delegationRpcContract.delegateProject.input.parse({
+                      projectId: project.id,
+                      presetId: preset.id,
+                      extraInstructions: input.options.instructions,
+                    }),
+                  ),
+                );
+              return input.options.json
+                ? JSON.stringify({ project, preset, ...result })
+                : result.threadId;
             });
           },
         }),

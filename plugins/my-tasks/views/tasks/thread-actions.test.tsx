@@ -71,7 +71,7 @@ describe("new thread menu", () => {
     const slot = renderSlot(
       { component: NewThreadMenu },
       {
-        taskId: TASK_ID,
+        target: { kind: "task", taskId: TASK_ID },
         presets: [preset, otherPreset],
         onError: (message: string) => errors.push(message),
       },
@@ -96,7 +96,11 @@ describe("new thread menu", () => {
   it("starts a thread with a preset picked from the menu and remembers it", async () => {
     const slot = renderSlot(
       { component: NewThreadMenu },
-      { taskId: TASK_ID, presets: [preset, otherPreset], onError: () => {} },
+      {
+        target: { kind: "task", taskId: TASK_ID },
+        presets: [preset, otherPreset],
+        onError: () => {},
+      },
       {
         rpc: { delegate: () => ({ threadId: "thr_new" }) },
         sidebarThreads: { threads: [makeSidebarThread("thr_new")] },
@@ -127,7 +131,7 @@ describe("new thread menu", () => {
     const slot = renderSlot(
       { component: NewThreadMenu },
       {
-        taskId: TASK_ID,
+        target: { kind: "task", taskId: TASK_ID },
         presets: [preset],
         onError: (message: string) => errors.push(message),
       },
@@ -152,7 +156,7 @@ describe("attach thread picker", () => {
     const slot = renderSlot(
       { component: AttachThreadPicker },
       {
-        taskId: TASK_ID,
+        target: { kind: "task", taskId: TASK_ID },
         attachedThreadIds: ["thr_attached"],
         onError: () => {},
       },

@@ -84,8 +84,11 @@ machine; pass `--machine <id-or-name>` to target another enrolled machine.
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `bb my-tasks status`                              | Show the installed My Tasks plugin name and version.                                                                                       |
 | `bb my-tasks project create\|list\|show\|update`  | Manage projects: status, priority, due date, description, folder, color, prefix, and bb-project link. `list`/`show` report progress.      |
+| `bb my-tasks project dispatch <prefix> --preset <name>` | Start a new agent thread for the whole project and attach it at the project level, not to a task.                              |
 | `bb my-tasks project attach\|detach\|threads <prefix>` | Attach the current thread (or `--thread <id>`) to a project, detach it, or list the threads attached at the project level.            |
 | `bb my-tasks project move <prefix>`               | Move a project to a status column, optionally `--after`/`--before` another project in that column.                                         |
+| `bb my-tasks project complete <prefix>`           | Mark a project done and every open task in it done in one step, as the list row checkbox does.                                             |
+| `bb my-tasks project brief <prefix>`              | Show the project brief, or update it with `--problem`, `--context`, `--priority-note`, `--solution`, `--clear`, `--add-decision`, `--remove-decision`. |
 | `bb my-tasks folder create\|list\|update\|delete` | Organize tracker projects into nested folders. Deleting a folder moves its projects and subfolders to the top level; no tasks are deleted. |
 | `bb my-tasks create`                              | Create a task with description, priority, labels, due date, and file attachments (repeatable `--attach <path>`).                          |
 | `bb my-tasks list`                                | Page/filter tasks by project, done state, priority, label, active agents, or search text; supports `--sort`, `--limit`, and `--cursor`.    |
@@ -131,11 +134,29 @@ and a report-back contract. Its installed skill tells it to inspect the task,
 leave substantive milestone comments, attach artifacts, and mark the task done
 when its criteria are met.
 
+Project task lists (an expanded row in the list, and the project page) hide
+done tasks by default. A task you check off stays visible until you collapse
+the project or leave the page, so you can undo it. Turn on **Show completed
+tasks** in Settings → Plugins → My Tasks, or run
+`bb plugin config my-tasks set showCompletedTasks true`, to always show them.
+
+When a thread is open in a split pane next to My Tasks, the list highlights
+the project it is attached to (directly, or through one of its tasks) with an
+accent bar, plus the matching task and thread inside the expanded row. The
+highlight follows the focused thread pane and stays on the last focused thread
+while you work in the My Tasks pane.
+
 Drag a task onto another project in the list (or use **Move to project** in its
 right-click menu) to move it there.
 
 In the app, every task row has **New thread** (pick a preset) and **Attach
-thread** (search your bb threads). Clicking a thread opens it in a split pane.
+thread** (search your bb threads). Every project row in the list, collapsed
+or expanded, lists the project's own threads under its priority and due date,
+with icon-only **New thread** (starts with the last-used preset) and **Attach
+thread** buttons beside the due date; expanding a row adds its tasks below.
+The project page shows the same threads with the labelled actions. Those
+threads belong to the project, not to any task. Clicking a thread opens it in a split
+pane.
 Going the other way, every thread's menu (right-click a sidebar row, its "…"
 button, or the thread header menu) has **Attach to My Tasks…**. It opens a
 dialog that suggests open tasks from projects linked to the thread's bb
@@ -148,6 +169,18 @@ thread with `bb my-tasks attach KEY`. The inverse is `bb my-tasks detach KEY
 use either to drop a thread that died or moved on to other work. The task
 page and `bb my-tasks threads` list live threads before completed or failed ones,
 newest first.
+
+## Project brief
+
+A project's description doubles as its brief: Problem, Context, Priority,
+Solution, and a Decisions list. Agents get two tools,
+`my_tasks_project_brief` and `my_tasks_update_project_brief`, which change one
+section or one decision at a time, so threads working on the same project do
+not overwrite each other. Threads attached to the project or one of its tasks
+are told to ask before updating the brief; saying "summarize thread into
+project" or "update project summary" asks for the update directly. Dropped
+decisions are deleted. Other headings and text in the description are kept.
+Instructions reach a thread when its agent session starts or resumes.
 
 ## Task mentions
 

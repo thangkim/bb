@@ -7,7 +7,8 @@ import {
 import { TASK_SORTS, type TaskSort } from "../../shared/pagination.js";
 import { EMPTY_FILTERS, type ListFilterState } from "./filter-bar.js";
 
-export const LIST_PREFERENCE_STORAGE_KEY = "bb-my-tasks:project-list-preferences";
+export const LIST_PREFERENCE_STORAGE_KEY =
+  "bb-my-tasks:project-list-preferences";
 export const LIST_PREFERENCE_VERSION = 1 as const;
 
 export type ListPreferenceScope = "all" | "active";
@@ -60,7 +61,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function sanitizeListPreference(raw: unknown): ListPreference {
   if (!isRecord(raw)) {
-    return { filters: { ...EMPTY_FILTERS }, sort: DEFAULT_LIST_PREFERENCE.sort };
+    return {
+      filters: { ...EMPTY_FILTERS },
+      sort: DEFAULT_LIST_PREFERENCE.sort,
+    };
   }
   const filtersRaw = isRecord(raw.filters) ? raw.filters : {};
   return {
