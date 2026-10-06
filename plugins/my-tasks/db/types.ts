@@ -82,6 +82,7 @@ export interface Comment {
 
 export interface Attachment {
   id: string;
+  projectId: string | null;
   taskId: string | null;
   commentId: string | null;
   fileName: string;
@@ -244,6 +245,7 @@ export interface UpdateCommentInput {
 
 export interface CreateAttachmentInput {
   id?: string;
+  projectId?: string | null;
   taskId?: string | null;
   commentId?: string | null;
   fileName: string;

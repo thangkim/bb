@@ -323,6 +323,34 @@ export const TASKS_SCHEMA_MIGRATIONS = [
 
     CREATE INDEX IF NOT EXISTS idx_project_threads_thread ON project_threads(thread_id);
   `,
+  `
+    CREATE TABLE attachments_next (
+      id TEXT PRIMARY KEY,
+      project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+      task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+      comment_id TEXT REFERENCES comments(id) ON DELETE CASCADE,
+      file_name TEXT NOT NULL,
+      mime TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+      blob_path TEXT NOT NULL,
+      is_image INTEGER NOT NULL CHECK (is_image IN (0, 1)),
+      created_at TEXT NOT NULL,
+      CHECK ((project_id IS NOT NULL) + (task_id IS NOT NULL) + (comment_id IS NOT NULL) = 1)
+    );
+    INSERT INTO attachments_next (
+      id, task_id, comment_id, file_name, mime, size_bytes, blob_path,
+      is_image, created_at
+    )
+    SELECT
+      id, task_id, comment_id, file_name, mime, size_bytes, blob_path,
+      is_image, created_at
+    FROM attachments;
+    DROP TABLE attachments;
+    ALTER TABLE attachments_next RENAME TO attachments;
+    CREATE INDEX idx_attachments_project ON attachments(project_id);
+    CREATE INDEX idx_attachments_task ON attachments(task_id);
+    CREATE INDEX idx_attachments_comment ON attachments(comment_id);
+  `,
 ] as const;
 
 export function initializeTasksSchema(db: PluginDatabase): void {

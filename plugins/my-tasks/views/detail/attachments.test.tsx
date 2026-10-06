@@ -11,6 +11,7 @@ afterEach(() => {
 function imageAttachment(overrides: Partial<Attachment> = {}): Attachment {
   return {
     id: "01JIMAGE0000000000000000AA",
+    projectId: null,
     taskId: "01JTASK00000000000000000AA",
     commentId: null,
     fileName: "diagram.png",

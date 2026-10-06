@@ -86,6 +86,7 @@ describe("AttachmentTracks", () => {
     isImage: boolean,
   ): Attachment => ({
     id,
+    projectId: null,
     taskId: "01HZZZZZZZZZZZZZZZZZZZZZT1",
     commentId: "01HZZZZZZZZZZZZZZZZZZZZZC1",
     fileName,

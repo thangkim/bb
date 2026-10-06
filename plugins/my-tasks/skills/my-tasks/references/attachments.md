@@ -1,10 +1,17 @@
-# Task attachments
+# Attachments
 
-Read this file when a task needs files or image references.
+Read this file when a project or task needs files or image references.
 
 ## Choose the owner
 
 A task key adds a file to the task. A comment ID adds a file to that comment.
+`--project <prefix>` instead of a positional adds a file to the project, for
+material that covers the whole project, such as specs and mockups:
+
+```sh
+bb my-tasks attachment add --project ABC --file ./spec.pdf
+bb my-tasks attachment list --project ABC
+```
 
 For a comment attachment, create the comment as JSON and use its ID:
 
@@ -24,11 +31,13 @@ Use JSON output when another command needs returned attachment data.
 
 Use repeatable `--attach <path>` with `bb my-tasks create` for initial files.
 
-List IDs with `bb my-tasks attachment list <key>`. Remove a file with
+List IDs with `bb my-tasks attachment list <key>` (the task and its comments)
+or `bb my-tasks attachment list --project <prefix>`. Remove a file with
 `bb my-tasks attachment remove <attachment-id>`.
 
-The remove command deletes the row and the stored file. It rejects a referenced
-file unless `--remove-references` confirms description cleanup.
+The remove command deletes the row and the stored file. It rejects a file
+referenced by its task or project description unless `--remove-references`
+confirms description cleanup.
 
 ## Select a machine
 

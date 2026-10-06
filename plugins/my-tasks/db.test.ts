@@ -239,6 +239,79 @@ describe("tasks storage", () => {
     }
   });
 
+  it("keeps task attachments and accepts project attachments after the owner migration", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "tasks-db-attachment-migration-test",
+    });
+    const db = bb.storage.database();
+    try {
+      db.pragma("foreign_keys = ON");
+      db.exec(`
+        CREATE TABLE schema_version (
+          version INTEGER PRIMARY KEY,
+          applied_at TEXT NOT NULL
+        )
+      `);
+      const record = db.prepare<[number]>(
+        "INSERT INTO schema_version (version, applied_at) VALUES (?, '2026-10-01')",
+      );
+      TASKS_SCHEMA_MIGRATIONS.slice(0, -1).forEach((sql, index) => {
+        db.exec(sql);
+        record.run(index + 1);
+      });
+      db.exec(`
+        INSERT INTO projects (id, name, prefix, next_task_number, color, created_at) VALUES
+          ('01J0000000000000000000000A', 'Docs', 'DOC', 2, 'blue', '2026-10-01');
+        INSERT INTO tasks (id, project_id, number, title, status, priority, position, created_at, updated_at) VALUES
+          ('01J000000000000000000000A1', '01J0000000000000000000000A', 1, 'Spec', 'todo', 'none', 1024, '2026-10-01', '2026-10-01');
+        INSERT INTO attachments (id, task_id, comment_id, file_name, mime, size_bytes, blob_path, is_image, created_at) VALUES
+          ('01J00000000000000000000AT1', '01J000000000000000000000A1', NULL, 'spec.pdf', 'application/pdf', 4, 'blobs/01J00000000000000000000AT1/spec.pdf', 0, '2026-10-01');
+      `);
+
+      const store = createTasksStore(db);
+
+      expect(store.getAttachment("01J00000000000000000000AT1")).toMatchObject({
+        projectId: null,
+        taskId: "01J000000000000000000000A1",
+        fileName: "spec.pdf",
+      });
+      const projectAttachment = store.createAttachment({
+        projectId: "01J0000000000000000000000A",
+        fileName: "mockup.png",
+        mime: "image/png",
+        sizeBytes: 3,
+        blobPath: "blobs/pending/mockup.png",
+        isImage: true,
+      });
+      expect(
+        store.listAttachmentsForProject("01J0000000000000000000000A"),
+      ).toEqual([projectAttachment]);
+      expect(() =>
+        store.createAttachment({
+          projectId: "01J0000000000000000000000A",
+          taskId: "01J000000000000000000000A1",
+          fileName: "both.png",
+          mime: "image/png",
+          sizeBytes: 3,
+          blobPath: "blobs/pending/both.png",
+          isImage: true,
+        }),
+      ).toThrow(/exactly one project, task, or comment/);
+      expect(() =>
+        db.exec(`
+          INSERT INTO attachments (id, project_id, task_id, file_name, mime, size_bytes, blob_path, is_image, created_at) VALUES
+            ('01J00000000000000000000AT9', '01J0000000000000000000000A', '01J000000000000000000000A1', 'x', 'text/plain', 1, 'blobs/x/x', 0, '2026-10-01');
+        `),
+      ).toThrow(/CHECK constraint failed/);
+
+      store.deleteProject("01J0000000000000000000000A");
+      expect(store.getAttachment(projectAttachment.id)).toBeUndefined();
+      expect(store.getAttachment("01J00000000000000000000AT1")).toBeUndefined();
+    } finally {
+      await harness.dispose();
+    }
+  });
+
   it("turns sub-tasks into checklist tasks and derives project status on upgrade", async () => {
     const { bb, harness } = createFakePluginHost({
       pluginId: "tasks-db-migration-test",

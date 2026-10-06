@@ -18,6 +18,7 @@ import { useTasksNavigation } from "../../shell/routes.js";
 import { TasksEditor } from "../../editor/tasks-editor.js";
 import { ProgressBar } from "../../components/progress-bar.js";
 import { EditableTitle } from "../detail/index.js";
+import { AttachmentsGrid, uploadAttachment } from "../detail/attachments.js";
 import {
   createDescriptionSaver,
   type DescriptionSaver,
@@ -170,6 +171,31 @@ function ProjectDetail({
     async (query) => (await query.call("listBbProjects")).bbProjects,
     ["projects:changed"],
   );
+  const attachments = useTasksQuery(
+    async (query) =>
+      (await query.call("listAttachments", { projectId: project.id }))
+        .attachments,
+    ["projects:changed"],
+    [project.id],
+  );
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadForProject = async (file: File) => {
+    const result = await uploadAttachment(file, { projectId: project.id });
+    attachments.refresh();
+    return result;
+  };
+
+  const onPickFiles = async (files: FileList | null) => {
+    for (const file of files ?? []) {
+      try {
+        await uploadAttachment(file, { projectId: project.id });
+      } catch (error) {
+        push(errorMessage(error));
+      }
+    }
+    attachments.refresh();
+  };
 
   const [draft, setDraft] = useState<{ projectId: string; markdown: string }>();
   const rpcRef = useRef(rpc);
@@ -244,9 +270,45 @@ function ProjectDetail({
             }}
             variant="doc"
             className="min-h-16"
-            placeholder="Describe the project…"
+            placeholder="Describe the project… paste or drop images"
+            onUploadImage={uploadForProject}
             mentionItems={mentionItems}
             onOpenThread={(threadId) => navigate.toThread(threadId)}
+          />
+
+          <div className="mb-1 mt-3 flex items-center gap-1">
+            <button
+              type="button"
+              title="Attach file"
+              aria-label="Attach file"
+              className="flex size-6.5 items-center justify-center rounded-md text-muted-foreground hover:bg-state-hover hover:text-foreground"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Icon name="Paperclip" className="size-4" />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                void onPickFiles(event.target.files);
+                event.target.value = "";
+              }}
+            />
+          </div>
+
+          <AttachmentsGrid
+            attachments={attachments.data ?? []}
+            onRemove={async (attachment) => {
+              const result = await rpc.call("deleteAttachment", {
+                attachmentId: attachment.id,
+                removeDescriptionReferences: true,
+              });
+              if (!result.ok) throw new Error(result.error.message);
+              attachments.refresh();
+            }}
+            onError={(message) => push(message)}
           />
 
           <section className="mt-6">

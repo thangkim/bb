@@ -770,7 +770,7 @@ describe("Tasks RPC domain API", () => {
     }
   });
 
-  it("removes attachment blobs when force-deleting a project", async () => {
+  it("removes task and project attachment blobs when force-deleting a project", async () => {
     const { bb, harness } = createFakePluginHost({ pluginId: "tasks" });
     const store = createStore(bb);
     registerTasksApi(bb, store);
@@ -804,6 +804,32 @@ describe("Tasks RPC domain API", () => {
       const blobDirectory = dirname(
         join(dirname(database.file), attachment.blobPath),
       );
+      const projectUpload = await harness.fetchHttp(
+        "POST",
+        `/attachments/upload?projectId=${project.id}&fileName=brief.txt&mime=text%2Fplain`,
+        { body: "project brief", headers: { "content-type": "text/plain" } },
+      );
+      const projectAttachmentId = (
+        (await projectUpload.json()) as { attachmentId: string }
+      ).attachmentId;
+      const projectAttachment = store.tasks.getAttachment(projectAttachmentId);
+      if (!projectAttachment) throw new Error("project attachment missing");
+      const projectBlobDirectory = dirname(
+        join(dirname(database.file), projectAttachment.blobPath),
+      );
+      await expect(
+        harness.callRpc("listAttachments", { projectId: project.id }),
+      ).resolves.toEqual({
+        attachments: [
+          expect.objectContaining({
+            id: projectAttachmentId,
+            projectId: project.id,
+            taskId: null,
+            commentId: null,
+            fileName: "brief.txt",
+          }),
+        ],
+      });
 
       await expect(
         harness.callRpc("deleteProject", {
@@ -812,6 +838,9 @@ describe("Tasks RPC domain API", () => {
         }),
       ).resolves.toEqual({ ok: true, deleted: true });
       await expect(stat(blobDirectory)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      await expect(stat(projectBlobDirectory)).rejects.toMatchObject({
         code: "ENOENT",
       });
     } finally {

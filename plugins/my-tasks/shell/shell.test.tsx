@@ -809,6 +809,86 @@ describe("tasks app shell", () => {
     );
   });
 
+  it("attaches files to the project page and removes them", async () => {
+    const uploads: string[] = [];
+    const deletes: Record<string, unknown>[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/plugins/my-tasks/token")) {
+        return new Response(JSON.stringify({ token: "test-token" }), {
+          status: 200,
+        });
+      }
+      uploads.push(url);
+      return new Response(
+        JSON.stringify({ attachmentId: "att-2", url: "/download" }),
+        { status: 201 },
+      );
+    }) as typeof fetch;
+    try {
+      const slot = renderSlot(
+        app.navPanels[0]!,
+        { subPath: PROJECT_ID },
+        {
+          rpc: seededRpc({
+            listBbProjects: () => ({ bbProjects: [] }),
+            listAttachments: (raw: unknown) => {
+              expect(rpcInput(raw)).toEqual({ projectId: PROJECT_ID });
+              return {
+                attachments: [
+                  {
+                    id: "01HZZZZZZZZZZZZZZZZZZZZZA1",
+                    projectId: PROJECT_ID,
+                    taskId: null,
+                    commentId: null,
+                    fileName: "brief.pdf",
+                    mime: "application/pdf",
+                    sizeBytes: 2048,
+                    isImage: false,
+                    createdAt: "2026-10-05T00:00:00.000Z",
+                  },
+                ],
+              };
+            },
+            deleteAttachment: (raw: unknown) => {
+              const input = rpcInput(raw);
+              deletes.push(input);
+              return { ok: true, deleted: true, attachment: null };
+            },
+          }),
+        },
+      );
+      await slot.findByText("brief.pdf");
+
+      const picker = slot.container.querySelector<HTMLInputElement>(
+        'input[type="file"]',
+      )!;
+      fireEvent.change(picker, {
+        target: {
+          files: [new File(["doc"], "notes.txt", { type: "text/plain" })],
+        },
+      });
+      await waitFor(() => expect(uploads).toHaveLength(1));
+      const query = new URL(uploads[0]!, "http://bb.test").searchParams;
+      expect(query.get("projectId")).toBe(PROJECT_ID);
+      expect(query.get("fileName")).toBe("notes.txt");
+
+      fireEvent.click(slot.getByRole("button", { name: "Remove brief.pdf" }));
+      fireEvent.click(await slot.findByRole("button", { name: "Remove" }));
+      await waitFor(() =>
+        expect(deletes).toEqual([
+          {
+            attachmentId: "01HZZZZZZZZZZZZZZZZZZZZZA1",
+            removeDescriptionReferences: true,
+          },
+        ]),
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("links the project page and task page back through a breadcrumb", async () => {
     const projectSlot = renderSlot(
       app.navPanels[0]!,

@@ -3,7 +3,7 @@ Turn a plan into tracked tasks, hand each task to an agent, and see the worker's
 ## What you get
 
 - A **My Tasks** panel listing projects grouped by status, with a List/Board toggle, filters, a project page, and a detail page for each task.
-- Projects with status, priority, due date, description, and a progress bar; tasks inside them are a checklist (done or not done) with labels, due dates, and file attachments.
+- Projects with status, priority, due date, a description you can paste or drop images into, file attachments, and a progress bar; tasks inside them are a checklist (done or not done) with labels, due dates, and file attachments.
 - **New thread** and **Attach thread** on every task; clicking a thread opens it in a split pane.
 - **Attach to My Tasks…** in every thread's menu: search projects and tasks, and attach or detach the thread in one dialog.
 - Markdown comments with a **Notify last responding agent** switch. The comment goes to the worker thread and resumes it when idle.

@@ -33,8 +33,9 @@ const MIME_PATTERN =
 const storeRoots = new WeakMap<TasksStore, string>();
 
 export type AttachmentOwner =
-  | { taskId: string; commentId?: never }
-  | { taskId?: never; commentId: string };
+  | { projectId: string; taskId?: never; commentId?: never }
+  | { projectId?: never; taskId: string; commentId?: never }
+  | { projectId?: never; taskId?: never; commentId: string };
 
 type SaveAttachmentFromBytesOptions = AttachmentOwner & {
   fileName: string;
@@ -52,7 +53,7 @@ type PluginHttpContext = Parameters<
 
 class AttachmentRequestError extends Error {
   constructor(
-    readonly status: 400 | 413,
+    readonly status: 400 | 404 | 413,
     message: string,
   ) {
     super(message);
@@ -62,7 +63,7 @@ class AttachmentRequestError extends Error {
 export class AttachmentReferencedError extends Error {
   constructor(readonly attachment: Attachment) {
     super(
-      `Attachment "${attachment.fileName}" is used in the task description. Remove it from the description before deleting the attachment.`,
+      `Attachment "${attachment.fileName}" is used in the ${attachment.projectId ? "project" : "task"} description. Remove it from the description before deleting the attachment.`,
     );
     this.name = "AttachmentReferencedError";
   }
@@ -256,17 +257,24 @@ function inferMimeFromBytes(bytes: Uint8Array, fileName: string): string {
 }
 
 function normalizeOwner(
+  projectId: string | null | undefined,
   taskId: string | null | undefined,
   commentId: string | null | undefined,
 ): AttachmentOwner {
+  const normalizedProjectId = projectId?.trim() || undefined;
   const normalizedTaskId = taskId?.trim() || undefined;
   const normalizedCommentId = commentId?.trim() || undefined;
-  if (Boolean(normalizedTaskId) === Boolean(normalizedCommentId)) {
+  if (
+    [normalizedProjectId, normalizedTaskId, normalizedCommentId].filter(
+      Boolean,
+    ).length !== 1
+  ) {
     throw new AttachmentRequestError(
       400,
-      "exactly one of taskId or commentId is required",
+      "exactly one of projectId, taskId, or commentId is required",
     );
   }
+  if (normalizedProjectId) return { projectId: normalizedProjectId };
   if (normalizedTaskId) return { taskId: normalizedTaskId };
   if (normalizedCommentId) return { commentId: normalizedCommentId };
   throw new Error("unreachable attachment owner state");
@@ -279,6 +287,7 @@ function attachmentParameters(context: PluginHttpContext): {
 } {
   const query = context.req.query();
   const owner = normalizeOwner(
+    query.projectId ?? context.req.header("x-project-id"),
     query.taskId ?? context.req.header("x-task-id"),
     query.commentId ?? context.req.header("x-comment-id"),
   );
@@ -297,6 +306,19 @@ function attachmentParameters(context: PluginHttpContext): {
     fileName: sanitizeFileName(requestedFileName),
     mime: normalizeMime(requestedMime),
   };
+}
+
+function requireOwnerExists(store: TasksStore, owner: AttachmentOwner): void {
+  const exists =
+    owner.projectId !== undefined
+      ? store.getProject(owner.projectId) !== undefined
+      : owner.taskId !== undefined
+        ? store.getTask(owner.taskId) !== undefined
+        : owner.commentId !== undefined &&
+          store.getComment(owner.commentId) !== undefined;
+  if (!exists) {
+    throw new AttachmentRequestError(404, "attachment owner not found");
+  }
 }
 
 async function readRequestBody(request: Request): Promise<Uint8Array> {
@@ -383,7 +405,7 @@ export async function saveAttachmentFromBytes(
 ): Promise<Attachment> {
   return persistAttachment(
     store,
-    normalizeOwner(options.taskId, options.commentId),
+    normalizeOwner(options.projectId, options.taskId, options.commentId),
     options.fileName,
     options.mime ?? inferMimeFromBytes(bytes, options.fileName),
     bytes.byteLength,
@@ -414,6 +436,41 @@ function errorResponse(context: PluginHttpContext, error: unknown): Response {
   throw error;
 }
 
+function ownerTaskId(
+  store: TasksStore,
+  attachment: Attachment,
+): string | undefined {
+  return (
+    attachment.taskId ??
+    (attachment.commentId
+      ? store.getComment(attachment.commentId)?.taskId
+      : undefined)
+  );
+}
+
+function descriptionOwner(
+  store: TasksStore,
+  attachment: Attachment,
+): { description: string; save(description: string): void } | undefined {
+  if (attachment.projectId) {
+    const project = store.getProject(attachment.projectId);
+    return project
+      ? {
+          description: project.description,
+          save: (description) => store.updateProject(project.id, { description }),
+        }
+      : undefined;
+  }
+  const taskId = ownerTaskId(store, attachment);
+  const task = taskId ? store.getTask(taskId) : undefined;
+  return task
+    ? {
+        description: task.description,
+        save: (description) => store.updateTask(task.id, { description }),
+      }
+    : undefined;
+}
+
 export async function deleteAttachmentById(
   bb: BbPluginApi,
   store: TasksStore,
@@ -426,22 +483,17 @@ export async function deleteAttachmentById(
   const attachment = store.getAttachment(attachmentId);
   if (!attachment) return null;
 
-  const taskId =
-    attachment.taskId ??
-    (attachment.commentId
-      ? store.getComment(attachment.commentId)?.taskId
-      : undefined);
-  const ownerTask = taskId ? store.getTask(taskId) : undefined;
+  const owner = descriptionOwner(store, attachment);
   let nextDescription: string | undefined;
-  if (ownerTask?.description.includes(attachmentDownloadUrl(attachment.id))) {
+  if (owner?.description.includes(attachmentDownloadUrl(attachment.id))) {
     if (!options.removeDescriptionReferences) {
       throw new AttachmentReferencedError(attachment);
     }
     nextDescription = removeAttachmentDescriptionReferences(
-      ownerTask.description,
+      owner.description,
       attachment.id,
     );
-    if (nextDescription === ownerTask.description) {
+    if (nextDescription === owner.description) {
       throw new AttachmentReferencedError(attachment);
     }
   }
@@ -453,8 +505,8 @@ export async function deleteAttachmentById(
   } catch (error) {
     throw new AttachmentCleanupError(attachment, error);
   }
-  if (ownerTask && nextDescription !== undefined) {
-    store.updateTask(ownerTask.id, { description: nextDescription });
+  if (owner && nextDescription !== undefined) {
+    owner.save(nextDescription);
   }
   if (!store.deleteAttachment(attachment.id)) return null;
   publishAttachmentChanged(bb, store, attachment);
@@ -466,11 +518,13 @@ export function publishAttachmentChanged(
   store: TasksStore,
   attachment: Attachment,
 ): void {
-  const taskId =
-    attachment.taskId ??
-    (attachment.commentId
-      ? store.getComment(attachment.commentId)?.taskId
-      : undefined);
+  if (attachment.projectId) {
+    bb.realtime.publish("projects:changed", {
+      projectId: attachment.projectId,
+    });
+    return;
+  }
+  const taskId = ownerTaskId(store, attachment);
   const task = taskId ? store.getTask(taskId) : undefined;
   if (!task) {
     bb.log.warn(`failed to publish attachment change ${attachment.id}`);
@@ -498,6 +552,7 @@ export function registerAttachments(
     async (context) => {
       try {
         const parameters = attachmentParameters(context);
+        requireOwnerExists(store, parameters.owner);
         const body = await readRequestBody(context.req.raw);
         const attachment = await persistAttachment(
           store,

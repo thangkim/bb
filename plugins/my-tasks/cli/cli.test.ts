@@ -1979,6 +1979,106 @@ describe("bb my-tasks CLI", () => {
     }
   });
 
+  it("adds and lists project attachments with --project", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "bb-tasks-cli-"));
+    const inputPath = join(directory, "brief.md");
+    await writeFile(inputPath, "project brief\n", "utf8");
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "tasks",
+      sdk: { files: localFilesSdk() },
+    });
+    await plugin(bb);
+
+    try {
+      stdout(
+        await harness.runCli([
+          "project",
+          "create",
+          "--name",
+          "Docs",
+          "--prefix",
+          "DOCS",
+        ]),
+      );
+      stdout(
+        await harness.runCli([
+          "create",
+          "--project",
+          "DOCS",
+          "--title",
+          "Unrelated task",
+        ]),
+      );
+
+      const signalsBeforeAdd = harness.realtimeSignals.length;
+      const added = JSON.parse(
+        stdout(
+          await harness.runCli([
+            "attachment",
+            "add",
+            "--project",
+            "docs",
+            "--file",
+            inputPath,
+            "--json",
+          ]),
+        ),
+      ).attachment;
+      expect(added).toMatchObject({
+        projectId: expect.any(String),
+        taskId: null,
+        commentId: null,
+        fileName: "brief.md",
+      });
+      expect(harness.realtimeSignals.slice(signalsBeforeAdd)).toEqual([
+        {
+          channel: "projects:changed",
+          payload: { projectId: added.projectId },
+        },
+      ]);
+
+      const listed = JSON.parse(
+        stdout(
+          await harness.runCli([
+            "attachment",
+            "list",
+            "--project",
+            "DOCS",
+            "--json",
+          ]),
+        ),
+      );
+      expect(listed.project.prefix).toBe("DOCS");
+      expect(listed.attachments).toEqual([
+        expect.objectContaining({ id: added.id, projectId: added.projectId }),
+      ]);
+      const taskListed = JSON.parse(
+        stdout(
+          await harness.runCli(["attachment", "list", "DOCS-1", "--json"]),
+        ),
+      );
+      expect(taskListed.attachments).toEqual([]);
+
+      const both = await harness.runCli([
+        "attachment",
+        "add",
+        "DOCS-1",
+        "--project",
+        "DOCS",
+        "--file",
+        inputPath,
+      ]);
+      expect(both.exitCode).toBe(1);
+      expect(both.stderr).toContain("not more than one");
+      const neither = await harness.runCli(["attachment", "list"]);
+      expect(neither.exitCode).toBe(1);
+      expect(neither.stderr).toContain("pass a task key or --project");
+    } finally {
+      await harness.dispose();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("routes file flags to the invoking thread's machine and honors --machine", async () => {
     const remoteFiles = new Map<string, Buffer>([
       ["/remote/notes.md", Buffer.from("remote description\n", "utf8")],

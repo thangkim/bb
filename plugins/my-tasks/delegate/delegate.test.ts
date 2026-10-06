@@ -684,6 +684,7 @@ describe("project delegation", () => {
     const prompt = buildProjectSeedPrompt({
       project,
       projectTasks: [done, open],
+      attachments: [{ id: "01J00000000000000000000ATT", fileName: "spec.pdf" }],
       presetInstructions: "Be careful.",
     });
 
@@ -692,6 +693,9 @@ describe("project delegation", () => {
     expect(prompt).toContain("- Due: 2026-10-31");
     expect(prompt).toContain("- [x] OPS-1 · Rotate keys");
     expect(prompt).toContain("- [ ] OPS-2 · Patch hosts");
+    expect(prompt).toContain(
+      "- spec.pdf · 01J00000000000000000000ATT\n  Fetch with: bb my-tasks attachment get 01J00000000000000000000ATT --out <path>",
+    );
     expect(prompt).toContain("bb my-tasks create --project OPS");
     expect(prompt).toContain("Your thread is already attached to the project.");
     expect(prompt).toContain("## Preset instructions\n\nBe careful.");

@@ -283,6 +283,7 @@ function writeSystemComments(
 function attachmentMetadata(attachment: StoredAttachment): AttachmentMetadata {
   return {
     id: attachment.id,
+    projectId: attachment.projectId,
     taskId: attachment.taskId,
     commentId: attachment.commentId,
     fileName: attachment.fileName,
@@ -644,7 +645,10 @@ export function registerHandlers(
         const taskIds = store.tasks
           .listTasks({ projectId: input.projectId })
           .map((task) => task.id);
-        const attachments = attachmentsForTasks(store.tasks, taskIds);
+        const attachments = [
+          ...store.tasks.listAttachmentsForProject(input.projectId),
+          ...attachmentsForTasks(store.tasks, taskIds),
+        ];
         const deleted = store.tasks.deleteProject(input.projectId);
         if (deleted) {
           await removeAttachmentBlobs(bb, store.tasks, attachments);
@@ -865,9 +869,11 @@ export function registerHandlers(
     },
     listAttachments(input) {
       const attachments =
-        "taskId" in input
-          ? store.tasks.listAttachmentsForTask(input.taskId)
-          : store.tasks.listAttachmentsForComment(input.commentId);
+        "projectId" in input
+          ? store.tasks.listAttachmentsForProject(input.projectId)
+          : "taskId" in input
+            ? store.tasks.listAttachmentsForTask(input.taskId)
+            : store.tasks.listAttachmentsForComment(input.commentId);
       return {
         attachments: attachments.map(attachmentMetadata),
       };

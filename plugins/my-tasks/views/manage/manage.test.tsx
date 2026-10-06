@@ -382,7 +382,9 @@ describe("NewTaskDialog attachments", () => {
     await slot.findByText("shot.png");
 
     const picker =
-      document.querySelector<HTMLInputElement>('input[type="file"]')!;
+      document.querySelector<HTMLInputElement>(
+        '[role="dialog"] input[type="file"]',
+      )!;
     fireEvent.change(picker, {
       target: {
         files: [new File(["doc"], "notes.txt", { type: "text/plain" })],

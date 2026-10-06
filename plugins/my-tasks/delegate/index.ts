@@ -55,6 +55,7 @@ class DelegationError extends Error {
 interface ProjectSeedPromptInput {
   project: Project;
   projectTasks: readonly Task[];
+  attachments: readonly Pick<Attachment, "id" | "fileName">[];
   presetInstructions: string;
   extraInstructions?: string;
 }
@@ -183,6 +184,7 @@ export function buildProjectSeedPrompt(input: ProjectSeedPromptInput): string {
       "Tasks in this project",
       formatProjectTasks(input.projectTasks),
     ),
+    markdownSection("Attachments", formatAttachments(input.attachments)),
     markdownSection(
       "Report-back contract",
       `You are working on project ${project.prefix} as a whole, not on one task. Use the bb my-tasks CLI: add tasks for new work (bb my-tasks create --project ${project.prefix} --title ...), comment substantive updates on the task they concern (bb my-tasks comment <key> --body ...), and mark tasks done when their work is complete (bb my-tasks update <key> --status done). Your thread is already attached to the project.`,
@@ -480,6 +482,7 @@ export function handlers(
       const prompt = buildProjectSeedPrompt({
         project,
         projectTasks: store.tasks.listTasks({ projectId: project.id }),
+        attachments: store.tasks.listAttachmentsForProject(project.id),
         presetInstructions: preset.instructions,
         extraInstructions: input.extraInstructions,
       });

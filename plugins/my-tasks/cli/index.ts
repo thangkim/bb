@@ -19,7 +19,9 @@ import {
   publishAttachmentChanged,
   readAttachmentContent,
   saveAttachmentFromBytes,
+  type AttachmentOwner,
 } from "../attachments";
+import type { TasksStore } from "../db";
 import { delegationRpcContract } from "../delegate/contract";
 import { handlers as delegationHandlers } from "../delegate";
 import { briefText, updateProjectBrief } from "../brief";
@@ -459,6 +461,58 @@ function resolvePreset(presets: readonly Preset[], address: string): Preset {
     });
   }
   return matches[0]!;
+}
+
+const PROJECT_ATTACHMENT_OPTION = {
+  type: "string",
+  placeholder: "prefix-or-id",
+  description: "Project prefix such as ABC or its ULID, instead of a task",
+} as const;
+
+async function resolveAttachmentOwner(
+  domain: TasksDomain,
+  store: TasksStore,
+  ownerAddress: string | undefined,
+  projectAddress: string | undefined,
+): Promise<AttachmentOwner> {
+  if (projectAddress !== undefined) {
+    if (ownerAddress !== undefined) {
+      throw new CliError(
+        "pass either a task key, a comment id, or --project, not more than one",
+        { code: "attachment_owner_conflict" },
+      );
+    }
+    return { projectId: (await resolveProject(domain, projectAddress)).id };
+  }
+  if (ownerAddress === undefined) {
+    throw new CliError("pass a task key, a comment id, or --project", {
+      code: "attachment_owner_missing",
+    });
+  }
+  const normalizedOwner = ownerAddress.trim().toUpperCase();
+  if (!ULID_PATTERN.test(normalizedOwner)) {
+    return { taskId: (await resolveTask(domain, ownerAddress)).id };
+  }
+  const comment = store.getComment(normalizedOwner);
+  if (!comment) {
+    throw new CliError(`comment not found: ${ownerAddress}`, {
+      code: "comment_not_found",
+    });
+  }
+  return { commentId: comment.id };
+}
+
+function attachmentTable(attachments: readonly Attachment[]): string {
+  return table(
+    ["ID", "NAME", "TYPE", "SIZE"],
+    attachments.map((attachment) => [
+      attachment.id,
+      attachment.fileName,
+      attachment.mime,
+      bytes(attachment.sizeBytes),
+    ]),
+    "No attachments.",
+  );
 }
 
 async function listTaskAttachments(
@@ -2437,27 +2491,27 @@ export function registerTasksCli(
 
         attachment: groupCommand(
           "attachment",
-          "Add, download, list, or remove task attachments",
+          "Add, download, list, or remove project and task attachments",
           [
-            ["add", "Attach a file to a task or comment"],
+            ["add", "Attach a file to a project, task, or comment"],
             ["get", "Download an attachment to a path"],
-            ["list", "List a task's attachments"],
+            ["list", "List a project's or task's attachments"],
             ["remove", "Remove an attachment"],
           ],
         ),
         "attachment add": cliCommand({
-          summary: "Attach a file to a task or comment",
+          summary: "Attach a file to a project, task, or comment",
           description:
-            "File paths are read from the invoking machine: the thread's machine inside an agent thread, otherwise the server's.",
+            "Pass a task key or comment ULID, or --project for a project attachment. File paths are read from the invoking machine: the thread's machine inside an agent thread, otherwise the server's.",
           positionals: [
             {
               name: "key-or-comment-id",
               description:
-                "Task key such as ABC-12, a task ULID, or a comment ULID",
-              required: true,
+                "Task key such as ABC-12, a task ULID, or a comment ULID; omit with --project",
             },
           ],
           options: {
+            project: PROJECT_ATTACHMENT_OPTION,
             file: {
               type: "string",
               required: true,
@@ -2474,23 +2528,16 @@ export function registerTasksCli(
           },
           run(input, ctx) {
             return guard(async () => {
-              const ownerAddress = input.positionals["key-or-comment-id"];
               const sourcePath = resolve(
                 ctx.cwd ?? process.cwd(),
                 input.options.file,
               );
-              const normalizedOwner = ownerAddress.trim().toUpperCase();
-              const comment = ULID_PATTERN.test(normalizedOwner)
-                ? store.tasks.getComment(normalizedOwner)
-                : undefined;
-              if (ULID_PATTERN.test(normalizedOwner) && !comment) {
-                throw new CliError(`comment not found: ${ownerAddress}`, {
-                  code: "comment_not_found",
-                });
-              }
-              const owner = comment
-                ? { commentId: comment.id }
-                : { taskId: (await resolveTask(domain, ownerAddress)).id };
+              const owner = await resolveAttachmentOwner(
+                domain,
+                store.tasks,
+                input.positionals["key-or-comment-id"],
+                input.options.project,
+              );
               const clientHostId = await resolveClientHostId(
                 bb,
                 domain,
@@ -2569,15 +2616,48 @@ export function registerTasksCli(
           },
         }),
         "attachment list": cliCommand({
-          summary: "List a task's attachments",
-          positionals: [KEY_POSITIONAL],
-          options: { json: JSON_OPTION },
+          summary: "List a project's or task's attachments",
+          description:
+            "A task's list includes its comments' attachments. Pass --project instead of a task key for the project's own attachments.",
+          positionals: [
+            {
+              name: "key-or-id",
+              description:
+                "Task key such as ABC-12 (case-insensitive) or its ULID; omit with --project",
+            },
+          ],
+          options: { project: PROJECT_ATTACHMENT_OPTION, json: JSON_OPTION },
           run(input) {
             return guard(async () => {
-              const task = await resolveTask(
-                domain,
-                input.positionals["key-or-id"],
-              );
+              const taskAddress = input.positionals["key-or-id"];
+              if (input.options.project !== undefined) {
+                if (taskAddress !== undefined) {
+                  throw new CliError(
+                    "pass either a task key or --project, not both",
+                    { code: "attachment_owner_conflict" },
+                  );
+                }
+                const project = await resolveProject(
+                  domain,
+                  input.options.project,
+                );
+                const attachments = tasksRpcContract.listAttachments.output.parse(
+                  await domain.listAttachments(
+                    tasksRpcContract.listAttachments.input.parse({
+                      projectId: project.id,
+                    }),
+                  ),
+                ).attachments;
+                return input.options.json
+                  ? JSON.stringify({ project, attachments })
+                  : attachmentTable(attachments);
+              }
+              if (taskAddress === undefined) {
+                throw new CliError("pass a task key or --project", {
+                  code: "attachment_owner_missing",
+                });
+              }
+              const task = await resolveTask(domain, taskAddress);
               const comments = tasksRpcContract.listComments.output.parse(
                 await domain.listComments(
                   tasksRpcContract.listComments.input.parse({
@@ -2592,16 +2672,7 @@ export function registerTasksCli(
               );
               return input.options.json
                 ? JSON.stringify({ task, attachments })
-                : table(
-                    ["ID", "NAME", "TYPE", "SIZE"],
-                    attachments.map((attachment) => [
-                      attachment.id,
-                      attachment.fileName,
-                      attachment.mime,
-                      bytes(attachment.sizeBytes),
-                    ]),
-                    "No attachments.",
-                  );
+                : attachmentTable(attachments);
             });
           },
         }),
@@ -2618,7 +2689,7 @@ export function registerTasksCli(
             "remove-references": {
               type: "boolean",
               description:
-                "Also strip the attachment's links from the task description",
+                "Also strip the attachment's links from the project or task description",
             },
             json: JSON_OPTION,
           },

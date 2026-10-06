@@ -96,7 +96,7 @@ machine; pass `--machine <id-or-name>` to target another enrolled machine.
 | `bb my-tasks update <key-or-id>`                  | Mark done (`--status done`) or reopen (`--status todo`), or update priority, title, description, due date, or labels.                     |
 | `bb my-tasks move <key-or-id> --project <prefix>` | Move a task into another project. It gets the next key there and keeps comments, attachments, and threads; labels from the old project are removed. |
 | `bb my-tasks comment <key-or-id>`                 | Add a Markdown comment from inline text or a file; optionally notify the latest responding task agent.                                     |
-| `bb my-tasks attachment add\|get\|list\|remove`   | Add, fetch, list, or remove attachments. Referenced attachments require `remove --remove-references`.                                      |
+| `bb my-tasks attachment add\|get\|list\|remove`   | Add, fetch, list, or remove task, comment, or project (`--project <prefix>`) attachments. Referenced attachments require `remove --remove-references`. |
 | `bb my-tasks preset list\|create\|update\|delete` | Manage reusable agent execution presets.                                                                                                   |
 | `bb my-tasks delegate <key>`                      | Start and attach a new agent thread using a preset.                                                                                        |
 | `bb my-tasks attach <key-or-id>`                  | Attach the current bb thread to a task when it was not delegated from Tasks.                                                               |

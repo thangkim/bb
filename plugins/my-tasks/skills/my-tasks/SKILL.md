@@ -167,7 +167,9 @@ each renders its own card.
 - Work that spans a whole project rather than one task attaches at the
   project level: `bb my-tasks project attach ABC` (current thread, or
   `--thread <id>`), `bb my-tasks project detach ABC`, and
-  `bb my-tasks project threads ABC`. Start a new project-level thread with
+  `bb my-tasks project threads ABC`. Project-level files use
+  `bb my-tasks attachment add --project ABC --file <path>`; a project
+  dispatch prompt lists them. Start a new project-level thread with
   `bb my-tasks project dispatch ABC --preset <name>`.
 - `bb my-tasks move ABC-12 --project XYZ` moves a task to another project and
   gives it a new key there (for example `XYZ-4`); use the new key afterwards.

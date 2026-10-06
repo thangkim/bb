@@ -31,7 +31,10 @@ function pluginToken(): Promise<string> {
   return tokenPromise;
 }
 
-export type AttachmentOwnerRef = { taskId: string } | { commentId: string };
+export type AttachmentOwnerRef =
+  | { projectId: string }
+  | { taskId: string }
+  | { commentId: string };
 
 export async function uploadAttachment(
   file: File,

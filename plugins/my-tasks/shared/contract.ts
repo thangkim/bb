@@ -190,6 +190,7 @@ const displayCommentSchema = commentSchema
 const attachmentSchema = z
   .object({
     id: idSchema,
+    projectId: idSchema.nullable(),
     taskId: idSchema.nullable(),
     commentId: idSchema.nullable(),
     fileName: z.string(),
@@ -636,6 +637,7 @@ export const tasksRpcContract = defineRpcContract({
   },
   listAttachments: {
     input: z.union([
+      z.object({ projectId: idSchema }).strict(),
       z.object({ taskId: idSchema }).strict(),
       z.object({ commentId: idSchema }).strict(),
     ]),

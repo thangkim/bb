@@ -136,6 +136,7 @@ interface CommentRow {
 
 interface AttachmentRow {
   id: string;
+  project_id: string | null;
   task_id: string | null;
   comment_id: string | null;
   file_name: string;
@@ -420,6 +421,7 @@ function commentFromRow(row: CommentRow): Comment {
 function attachmentFromRow(row: AttachmentRow): Attachment {
   return {
     id: row.id,
+    projectId: row.project_id,
     taskId: row.task_id,
     commentId: row.comment_id,
     fileName: row.file_name,
@@ -1502,19 +1504,22 @@ export function createTasksStore(db: PluginDatabase) {
   }
 
   function createAttachment(input: CreateAttachmentInput): Attachment {
+    const projectId = input.projectId ?? null;
     const taskId = input.taskId ?? null;
     const commentId = input.commentId ?? null;
-    if ((taskId === null) === (commentId === null)) {
+    if ([projectId, taskId, commentId].filter((id) => id !== null).length !== 1) {
       throw new Error(
-        "An attachment must belong to exactly one task or comment",
+        "An attachment must belong to exactly one project, task, or comment",
       );
     }
+    if (projectId !== null) requireProject(projectId);
     if (taskId !== null) requireTask(taskId);
     if (commentId !== null) requireComment(commentId);
     const id = createOrValidateUlid(input.id);
     db.prepare<
       [
         string,
+        string | null,
         string | null,
         string | null,
         string,
@@ -1527,12 +1532,13 @@ export function createTasksStore(db: PluginDatabase) {
     >(
       `
       INSERT INTO attachments (
-        id, task_id, comment_id, file_name, mime, size_bytes, blob_path,
-        is_image, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, project_id, task_id, comment_id, file_name, mime, size_bytes,
+        blob_path, is_image, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     ).run(
       id,
+      projectId,
       taskId,
       commentId,
       requireNonEmpty(input.fileName, "Attachment fileName"),
@@ -1543,6 +1549,17 @@ export function createTasksStore(db: PluginDatabase) {
       nowIso(),
     );
     return requireAttachment(id);
+  }
+
+  function listAttachmentsForProject(projectId: string): Attachment[] {
+    return db
+      .prepare<[string], AttachmentRow>(
+        `
+        SELECT * FROM attachments WHERE project_id = ? ORDER BY created_at, id
+      `,
+      )
+      .all(projectId)
+      .map(attachmentFromRow);
   }
 
   function listAttachmentsForTask(taskId: string): Attachment[] {
@@ -2025,6 +2042,7 @@ export function createTasksStore(db: PluginDatabase) {
     updateComment,
     createAttachment,
     getAttachment,
+    listAttachmentsForProject,
     listAttachmentsForTask,
     listAttachmentsForComment,
     updateAttachment,

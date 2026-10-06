@@ -28,7 +28,7 @@ function setup(options?: Parameters<typeof registerAttachments>[2]) {
     .all()
     .find((entry) => entry.name === "main");
   if (!database) throw new Error("test database path is missing");
-  return { bb, harness, store, task, root: dirname(database.file) };
+  return { bb, harness, store, project, task, root: dirname(database.file) };
 }
 
 async function upload(
@@ -108,7 +108,7 @@ describe("task attachments", () => {
     }
   });
 
-  it("requires exactly one task or comment owner", async () => {
+  it("requires exactly one project, task, or comment owner", async () => {
     const { harness, task } = setup();
     try {
       const noOwner = await harness.fetchHttp(
@@ -125,10 +125,10 @@ describe("task attachments", () => {
       expect(noOwner.status).toBe(400);
       expect(twoOwners.status).toBe(400);
       await expect(noOwner.json()).resolves.toEqual({
-        error: "exactly one of taskId or commentId is required",
+        error: "exactly one of projectId, taskId, or commentId is required",
       });
       await expect(twoOwners.json()).resolves.toEqual({
-        error: "exactly one of taskId or commentId is required",
+        error: "exactly one of projectId, taskId, or commentId is required",
       });
     } finally {
       await harness.dispose();
@@ -452,6 +452,113 @@ describe("task attachments", () => {
       await expect(
         deleteAttachmentById(bb, store, "01JZZZZZZZZZZZZZZZZZZZZZZZ"),
       ).resolves.toBeNull();
+    } finally {
+      await harness.dispose();
+    }
+  });
+});
+
+describe("project attachments", () => {
+  async function uploadToProject(
+    harness: ReturnType<typeof setup>["harness"],
+    projectId: string,
+    body: BodyInit,
+    fileName = "mockup.png",
+    mime = "image/png",
+  ) {
+    const query = new URLSearchParams({ projectId, fileName, mime });
+    return harness.fetchHttp("POST", `/attachments/upload?${query}`, {
+      body,
+      headers: { "content-type": mime },
+    });
+  }
+
+  it("uploads against a project and publishes a project change", async () => {
+    const { harness, root, store, project } = setup();
+    try {
+      const response = await uploadToProject(harness, project.id, "png bytes");
+      expect(response.status).toBe(201);
+      const { attachmentId } = (await response.json()) as {
+        attachmentId: string;
+      };
+      const attachment = store.getAttachment(attachmentId);
+      expect(attachment).toMatchObject({
+        projectId: project.id,
+        taskId: null,
+        commentId: null,
+        fileName: "mockup.png",
+        isImage: true,
+      });
+      if (!attachment) throw new Error("attachment row was not created");
+      expect(await readFile(join(root, attachment.blobPath), "utf8")).toBe(
+        "png bytes",
+      );
+      expect(store.listAttachmentsForProject(project.id)).toEqual([attachment]);
+      expect(harness.realtimeSignals).toEqual([
+        { channel: "projects:changed", payload: { projectId: project.id } },
+      ]);
+    } finally {
+      await harness.dispose();
+    }
+  });
+
+  it("rejects an unknown project with 404 without writing a row", async () => {
+    const { harness, store, project } = setup();
+    try {
+      const response = await uploadToProject(
+        harness,
+        "01ARZ3NDEKTSV4RRFFQ69G5FZZ",
+        "bytes",
+      );
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toEqual({
+        error: "attachment owner not found",
+      });
+      expect(store.listAttachmentsForProject(project.id)).toEqual([]);
+    } finally {
+      await harness.dispose();
+    }
+  });
+
+  it("strips a confirmed delete's image from the project description", async () => {
+    const { harness, root, store, project } = setup();
+    try {
+      const uploaded = await uploadToProject(harness, project.id, "image");
+      const { attachmentId } = (await uploaded.json()) as {
+        attachmentId: string;
+      };
+      const attachment = store.getAttachment(attachmentId);
+      if (!attachment) throw new Error("attachment row was not created");
+      store.updateProject(project.id, {
+        description: `Plan\n\n![mockup](${attachmentDownloadUrl(attachmentId)})`,
+      });
+
+      const refused = await harness.fetchHttp(
+        "DELETE",
+        `/attachments/delete?attachmentId=${attachmentId}`,
+        { headers: { "content-type": "application/json" } },
+      );
+      expect(refused.status).toBe(409);
+      await expect(refused.json()).resolves.toEqual({
+        error:
+          'Attachment "mockup.png" is used in the project description. Remove it from the description before deleting the attachment.',
+      });
+
+      const confirmed = await harness.fetchHttp(
+        "DELETE",
+        `/attachments/delete?attachmentId=${attachmentId}&removeDescriptionReferences=true`,
+        { headers: { "content-type": "application/json" } },
+      );
+      expect(confirmed.status).toBe(200);
+      expect(store.getAttachment(attachmentId)).toBeUndefined();
+      expect(store.getProject(project.id)?.description).toBe("Plan\n\n");
+      await expect(
+        stat(dirname(join(root, attachment.blobPath))),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+      expect(harness.realtimeSignals.at(-1)).toEqual({
+        channel: "projects:changed",
+        payload: { projectId: project.id },
+      });
     } finally {
       await harness.dispose();
     }
