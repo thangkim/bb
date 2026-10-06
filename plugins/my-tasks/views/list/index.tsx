@@ -35,7 +35,10 @@ import { groupProjectsByStatus, STATUS_LABELS } from "./lib.js";
 import { useProjectEdits } from "./use-project-edits.js";
 import { ProjectRow } from "./row.js";
 import { PROJECT_DRAG_TYPE, useMoveTaskToProject } from "../tasks/move-task.js";
-import { useBusyThreadIds } from "../tasks/project-threads.js";
+import {
+  useBusyThreadIds,
+  useUnarchivedThreadIds,
+} from "../tasks/project-threads.js";
 
 const NO_THREADS: readonly ProjectThread[] = [];
 
@@ -128,6 +131,7 @@ export function ListView({ activeOnly = false }: ListViewProps) {
   );
   const projectThreads = useProjectThreadsByProject(visibleProjectIds);
   const busyThreadIds = useBusyThreadIds();
+  const unarchivedThreadIds = useUnarchivedThreadIds();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useListScrollRestoration(
@@ -242,6 +246,7 @@ export function ListView({ activeOnly = false }: ListViewProps) {
                   threads={projectThreads.data?.get(project.id) ?? NO_THREADS}
                   threadsError={projectThreads.error}
                   busyThreadIds={busyThreadIds}
+                  unarchivedThreadIds={unarchivedThreadIds}
                   onEdit={edits.edit}
                   onComplete={() => edits.complete(project)}
                   onDelete={() => edits.remove(project)}

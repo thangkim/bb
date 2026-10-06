@@ -1,9 +1,9 @@
 import { useMemo } from "react";
 import { experimental_useSidebarThreads } from "@get-bb/plugin-sdk/app";
-import type { Preset, ProjectThread } from "../../shared/contract.js";
+import type { ProjectThread } from "../../shared/contract.js";
 import { useProjectThreads } from "../list/data.js";
 import { ThreadLink } from "./checklist.js";
-import { AttachThreadPicker, NewThreadMenu } from "./thread-actions.js";
+import { AttachThreadPicker, NewProjectThreadButton } from "./thread-actions.js";
 import { cn } from "@/lib/utils";
 
 const BUSY_STATUSES = new Set(["starting", "active", "stopping"]);
@@ -19,6 +19,28 @@ export function useBusyThreadIds(): ReadonlySet<string> {
       ),
     [threads],
   );
+}
+
+const NO_THREAD_IDS: ReadonlySet<string> = new Set();
+
+export function useUnarchivedThreadIds(): ReadonlySet<string> | null {
+  const { status, threads } = experimental_useSidebarThreads();
+  return useMemo(() => {
+    if (status === "error") return null;
+    if (status === "loading") return NO_THREAD_IDS;
+    return new Set(threads.map((thread) => thread.id));
+  }, [status, threads]);
+}
+
+export function withoutArchivedThreads(
+  threads: readonly ProjectThread[],
+  unarchivedThreadIds: ReadonlySet<string> | null,
+): readonly ProjectThread[] {
+  if (unarchivedThreadIds === null) return threads;
+  const visible = threads.filter((thread) =>
+    unarchivedThreadIds.has(thread.threadId),
+  );
+  return visible.length === threads.length ? threads : visible;
 }
 
 const SIDE_CHAT_PLUGIN_ID = "side-chat";
@@ -112,7 +134,6 @@ interface ProjectThreadActionsProps {
   projectId: string;
   linked: boolean;
   threads: readonly ProjectThread[];
-  presets: Preset[] | undefined;
   onError: (message: string) => void;
   compact?: boolean;
   className?: string;
@@ -122,7 +143,6 @@ export function ProjectThreadActions({
   projectId,
   linked,
   threads,
-  presets,
   onError,
   compact = false,
   className,
@@ -132,12 +152,11 @@ export function ProjectThreadActions({
       data-project-thread-actions={projectId}
       className={cn("flex items-center gap-1", className)}
     >
-      <NewThreadMenu
-        target={{ kind: "project", projectId }}
-        presets={presets}
+      <NewProjectThreadButton
+        projectId={projectId}
+        linked={linked}
         onError={onError}
         compact={compact}
-        unlinkedProjectId={linked ? null : projectId}
       />
       <AttachThreadPicker
         target={{ kind: "project", projectId }}
@@ -152,7 +171,6 @@ export function ProjectThreadActions({
 interface ProjectThreadListProps {
   projectId: string;
   linked: boolean;
-  presets: Preset[] | undefined;
   onError: (message: string) => void;
   className?: string;
 }
@@ -160,17 +178,17 @@ interface ProjectThreadListProps {
 export function ProjectThreadList({
   projectId,
   linked,
-  presets,
   onError,
   className,
 }: ProjectThreadListProps) {
   const threads = useProjectThreads(projectId);
   const busyThreadIds = useBusyThreadIds();
+  const unarchivedThreadIds = useUnarchivedThreadIds();
   const attached = threads.data ?? [];
   return (
     <ProjectThreadLinks
       projectId={projectId}
-      threads={attached}
+      threads={withoutArchivedThreads(attached, unarchivedThreadIds)}
       error={threads.error}
       busyThreadIds={busyThreadIds}
       className={className}
@@ -179,7 +197,6 @@ export function ProjectThreadList({
         projectId={projectId}
         linked={linked}
         threads={attached}
-        presets={presets}
         onError={onError}
       />
     </ProjectThreadLinks>

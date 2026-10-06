@@ -25,6 +25,7 @@ import { displayName } from "../shared/display-name";
 import { errorMessage } from "../shared/errors";
 import { truncateToWidth } from "../shared/text-measure";
 import { delegationRpcContract } from "./contract";
+import { composeClaimsFor, registerComposeAttach } from "./compose";
 
 const MAX_DELEGATED_THREAD_TITLE_WIDTH = 120;
 const SYSTEM_AUTHOR_NAME = "My Tasks";
@@ -565,6 +566,13 @@ export function handlers(
       return { threadId: thread.id };
     },
 
+    projectThreadsCompose(input) {
+      const project = requireProject(store.tasks, input.projectId);
+      const bbProjectId = requireLinkedBbProject(project);
+      composeClaimsFor(bb).claim(bbProjectId, project.id);
+      return { bbProjectId };
+    },
+
     async projectThreadsDetach(input) {
       const project = requireProject(store.tasks, input.projectId);
       const projectThread = store.tasks.getProjectThreadByThreadId(
@@ -589,4 +597,5 @@ export function registerDelegation(
   store: TasksApiStore,
 ): void {
   bb.rpc.register(delegationRpcContract, handlers(bb, store));
+  registerComposeAttach(bb, store);
 }

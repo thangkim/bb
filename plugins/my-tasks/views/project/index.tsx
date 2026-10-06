@@ -86,12 +86,10 @@ function ProjectProperties({
 function ProjectThreads({
   projectId,
   linked,
-  presets,
   onError,
 }: {
   projectId: string;
   linked: boolean;
-  presets: Preset[] | undefined;
   onError: (message: string) => void;
 }) {
   const tasks = useProjectTasks(projectId);
@@ -114,7 +112,6 @@ function ProjectThreads({
       <ProjectThreadList
         projectId={projectId}
         linked={linked}
-        presets={presets}
         onError={onError}
         className={rows.length > 0 ? "mb-1" : undefined}
       />
@@ -327,7 +324,6 @@ function ProjectDetail({
           <ProjectThreads
             projectId={project.id}
             linked={project.linkedBbProjectId !== null}
-            presets={presets.data}
             onError={push}
           />
         </div>

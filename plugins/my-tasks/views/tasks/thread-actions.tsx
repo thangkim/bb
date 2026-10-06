@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import { useRpc } from "@get-bb/plugin-sdk/app";
+import {
+  experimental_useSidebarThreadActions,
+  experimental_useSplitPanes,
+  useRpc,
+} from "@get-bb/plugin-sdk/app";
 import { HugeiconsIcon } from "@hugeicons/react";
 import BubbleChatAddIcon from "@hugeicons/core-free-icons/BubbleChatAddIcon";
 import Link01Icon from "@hugeicons/core-free-icons/Link01Icon";
@@ -82,14 +86,14 @@ interface ThreadSearchResult {
 }
 
 export function NewThreadMenu({
-  target,
+  taskId,
   presets,
   onError,
   className,
   compact = false,
   unlinkedProjectId = null,
 }: {
-  target: ThreadTarget;
+  taskId: string;
   presets: Preset[] | undefined;
   onError: (message: string) => void;
   className?: string;
@@ -125,16 +129,10 @@ export function NewThreadMenu({
     storeLastPresetId(preset.id);
     setDispatching(true);
     try {
-      const { threadId } =
-        target.kind === "task"
-          ? await rpc.call("delegate", {
-              taskId: target.taskId,
-              presetId: preset.id,
-            })
-          : await rpc.call("delegateProject", {
-              projectId: target.projectId,
-              presetId: preset.id,
-            });
+      const { threadId } = await rpc.call("delegate", {
+        taskId,
+        presetId: preset.id,
+      });
       openNewThread(threadId);
     } catch (error) {
       onError(errorMessage(error));
@@ -267,6 +265,111 @@ export function NewThreadMenu({
       </div>
       {createDialog}
     </>
+  );
+}
+
+export function NewProjectThreadButton({
+  projectId,
+  linked,
+  onError,
+  className,
+  compact = false,
+}: {
+  projectId: string;
+  linked: boolean;
+  onError: (message: string) => void;
+  className?: string;
+  compact?: boolean;
+}) {
+  const rpc = useRpc<DelegationRpcContract>();
+  const splitPanes = experimental_useSplitPanes();
+  const threadActions = experimental_useSidebarThreadActions();
+  const [opening, setOpening] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
+
+  const compose = async () => {
+    setOpening(true);
+    try {
+      const { bbProjectId } = await rpc.call("projectThreadsCompose", {
+        projectId,
+      });
+      const placed = splitPanes.isAvailable
+        ? splitPanes.openNewThread({
+            side: "right",
+            projectId: bbProjectId,
+            focusPrompt: true,
+            reuseComposer: true,
+          })
+        : "unavailable";
+      if (placed === "unavailable" || placed === "at-cap") {
+        threadActions.openNewThread({
+          projectId: bbProjectId,
+          focusPrompt: true,
+        });
+      }
+    } catch (error) {
+      onError(errorMessage(error));
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  const start = () => {
+    if (linked) void compose();
+    else setLinkOpen(true);
+  };
+
+  const linkPopover = linkOpen ? (
+    <LinkBeforeStartContent
+      projectId={projectId}
+      onError={onError}
+      onLinked={() => {
+        setLinkOpen(false);
+        void compose();
+      }}
+    />
+  ) : null;
+
+  if (compact) {
+    return (
+      <Popover open={linkOpen} onOpenChange={setLinkOpen}>
+        <ActionTooltip label="New thread">
+          <PopoverAnchor asChild>
+            <button
+              type="button"
+              aria-label="New thread"
+              aria-busy={opening}
+              className={cn(ICON_ACTION_CLASS, className)}
+              disabled={opening}
+              onClick={start}
+            >
+              <HugeiconsIcon
+                icon={BubbleChatAddIcon}
+                className="size-3.5 shrink-0"
+              />
+            </button>
+          </PopoverAnchor>
+        </ActionTooltip>
+        {linkPopover}
+      </Popover>
+    );
+  }
+
+  return (
+    <Popover open={linkOpen} onOpenChange={setLinkOpen}>
+      <PopoverAnchor asChild>
+        <button
+          type="button"
+          className={cn(ACTION_CLASS, className)}
+          disabled={opening}
+          onClick={start}
+        >
+          <Icon name="Plus" className="size-3 shrink-0" />
+          New thread
+        </button>
+      </PopoverAnchor>
+      {linkPopover}
+    </Popover>
   );
 }
 

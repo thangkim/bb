@@ -152,8 +152,13 @@ right-click menu) to move it there.
 In the app, every task row has **New thread** (pick a preset) and **Attach
 thread** (search your bb threads). Every project row in the list, collapsed
 or expanded, lists the project's own threads under its priority and due date,
-with icon-only **New thread** (starts with the last-used preset) and **Attach
-thread** buttons beside the due date; expanding a row adds its tasks below.
+with icon-only **New thread** and **Attach thread** buttons beside the due
+date; expanding a row adds its tasks below. A project's **New thread** opens an
+empty composer for the project's linked bb project beside the list (or in place
+when splits are unavailable) and starts nothing; the first thread you send from
+bb in that project within 10 minutes is attached to the project. To start a
+thread with the project's details already in the prompt, use
+`bb my-tasks project dispatch`.
 The project page shows the same threads with the labelled actions. Those
 threads belong to the project, not to any task. Clicking a thread opens it in a split
 pane.

@@ -26,12 +26,13 @@ window.ResizeObserver ??= class {
 Element.prototype.scrollIntoView ??= () => {};
 
 installTestPluginRuntime();
-const { AttachThreadPicker, NewThreadMenu } =
+const { AttachThreadPicker, NewProjectThreadButton, NewThreadMenu } =
   await import("./thread-actions.js");
 
 afterEach(cleanup);
 
 const TASK_ID = "01HZZZZZZZZZZZZZZZZZZZZZT1";
+const PROJECT_ID = "01HZZZZZZZZZZZZZZZZZZZZZP1";
 
 const preset = {
   id: "01HZZZZZZZZZZZZZZZZZZZZZE1",
@@ -71,7 +72,7 @@ describe("new thread menu", () => {
     const slot = renderSlot(
       { component: NewThreadMenu },
       {
-        target: { kind: "task", taskId: TASK_ID },
+        taskId: TASK_ID,
         presets: [preset, otherPreset],
         onError: (message: string) => errors.push(message),
       },
@@ -97,7 +98,7 @@ describe("new thread menu", () => {
     const slot = renderSlot(
       { component: NewThreadMenu },
       {
-        target: { kind: "task", taskId: TASK_ID },
+        taskId: TASK_ID,
         presets: [preset, otherPreset],
         onError: () => {},
       },
@@ -131,7 +132,7 @@ describe("new thread menu", () => {
     const slot = renderSlot(
       { component: NewThreadMenu },
       {
-        target: { kind: "task", taskId: TASK_ID },
+        taskId: TASK_ID,
         presets: [preset],
         onError: (message: string) => errors.push(message),
       },
@@ -147,6 +148,94 @@ describe("new thread menu", () => {
     await waitFor(() => expect(errors).toEqual(["project is not linked"]));
     expect(slot.sidebarActionCalls).toEqual([]);
     expect(slot.navigateCalls).toEqual([]);
+  });
+});
+
+describe("project new thread button", () => {
+  function render(options: {
+    splitResult?: "opened" | "focused" | "replaced" | "at-cap" | "unavailable";
+    compose?: () => unknown;
+  }) {
+    const errors: string[] = [];
+    const splitCalls: unknown[] = [];
+    const slot = renderSlot(
+      { component: NewProjectThreadButton },
+      {
+        projectId: PROJECT_ID,
+        linked: true,
+        compact: true,
+        onError: (message: string) => errors.push(message),
+      },
+      {
+        rpc: {
+          projectThreadsCompose:
+            options.compose ?? (() => ({ bbProjectId: "proj_linked" })),
+        },
+        ...(options.splitResult === undefined
+          ? {}
+          : {
+              experimental_splitPanes: {
+                isAvailable: true,
+                openNewThread: (input: unknown) => {
+                  splitCalls.push(input);
+                  return options.splitResult!;
+                },
+              },
+            }),
+      },
+    );
+    return { slot, errors, splitCalls };
+  }
+
+  it("opens an empty composer for the linked project beside the list without starting a thread", async () => {
+    const { slot, errors, splitCalls } = render({ splitResult: "opened" });
+    fireEvent.click(slot.getByRole("button", { name: "New thread" }));
+    await waitFor(() =>
+      expect(splitCalls).toEqual([
+        {
+          side: "right",
+          projectId: "proj_linked",
+          focusPrompt: true,
+          reuseComposer: true,
+        },
+      ]),
+    );
+    expect(
+      slot.rpcCalls.map((call) => [call.method, rpcInput(call.input)]),
+    ).toEqual([["projectThreadsCompose", { projectId: PROJECT_ID }]]);
+    expect(slot.sidebarActionCalls).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  it("falls back to the new-thread screen when splits are unavailable or full", async () => {
+    for (const splitResult of [undefined, "at-cap"] as const) {
+      const { slot } = render({ splitResult });
+      fireEvent.click(slot.getByRole("button", { name: "New thread" }));
+      await waitFor(() =>
+        expect(slot.sidebarActionCalls).toEqual([
+          {
+            method: "openNewThread",
+            options: { projectId: "proj_linked", focusPrompt: true },
+          },
+        ]),
+      );
+      cleanup();
+    }
+  });
+
+  it("reports a failed claim and opens nothing", async () => {
+    const { slot, errors, splitCalls } = render({
+      splitResult: "opened",
+      compose: () => {
+        throw new Error("Project is not linked to a bb project");
+      },
+    });
+    fireEvent.click(slot.getByRole("button", { name: "New thread" }));
+    await waitFor(() =>
+      expect(errors).toEqual(["Project is not linked to a bb project"]),
+    );
+    expect(splitCalls).toEqual([]);
+    expect(slot.sidebarActionCalls).toEqual([]);
   });
 });
 

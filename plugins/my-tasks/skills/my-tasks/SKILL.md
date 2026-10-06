@@ -170,7 +170,9 @@ each renders its own card.
   `bb my-tasks project threads ABC`. Project-level files use
   `bb my-tasks attachment add --project ABC --file <path>`; a project
   dispatch prompt lists them. Start a new project-level thread with
-  `bb my-tasks project dispatch ABC --preset <name>`.
+  `bb my-tasks project dispatch ABC --preset <name>`. In the app, a project's
+  New thread only opens an empty composer; the next top-level thread created
+  in the linked bb project within 10 minutes is attached to the project.
 - `bb my-tasks move ABC-12 --project XYZ` moves a task to another project and
   gives it a new key there (for example `XYZ-4`); use the new key afterwards.
 - Write one comment per meaningful milestone. Combine related facts into a

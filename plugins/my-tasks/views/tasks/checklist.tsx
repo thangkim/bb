@@ -275,7 +275,7 @@ function TaskChecklistRow({
             ))}
             <div className="flex items-center gap-1">
               <NewThreadMenu
-                target={{ kind: "task", taskId: task.id }}
+                taskId={task.id}
                 presets={presets}
                 onError={onError}
                 unlinkedProjectId={unlinkedProjectId}

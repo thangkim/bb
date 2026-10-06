@@ -307,7 +307,7 @@ function TaskDetail({ task }: { task: Task }) {
             ) : null}
             <div className="flex items-center gap-1 pt-1">
               <NewThreadMenu
-                target={{ kind: "task", taskId: task.id }}
+                taskId={task.id}
                 presets={presets.data}
                 onError={push}
                 unlinkedProjectId={

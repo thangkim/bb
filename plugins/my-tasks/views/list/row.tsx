@@ -15,6 +15,7 @@ import { TaskChecklist } from "../tasks/checklist.js";
 import {
   ProjectThreadActions,
   ProjectThreadLinks,
+  withoutArchivedThreads,
 } from "../tasks/project-threads.js";
 import {
   isTaskDrag,
@@ -38,6 +39,7 @@ interface ProjectRowProps {
   threads: readonly ProjectThread[];
   threadsError: string | null;
   busyThreadIds: ReadonlySet<string>;
+  unarchivedThreadIds: ReadonlySet<string> | null;
   onEdit: ProjectEditFn;
   onComplete: () => void;
   onDelete: () => void;
@@ -56,6 +58,7 @@ export function ProjectRow({
   threads,
   threadsError,
   busyThreadIds,
+  unarchivedThreadIds,
   onEdit,
   onComplete,
   onDelete,
@@ -70,6 +73,7 @@ export function ProjectRow({
   const working = (summary?.activeAgentCount ?? 0) > 0;
   const done = project.status === "done";
   const activeThreadProject = useActiveThread().projectIds.has(project.id);
+  const visibleThreads = withoutArchivedThreads(threads, unarchivedThreadIds);
 
   return (
     <ProjectContextMenu project={project} onEdit={onEdit} onDelete={onDelete}>
@@ -199,7 +203,6 @@ export function ProjectRow({
               projectId={project.id}
               linked={project.linkedBbProjectId !== null}
               threads={threads}
-              presets={presets}
               onError={onError}
               compact
               className="gap-0.5"
@@ -212,12 +215,12 @@ export function ProjectRow({
             />
           </div>
         </div>
-        {threads.length > 0 || threadsError !== null || expanded ? (
+        {visibleThreads.length > 0 || threadsError !== null || expanded ? (
           <div className="pb-2 pl-10.5 pr-3.5">
-            {threads.length > 0 || threadsError !== null ? (
+            {visibleThreads.length > 0 || threadsError !== null ? (
               <ProjectThreadLinks
                 projectId={project.id}
-                threads={threads}
+                threads={visibleThreads}
                 error={threadsError}
                 busyThreadIds={busyThreadIds}
                 className={

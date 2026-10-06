@@ -121,6 +121,7 @@ interface Fixture {
   threadsByProject?: Record<string, ProjectThread[]>;
   presets?: Preset[];
   sidebarThreadIds?: string[];
+  archivedThreadIds?: string[];
   sideChats?: { id: string; title: string; sourceThreadId: string }[];
   settings?: Record<string, boolean>;
   threadLinks?: Record<string, { tasks: Task[]; projects: Project[] }>;
@@ -129,6 +130,14 @@ interface Fixture {
 
 function renderList(fixture: Fixture = {}) {
   const projects = fixture.projects ?? [LAUNCH, POLISH, PLANNED];
+  const archived = new Set(fixture.archivedThreadIds ?? []);
+  const unarchivedThreadIds = new Set([
+    ...(fixture.sidebarThreadIds ?? []),
+    ...Object.values(fixture.threadsByProject ?? {})
+      .flat()
+      .map((thread) => thread.threadId)
+      .filter((threadId) => !archived.has(threadId)),
+  ]);
   const tasks = [...(fixture.tasks ?? [task(1), task(2, "done")])];
   return renderSlot(
     app.navPanels[0]!,
@@ -157,7 +166,7 @@ function renderList(fixture: Fixture = {}) {
           }),
       sidebarThreads: {
         threads: [
-          ...(fixture.sidebarThreadIds ?? []).map(makeSidebarThread),
+          ...[...unarchivedThreadIds].map(makeSidebarThread),
           ...(fixture.sideChats ?? []).map((sideChat) => ({
             ...makeSidebarThread(sideChat.id),
             displayTitle: sideChat.title,
@@ -178,7 +187,10 @@ function renderList(fixture: Fixture = {}) {
             (projectId) => fixture.threadsByProject?.[projectId] ?? [],
           ),
         }),
-        delegateProject: () => ({ threadId: "thr_project_new" }),
+        projectThreadsCompose: (raw: unknown) => ({
+          bbProjectId:
+            rpcInput(raw).projectId === POLISH.id ? "proj_mono" : "proj_launch",
+        }),
         listThreadLinks: (raw: unknown) =>
           fixture.threadLinks?.[rpcInput(raw).threadId as string] ?? {
             tasks: [],
@@ -511,6 +523,37 @@ describe("projects list", () => {
     });
   });
 
+  it("hides archived project threads from the row", async () => {
+    const slot = renderList({
+      threadsByProject: {
+        [LAUNCH.id]: [
+          projectThread(LAUNCH.id, "P1"),
+          projectThread(LAUNCH.id, "P2"),
+        ],
+        [POLISH.id]: [projectThread(POLISH.id, "P3")],
+      },
+      archivedThreadIds: ["thr_P2", "thr_P3"],
+    });
+    const row = await projectRow(slot, LAUNCH.id);
+    const projectThreads = row.querySelector(
+      `[data-project-threads="${LAUNCH.id}"]`,
+    ) as HTMLElement;
+    expect(
+      await within(projectThreads).findByRole("button", {
+        name: "Project worker P1",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(projectThreads).queryByRole("button", {
+        name: "Project worker P2",
+      }),
+    ).toBeNull();
+    const polish = await projectRow(slot, POLISH.id);
+    expect(
+      polish.querySelector(`[data-project-threads="${POLISH.id}"]`),
+    ).toBeNull();
+  });
+
   it("shows project threads below the row and icon-only thread actions beside the due date", async () => {
     const slot = renderList({
       threadsByProject: { [LAUNCH.id]: [projectThread(LAUNCH.id, "P1")] },
@@ -552,7 +595,7 @@ describe("projects list", () => {
     expect(rpcInput(batches[0]!.input).projectIds).toContain(LAUNCH.id);
   });
 
-  it("starts a new thread for the whole project from its collapsed row", async () => {
+  it("opens an empty composer for the whole project from its collapsed row", async () => {
     const slot = renderList({ presets: [PRESET] });
     const row = await projectRow(slot, LAUNCH.id);
     const projectThreads = await waitFor(() => {
@@ -569,18 +612,26 @@ describe("projects list", () => {
     await waitFor(() => expect(newThread.hasAttribute("disabled")).toBe(false));
     fireEvent.click(newThread);
     await waitFor(() =>
-      expect(
-        slot.rpcCalls
-          .filter((call) => call.method === "delegateProject")
-          .map((call) => rpcInput(call.input)),
-      ).toEqual([{ projectId: LAUNCH.id, presetId: PRESET.id }]),
+      expect(slot.sidebarActionCalls).toEqual([
+        {
+          method: "openNewThread",
+          options: { projectId: "proj_launch", focusPrompt: true },
+        },
+      ]),
     );
-    expect(slot.rpcCalls.some((call) => call.method === "delegate")).toBe(
-      false,
-    );
+    expect(
+      slot.rpcCalls
+        .filter((call) => call.method === "projectThreadsCompose")
+        .map((call) => rpcInput(call.input)),
+    ).toEqual([{ projectId: LAUNCH.id }]);
+    expect(
+      slot.rpcCalls.some(
+        (call) => call.method === "delegate" || call.method === "delegateProject",
+      ),
+    ).toBe(false);
   });
 
-  it("asks for a bb project before starting a thread in an unlinked project", async () => {
+  it("asks for a bb project before opening a composer for an unlinked project", async () => {
     const slot = renderList({ presets: [PRESET] });
     const row = await projectRow(slot, POLISH.id);
     const actions = await waitFor(() => {
@@ -597,17 +648,18 @@ describe("projects list", () => {
     await waitFor(() => expect(newThread.hasAttribute("disabled")).toBe(false));
     fireEvent.click(newThread);
     expect(
-      slot.rpcCalls.some((call) => call.method === "delegateProject"),
+      slot.rpcCalls.some((call) => call.method === "projectThreadsCompose"),
     ).toBe(false);
     fireEvent.click(await slot.findByLabelText("Linked bb project"));
     fireEvent.click(await slot.findByRole("option", { name: "bb monorepo" }));
     fireEvent.click(slot.getByRole("button", { name: "Link and start" }));
     await waitFor(() =>
-      expect(
-        slot.rpcCalls
-          .filter((call) => call.method === "delegateProject")
-          .map((call) => rpcInput(call.input)),
-      ).toEqual([{ projectId: POLISH.id, presetId: PRESET.id }]),
+      expect(slot.sidebarActionCalls).toEqual([
+        {
+          method: "openNewThread",
+          options: { projectId: "proj_mono", focusPrompt: true },
+        },
+      ]),
     );
     expect(
       slot.rpcCalls
