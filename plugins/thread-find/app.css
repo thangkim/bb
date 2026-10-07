@@ -1,9 +1,17 @@
 ::highlight(bb-thread-find-match) {
-  background-color: var(--sidebar-search-match);
+  background-color: color-mix(
+    in oklab,
+    oklch(0.8 0.13 88),
+    var(--canvas) 55%
+  );
   color: var(--ink);
 }
 
 ::highlight(bb-thread-find-active) {
-  background-color: var(--sidebar-search-match-border);
+  background-color: color-mix(
+    in oklab,
+    oklch(0.72 0.17 55),
+    var(--canvas) 40%
+  );
   color: var(--ink);
 }
