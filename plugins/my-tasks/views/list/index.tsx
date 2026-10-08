@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectStatus, ProjectThread } from "../../shared/contract.js";
-import { usePresets, useProjects } from "../../shell/data.js";
+import { useProjects } from "../../shell/data.js";
 import { useTasksNavigation } from "../../shell/routes.js";
 import { NewProjectDialog } from "../manage/new-project-dialog.js";
 import { DetailToasts, useDetailToasts } from "../detail/toast.js";
@@ -71,7 +71,6 @@ function LoadingRows() {
 export function ListView({ activeOnly = false }: ListViewProps) {
   const navigation = useTasksNavigation();
   const projects = useProjects();
-  const presets = usePresets();
   const summaries = useProjectSummaries();
   const { toasts, push, dismiss } = useDetailToasts();
   const scope = activeOnly ? "active" : "all";
@@ -242,7 +241,6 @@ export function ListView({ activeOnly = false }: ListViewProps) {
                   projects={projects.data}
                   summary={summaries.get(project.id)}
                   labels={labels.data}
-                  presets={presets.data}
                   threads={projectThreads.data?.get(project.id) ?? NO_THREADS}
                   threadsError={projectThreads.error}
                   busyThreadIds={busyThreadIds}

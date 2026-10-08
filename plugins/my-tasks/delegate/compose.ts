@@ -2,7 +2,13 @@ import type {
   BbPluginApi,
   PluginThreadEventPayloads,
 } from "@get-bb/plugin-sdk";
-import { publishProjectsChanged, type TasksApiStore } from "../api";
+import {
+  publishProjectsChanged,
+  publishTasksChanged,
+  type TasksApiStore,
+} from "../api";
+import type { Project } from "../db";
+import type { ThreadsChangedEvent } from "../shared/contract";
 import { truncateToWidth } from "../shared/text-measure";
 
 type ThreadResponse = PluginThreadEventPayloads["thread.created"]["thread"];
@@ -10,15 +16,25 @@ type ThreadResponse = PluginThreadEventPayloads["thread.created"]["thread"];
 export const COMPOSE_CLAIM_TTL_MS = 10 * 60 * 1000;
 const COMPOSE_CLAIM_LIMIT = 100;
 export const COMPOSED_THREAD_TITLE_WIDTH = 80;
+export const MANUAL_PRESET_NAME = "Attached";
+
+export type ComposeTarget =
+  | { kind: "project"; projectId: string }
+  | { kind: "task"; taskId: string };
 
 interface ComposeClaim {
-  projectId: string;
+  target: ComposeTarget;
   expiresAt: number;
 }
 
 export interface ComposeClaims {
-  claim(bbProjectId: string, projectId: string): void;
-  take(bbProjectId: string): string | null;
+  claim(bbProjectId: string, target: ComposeTarget): void;
+  take(bbProjectId: string): ComposeTarget | null;
+}
+
+export function publishThreadsChanged(bb: BbPluginApi, taskId: string): void {
+  const payload: ThreadsChangedEvent = { taskId };
+  bb.realtime.publish("threads:changed", payload);
 }
 
 export function createComposeClaims(now: () => number = Date.now): ComposeClaims {
@@ -30,10 +46,10 @@ export function createComposeClaims(now: () => number = Date.now): ComposeClaims
     }
   };
   return {
-    claim(bbProjectId, projectId) {
+    claim(bbProjectId, target) {
       prune();
       claims.delete(bbProjectId);
-      claims.set(bbProjectId, { projectId, expiresAt: now() + COMPOSE_CLAIM_TTL_MS });
+      claims.set(bbProjectId, { target, expiresAt: now() + COMPOSE_CLAIM_TTL_MS });
       while (claims.size > COMPOSE_CLAIM_LIMIT) {
         const oldest = claims.keys().next().value;
         if (oldest === undefined) break;
@@ -44,7 +60,7 @@ export function createComposeClaims(now: () => number = Date.now): ComposeClaims
       const claim = claims.get(bbProjectId);
       if (!claim) return null;
       claims.delete(bbProjectId);
-      return claim.expiresAt > now() ? claim.projectId : null;
+      return claim.expiresAt > now() ? claim.target : null;
     },
   };
 }
@@ -76,6 +92,12 @@ function composedTitle(thread: ThreadResponse, fallback: string): string {
   );
 }
 
+function startProject(store: TasksApiStore, project: Project): void {
+  if (project.status === "backlog" || project.status === "todo") {
+    store.tasks.updateProject(project.id, { status: "in_progress" });
+  }
+}
+
 export function attachComposedThread(
   bb: BbPluginApi,
   store: TasksApiStore,
@@ -83,9 +105,29 @@ export function attachComposedThread(
   thread: ThreadResponse,
 ): boolean {
   if (!isComposedThread(thread)) return false;
-  const projectId = claims.take(thread.projectId);
-  if (projectId === null) return false;
-  const project = store.tasks.getProject(projectId);
+  const target = claims.take(thread.projectId);
+  if (target === null) return false;
+  if (target.kind === "task") {
+    const task = store.tasks.getTask(target.taskId);
+    if (!task) return false;
+    const project = store.tasks.getProject(task.projectId);
+    if (!project || project.linkedBbProjectId !== thread.projectId) return false;
+    store.transaction(() => {
+      store.tasks.upsertTaskThread({
+        taskId: task.id,
+        threadId: thread.id,
+        presetName: MANUAL_PRESET_NAME,
+        title: composedTitle(thread, task.title),
+        liveStatus: "starting",
+      });
+      startProject(store, project);
+    });
+    publishThreadsChanged(bb, task.id);
+    publishTasksChanged(bb, task.id, task.projectId);
+    publishProjectsChanged(bb, project.id);
+    return true;
+  }
+  const project = store.tasks.getProject(target.projectId);
   if (!project || project.linkedBbProjectId !== thread.projectId) return false;
   store.transaction(() => {
     store.tasks.upsertProjectThread({
@@ -93,9 +135,7 @@ export function attachComposedThread(
       threadId: thread.id,
       title: composedTitle(thread, project.name),
     });
-    if (project.status === "backlog" || project.status === "todo") {
-      store.tasks.updateProject(project.id, { status: "in_progress" });
-    }
+    startProject(store, project);
   });
   publishProjectsChanged(bb, project.id);
   return true;
@@ -121,6 +161,29 @@ export function refreshProjectThreadTitles(
   }
 }
 
+export function refreshComposedTaskThreadTitles(
+  bb: BbPluginApi,
+  store: TasksApiStore,
+  thread: ThreadResponse,
+): void {
+  const title = thread.title?.trim();
+  if (!title) return;
+  const next = truncateToWidth(title, COMPOSED_THREAD_TITLE_WIDTH);
+  for (const current of store.tasks.listTaskThreadsByThreadId(thread.id)) {
+    if (current.presetName !== MANUAL_PRESET_NAME || current.title === next) {
+      continue;
+    }
+    store.tasks.upsertTaskThread({
+      taskId: current.taskId,
+      threadId: current.threadId,
+      presetName: current.presetName,
+      title: next,
+      liveStatus: current.liveStatus,
+    });
+    publishThreadsChanged(bb, current.taskId);
+  }
+}
+
 export function registerComposeAttach(
   bb: BbPluginApi,
   store: TasksApiStore,
@@ -140,9 +203,10 @@ export function registerComposeAttach(
   bb.events.on("thread.idle", ({ thread }) => {
     try {
       refreshProjectThreadTitles(bb, store, thread);
+      refreshComposedTaskThreadTitles(bb, store, thread);
     } catch (error) {
       bb.log.warn(
-        `failed to refresh project thread title ${thread.id}: ${
+        `failed to refresh composed thread title ${thread.id}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );

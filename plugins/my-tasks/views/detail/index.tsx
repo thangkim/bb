@@ -23,7 +23,7 @@ import {
   type TaskPropertyUpdate,
 } from "./rail.js";
 import { ThreadsSection } from "./threads.js";
-import { AttachThreadPicker, NewThreadMenu } from "../tasks/thread-actions.js";
+import { AttachThreadPicker, NewThreadButton } from "../tasks/thread-actions.js";
 import { DetailToasts, useDetailToasts } from "./toast.js";
 import { DelayedLoading } from "@/components/ui/delayed-loading";
 import { Icon } from "@/components/ui/icon";
@@ -306,13 +306,11 @@ function TaskDetail({ task }: { task: Task }) {
               />
             ) : null}
             <div className="flex items-center gap-1 pt-1">
-              <NewThreadMenu
-                taskId={task.id}
-                presets={presets.data}
+              <NewThreadButton
+                target={{ kind: "task", taskId: task.id }}
+                projectId={task.projectId}
+                linked={project?.linkedBbProjectId !== null}
                 onError={push}
-                unlinkedProjectId={
-                  project?.linkedBbProjectId === null ? project.id : null
-                }
               />
               <AttachThreadPicker
                 target={{ kind: "task", taskId: task.id }}

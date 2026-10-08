@@ -153,8 +153,13 @@ right-click menu) to move it there. Inside an expanded project row, drag a task
 above or below another task, or a project-level thread above or below another
 thread, to change their order. New project-level threads appear at the top.
 
-In the app, every task row has **New thread** (pick a preset) and **Attach
-thread** (search your bb threads). Every project row in the list, collapsed
+In the app, every task has **New thread** and **Attach thread** (search your
+bb threads): labelled on the task page, icon-only on a task's checklist row
+under a project. A task's **New thread** opens an empty composer for the
+project's linked bb project, like a project's, and attaches the thread you send
+to that task. To start a thread with the task's details already in the prompt,
+use the **Dispatch** control in the task's properties or `bb my-tasks delegate`.
+Every project row in the list, collapsed
 or expanded, lists the project's own threads under its priority and due date,
 with icon-only **New thread** and **Attach thread** buttons beside the due
 date; expanding a row adds its tasks below. A project's **New thread** opens an

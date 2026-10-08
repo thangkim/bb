@@ -6,7 +6,7 @@ import {
   renderSlot,
 } from "@get-bb/plugin-sdk/testing/app";
 import { COMPACT_VIEWPORT_QUERY } from "@/components/ui/hooks/use-compact-viewport";
-import { makeSidebarThread, rpcInput } from "../../test-fixtures.js";
+import { rpcInput } from "../../test-fixtures.js";
 
 window.matchMedia = (query: string) => ({
   matches: query === COMPACT_VIEWPORT_QUERY,
@@ -26,7 +26,7 @@ window.ResizeObserver ??= class {
 Element.prototype.scrollIntoView ??= () => {};
 
 installTestPluginRuntime();
-const { AttachThreadPicker, NewProjectThreadButton, NewThreadMenu } =
+const { AttachThreadPicker, NewThreadButton } =
   await import("./thread-actions.js");
 
 afterEach(cleanup);
@@ -34,133 +34,18 @@ afterEach(cleanup);
 const TASK_ID = "01HZZZZZZZZZZZZZZZZZZZZZT1";
 const PROJECT_ID = "01HZZZZZZZZZZZZZZZZZZZZZP1";
 
-const preset = {
-  id: "01HZZZZZZZZZZZZZZZZZZZZZE1",
-  name: "Sonnet · high",
-  providerId: "claude-code",
-  modelId: "claude-sonnet-5",
-  reasoningLevel: "high" as const,
-  serviceTier: null,
-  permissionMode: "accept-edits" as const,
-  environmentKind: "project-default" as const,
-  baseBranch: null,
-  machineId: null,
-  instructions: "",
-  builtin: false,
-  createdAt: "2026-07-15T00:00:00.000Z",
-};
-
-const otherPreset = {
-  ...preset,
-  id: "01HZZZZZZZZZZZZZZZZZZZZZE2",
-  name: "Opus · max",
-  modelId: "claude-opus-5",
-};
-
-function delegateInputs(slot: {
-  rpcCalls: { method: string; input: unknown }[];
-}) {
-  return slot.rpcCalls
-    .filter((call) => call.method === "delegate")
-    .map((call) => rpcInput(call.input));
-}
-
-describe("new thread menu", () => {
-  it("starts a thread with the default preset in one click and opens it beside the list", async () => {
-    window.localStorage.clear();
-    const errors: string[] = [];
-    const slot = renderSlot(
-      { component: NewThreadMenu },
-      {
-        taskId: TASK_ID,
-        presets: [preset, otherPreset],
-        onError: (message: string) => errors.push(message),
-      },
-      {
-        rpc: { delegate: () => ({ threadId: "thr_new" }) },
-        sidebarThreads: { threads: [makeSidebarThread("thr_new")] },
-      },
-    );
-    fireEvent.click(slot.getByRole("button", { name: "New thread" }));
-    await waitFor(() =>
-      expect(slot.sidebarActionCalls).toEqual([
-        { method: "open", threadId: "thr_new", options: { split: true } },
-      ]),
-    );
-    expect(delegateInputs(slot)).toEqual([
-      { taskId: TASK_ID, presetId: otherPreset.id },
-    ]);
-    expect(slot.navigateCalls).toEqual([]);
-    expect(errors).toEqual([]);
-  });
-
-  it("starts a thread with a preset picked from the menu and remembers it", async () => {
-    const slot = renderSlot(
-      { component: NewThreadMenu },
-      {
-        taskId: TASK_ID,
-        presets: [preset, otherPreset],
-        onError: () => {},
-      },
-      {
-        rpc: { delegate: () => ({ threadId: "thr_new" }) },
-        sidebarThreads: { threads: [makeSidebarThread("thr_new")] },
-      },
-    );
-    fireEvent.click(slot.getByRole("button", { name: "Choose thread preset" }));
-    fireEvent.click(
-      await slot.findByRole("menuitem", { name: /Sonnet · high/ }),
-    );
-    await waitFor(() =>
-      expect(delegateInputs(slot)).toEqual([
-        { taskId: TASK_ID, presetId: preset.id },
-      ]),
-    );
-    await waitFor(() => expect(slot.sidebarActionCalls).toHaveLength(1));
-
-    fireEvent.click(slot.getByRole("button", { name: "New thread" }));
-    await waitFor(() =>
-      expect(delegateInputs(slot)).toEqual([
-        { taskId: TASK_ID, presetId: preset.id },
-        { taskId: TASK_ID, presetId: preset.id },
-      ]),
-    );
-  });
-
-  it("reports a failed dispatch without opening anything", async () => {
-    const errors: string[] = [];
-    const slot = renderSlot(
-      { component: NewThreadMenu },
-      {
-        taskId: TASK_ID,
-        presets: [preset],
-        onError: (message: string) => errors.push(message),
-      },
-      {
-        rpc: {
-          delegate: () => {
-            throw new Error("project is not linked");
-          },
-        },
-      },
-    );
-    fireEvent.click(slot.getByRole("button", { name: "New thread" }));
-    await waitFor(() => expect(errors).toEqual(["project is not linked"]));
-    expect(slot.sidebarActionCalls).toEqual([]);
-    expect(slot.navigateCalls).toEqual([]);
-  });
-});
-
-describe("project new thread button", () => {
+describe("new thread button", () => {
   function render(options: {
     splitResult?: "opened" | "focused" | "replaced" | "at-cap" | "unavailable";
     compose?: () => unknown;
+    target?: { kind: "task"; taskId: string };
   }) {
     const errors: string[] = [];
     const splitCalls: unknown[] = [];
     const slot = renderSlot(
-      { component: NewProjectThreadButton },
+      { component: NewThreadButton },
       {
+        target: options.target ?? { kind: "project", projectId: PROJECT_ID },
         projectId: PROJECT_ID,
         linked: true,
         compact: true,
@@ -169,6 +54,8 @@ describe("project new thread button", () => {
       {
         rpc: {
           projectThreadsCompose:
+            options.compose ?? (() => ({ bbProjectId: "proj_linked" })),
+          taskThreadsCompose:
             options.compose ?? (() => ({ bbProjectId: "proj_linked" })),
         },
         ...(options.splitResult === undefined
@@ -205,6 +92,18 @@ describe("project new thread button", () => {
     ).toEqual([["projectThreadsCompose", { projectId: PROJECT_ID }]]);
     expect(slot.sidebarActionCalls).toEqual([]);
     expect(errors).toEqual([]);
+  });
+
+  it("claims the composer for a task target", async () => {
+    const { slot, splitCalls } = render({
+      splitResult: "opened",
+      target: { kind: "task", taskId: TASK_ID },
+    });
+    fireEvent.click(slot.getByRole("button", { name: "New thread" }));
+    await waitFor(() => expect(splitCalls).toHaveLength(1));
+    expect(
+      slot.rpcCalls.map((call) => [call.method, rpcInput(call.input)]),
+    ).toEqual([["taskThreadsCompose", { taskId: TASK_ID }]]);
   });
 
   it("falls back to the new-thread screen when splits are unavailable or full", async () => {

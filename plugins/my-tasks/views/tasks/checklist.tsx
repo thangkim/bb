@@ -4,7 +4,6 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import Tag01Icon from "@hugeicons/core-free-icons/Tag01Icon";
 import type {
   Label,
-  Preset,
   Project,
   Task,
   TaskThread,
@@ -32,7 +31,7 @@ import {
   type TaskEditFn,
 } from "../list/property-menus.js";
 import { useListTaskEdits } from "../list/use-task-edits.js";
-import { AttachThreadPicker, NewThreadMenu } from "./thread-actions.js";
+import { AttachThreadPicker, NewThreadButton } from "./thread-actions.js";
 import { useMoveTaskToProject, writeDraggedTask } from "./move-task.js";
 import {
   DropLine,
@@ -165,7 +164,6 @@ interface TaskChecklistRowProps {
   meta: TaskRowMeta | undefined;
   labelsById: ReadonlyMap<string, Label>;
   projectLabels: readonly Label[];
-  presets: Preset[] | undefined;
   otherProjects: readonly Project[];
   unlinkedProjectId: string | null;
   pending: boolean;
@@ -182,7 +180,6 @@ function TaskChecklistRow({
   meta,
   labelsById,
   projectLabels,
-  presets,
   otherProjects,
   unlinkedProjectId,
   pending,
@@ -286,16 +283,18 @@ function TaskChecklistRow({
               <ThreadRow key={thread.id} thread={thread} />
             ))}
             <div className="flex items-center gap-1">
-              <NewThreadMenu
-                taskId={task.id}
-                presets={presets}
+              <NewThreadButton
+                target={{ kind: "task", taskId: task.id }}
+                projectId={task.projectId}
+                linked={unlinkedProjectId === null}
                 onError={onError}
-                unlinkedProjectId={unlinkedProjectId}
+                compact
               />
               <AttachThreadPicker
                 target={{ kind: "task", taskId: task.id }}
                 attachedThreadIds={threads.map((thread) => thread.threadId)}
                 onError={onError}
+                compact
               />
             </div>
           </div>
@@ -382,7 +381,6 @@ interface TaskChecklistProps {
   projectId: string;
   projects: readonly Project[] | undefined;
   labels: readonly Label[] | undefined;
-  presets: Preset[] | undefined;
   onError: (message: string) => void;
   className?: string;
 }
@@ -391,7 +389,6 @@ export function TaskChecklist({
   projectId,
   projects,
   labels,
-  presets,
   onError,
   className,
 }: TaskChecklistProps) {
@@ -469,7 +466,6 @@ export function TaskChecklist({
           meta={meta.data?.get(task.id)}
           labelsById={labelsById}
           projectLabels={projectLabels}
-          presets={presets}
           otherProjects={otherProjects}
           unlinkedProjectId={unlinkedProjectId}
           pending={edits.pending.has(task.id)}

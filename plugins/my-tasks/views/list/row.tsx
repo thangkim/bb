@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type {
   Label,
-  Preset,
   Project,
   ProjectThread,
   SidebarProjectSummary,
@@ -36,7 +35,6 @@ interface ProjectRowProps {
   projects: readonly Project[] | undefined;
   summary: SidebarProjectSummary | undefined;
   labels: readonly Label[] | undefined;
-  presets: Preset[] | undefined;
   threads: readonly ProjectThread[];
   threadsError: string | null;
   busyThreadIds: ReadonlySet<string>;
@@ -55,7 +53,6 @@ export function ProjectRow({
   projects,
   summary,
   labels,
-  presets,
   threads,
   threadsError,
   busyThreadIds,
@@ -242,7 +239,6 @@ export function ProjectRow({
                 projectId={project.id}
                 projects={projects}
                 labels={labels}
-                presets={presets}
                 onError={onError}
               />
             ) : null}

@@ -19,17 +19,22 @@ import {
   presetPermissionModeSchema,
   presetReasoningLevelSchema,
   presetServiceTierSchema,
-  type ThreadsChangedEvent,
 } from "../shared/contract";
 import { displayName } from "../shared/display-name";
 import { errorMessage } from "../shared/errors";
 import { truncateToWidth } from "../shared/text-measure";
 import { delegationRpcContract } from "./contract";
-import { composeClaimsFor, registerComposeAttach } from "./compose";
+import {
+  composeClaimsFor,
+  MANUAL_PRESET_NAME,
+  publishThreadsChanged,
+  registerComposeAttach,
+} from "./compose";
+
+export { publishThreadsChanged };
 
 const MAX_DELEGATED_THREAD_TITLE_WIDTH = 120;
 const SYSTEM_AUTHOR_NAME = "My Tasks";
-const MANUAL_PRESET_NAME = "Attached";
 
 const presetExecutionSchema = z
   .object({
@@ -378,11 +383,6 @@ export function createSystemComment(
   });
 }
 
-export function publishThreadsChanged(bb: BbPluginApi, taskId: string): void {
-  const payload: ThreadsChangedEvent = { taskId };
-  bb.realtime.publish("threads:changed", payload);
-}
-
 type SdkThread = Awaited<ReturnType<BbPluginApi["sdk"]["threads"]["get"]>>;
 
 function taskThreadLiveStatus(thread: SdkThread): TaskThreadLiveStatus {
@@ -569,7 +569,18 @@ export function handlers(
     projectThreadsCompose(input) {
       const project = requireProject(store.tasks, input.projectId);
       const bbProjectId = requireLinkedBbProject(project);
-      composeClaimsFor(bb).claim(bbProjectId, project.id);
+      composeClaimsFor(bb).claim(bbProjectId, {
+        kind: "project",
+        projectId: project.id,
+      });
+      return { bbProjectId };
+    },
+
+    taskThreadsCompose(input) {
+      const task = requireTask(store.tasks, input.taskId);
+      const project = requireProject(store.tasks, task.projectId);
+      const bbProjectId = requireLinkedBbProject(project);
+      composeClaimsFor(bb).claim(bbProjectId, { kind: "task", taskId: task.id });
       return { bbProjectId };
     },
 

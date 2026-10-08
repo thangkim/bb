@@ -139,12 +139,77 @@ describe("project composer threads", () => {
   it("expires claims and keeps only the latest claim per bb project", () => {
     let now = 0;
     const claims = createComposeClaims(() => now);
-    claims.claim("proj_a", "first");
-    claims.claim("proj_a", "second");
-    expect(claims.take("proj_a")).toBe("second");
+    claims.claim("proj_a", { kind: "project", projectId: "first" });
+    claims.claim("proj_a", { kind: "task", taskId: "second" });
+    expect(claims.take("proj_a")).toEqual({ kind: "task", taskId: "second" });
     expect(claims.take("proj_a")).toBeNull();
-    claims.claim("proj_b", "late");
+    claims.claim("proj_b", { kind: "project", projectId: "late" });
     now = COMPOSE_CLAIM_TTL_MS + 1;
     expect(claims.take("proj_b")).toBeNull();
+  });
+});
+
+describe("task composer threads", () => {
+  it("attaches the next composed thread to the task and renames it once bb titles it", async () => {
+    const { harness, store, project } = setup();
+    const task = store.tasks.createTask({
+      projectId: project.id,
+      title: "Fix the importer",
+    });
+    expect(
+      delegationRpcContract.taskThreadsCompose.output.parse(
+        await harness.callRpc("taskThreadsCompose", { taskId: task.id }),
+      ),
+    ).toEqual({ bbProjectId: "proj_launch" });
+
+    await harness.emitThreadEvent("thread.created", {
+      thread: makeThreadResponse({
+        id: "thr_task",
+        projectId: "proj_launch",
+        titleFallback: "look at the importer",
+      }),
+    });
+
+    expect(store.tasks.listTaskThreads(task.id)).toEqual([
+      expect.objectContaining({
+        threadId: "thr_task",
+        title: "look at the importer",
+        presetName: "Attached",
+      }),
+    ]);
+    expect(store.tasks.listProjectThreads(project.id)).toEqual([]);
+    expect(store.tasks.getProject(project.id)?.status).toBe("in_progress");
+    expect(harness.realtimeSignals).toContainEqual({
+      channel: "threads:changed",
+      payload: { taskId: task.id },
+    });
+
+    await harness.emitThreadEvent("thread.idle", {
+      thread: makeThreadResponse({
+        id: "thr_task",
+        projectId: "proj_launch",
+        title: "Importer fix",
+      }),
+      lastAssistantText: null,
+    });
+    expect(store.tasks.listTaskThreads(task.id)).toEqual([
+      expect.objectContaining({ title: "Importer fix" }),
+    ]);
+  });
+
+  it("refuses tasks in unlinked projects", async () => {
+    const { harness, store } = setup();
+    const unlinked = store.tasks.createProject({
+      name: "Loose",
+      prefix: "LSE",
+      color: "green",
+    });
+    const task = store.tasks.createTask({
+      projectId: unlinked.id,
+      title: "Orphan",
+    });
+    await expect(
+      harness.callRpc("taskThreadsCompose", { taskId: task.id }),
+    ).rejects.toThrow(/not linked to a bb project/);
   });
 });

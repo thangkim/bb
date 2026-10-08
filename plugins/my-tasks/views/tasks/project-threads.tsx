@@ -6,7 +6,7 @@ import { useTasksRpc } from "../../shell/data.js";
 import { useProjectThreads } from "../list/data.js";
 import { ThreadLink } from "./checklist.js";
 import { DropLine, positionBetween, useReorderList } from "./reorder.js";
-import { AttachThreadPicker, NewProjectThreadButton } from "./thread-actions.js";
+import { AttachThreadPicker, NewThreadButton } from "./thread-actions.js";
 import { cn } from "@/lib/utils";
 
 const BUSY_STATUSES = new Set(["starting", "active", "stopping"]);
@@ -282,7 +282,8 @@ export function ProjectThreadActions({
       data-project-thread-actions={projectId}
       className={cn("flex items-center gap-1", className)}
     >
-      <NewProjectThreadButton
+      <NewThreadButton
+        target={{ kind: "project", projectId }}
         projectId={projectId}
         linked={linked}
         onError={onError}

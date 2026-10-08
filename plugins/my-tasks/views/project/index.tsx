@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useBbNavigate } from "@get-bb/plugin-sdk/app";
 import type {
-  Preset,
   Project,
   ProjectStatus,
   Priority,
@@ -9,7 +8,6 @@ import type {
 import { errorMessage } from "../../shared/errors.js";
 import {
   useMentionItems,
-  usePresets,
   useProjects,
   useTasksQuery,
   useTasksRpc,
@@ -156,7 +154,6 @@ function ProjectDetail({
   const { toasts, push, dismiss } = useDetailToasts();
   const summaries = useProjectSummaries();
   const summary = summaries.get(project.id);
-  const presets = usePresets();
   const mentionItems = useMentionItems();
   const labels = useTasksQuery(
     async (query) =>
@@ -316,7 +313,6 @@ function ProjectDetail({
               projectId={project.id}
               projects={projects}
               labels={labels.data}
-              presets={presets.data}
               onError={push}
             />
           </section>
