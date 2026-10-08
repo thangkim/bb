@@ -756,6 +756,14 @@ export function registerHandlers(
         throw error;
       }
     },
+    reorderTask(input) {
+      const task = store.tasks.reorderTask(input.taskId, {
+        beforeId: input.beforeTaskId,
+        afterId: input.afterTaskId,
+      });
+      publishTasksChanged(bb, task.id, task.projectId);
+      return { task: apiTask(store, task) };
+    },
     moveTaskToProject(input) {
       const current = store.tasks.getTask(input.taskId);
       if (!current) throw new Error(`Task not found: ${input.taskId}`);
@@ -915,6 +923,15 @@ export function registerHandlers(
       return {
         projectThreads: store.tasks.listProjectThreads(input.projectId),
       };
+    },
+    reorderProjectThread(input) {
+      const projectThread = store.tasks.reorderProjectThread(
+        input.projectId,
+        input.threadId,
+        { beforeId: input.beforeThreadId, afterId: input.afterThreadId },
+      );
+      publishProjectsChanged(bb, input.projectId);
+      return { projectThread };
     },
     listProjectThreadsBatch(input) {
       return {

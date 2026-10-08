@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  createEvent,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { COMPACT_VIEWPORT_QUERY } from "@/components/ui/hooks/use-compact-viewport";
@@ -16,6 +22,7 @@ import {
   makeTask,
   rpcInput,
 } from "../../test-fixtures.js";
+import { positionBetween } from "../tasks/reorder.js";
 
 window.matchMedia = (query: string) => ({
   matches: query === COMPACT_VIEWPORT_QUERY,
@@ -94,6 +101,7 @@ function projectThread(projectId: string, suffix: string): ProjectThread {
     projectId,
     threadId: `thr_${suffix}`,
     title: `Project worker ${suffix}`,
+    position: 0,
     attachedAt: "2026-07-15T00:00:00.000Z",
   };
 }
@@ -256,6 +264,36 @@ function renderList(fixture: Fixture = {}) {
             task: { ...current, projectId: input.projectId },
           };
         },
+        reorderTask: (raw: unknown) => {
+          const input = rpcInput(raw);
+          const index = tasks.findIndex((entry) => entry.id === input.taskId);
+          const updated = {
+            ...tasks[index]!,
+            position: positionBetween(
+              tasks.find((entry) => entry.id === input.beforeTaskId),
+              tasks.find((entry) => entry.id === input.afterTaskId),
+            ),
+          };
+          tasks[index] = updated;
+          return { task: updated };
+        },
+        reorderProjectThread: (raw: unknown) => {
+          const input = rpcInput(raw);
+          const threads = fixture.threadsByProject?.[input.projectId as string];
+          if (!threads) throw new Error("unknown project");
+          const index = threads.findIndex(
+            (entry) => entry.threadId === input.threadId,
+          );
+          const updated = {
+            ...threads[index]!,
+            position: positionBetween(
+              threads.find((entry) => entry.threadId === input.beforeThreadId),
+              threads.find((entry) => entry.threadId === input.afterThreadId),
+            ),
+          };
+          threads[index] = updated;
+          return { projectThread: updated };
+        },
         updateTask: (raw: unknown) => {
           const input = rpcInput(raw);
           const index = tasks.findIndex((entry) => entry.id === input.taskId);
@@ -292,6 +330,21 @@ function fakeDataTransfer() {
     effectAllowed: "",
     dropEffect: "",
   };
+}
+
+function dropOnUpperHalf(
+  target: HTMLElement,
+  dataTransfer: ReturnType<typeof fakeDataTransfer>,
+) {
+  target.getBoundingClientRect = () => new DOMRect(0, 100, 300, 20);
+  const atUpperHalf = (event: Event) => {
+    Object.defineProperty(event, "clientY", { value: 104 });
+    return event;
+  };
+  fireEvent(target, atUpperHalf(createEvent.dragOver(target, { dataTransfer })));
+  expect(target.querySelector('[data-drop-line="before"]')).not.toBeNull();
+  fireEvent(target, atUpperHalf(createEvent.drop(target, { dataTransfer })));
+  fireEvent.dragEnd(target, { dataTransfer });
 }
 
 function sectionOrder(slot: ReturnType<typeof renderList>) {
@@ -911,6 +964,90 @@ describe("projects list", () => {
     expect(slot.rpcCalls.some((call) => call.method === "moveProject")).toBe(
       false,
     );
+  });
+
+  it("reorders tasks within a project by dragging", async () => {
+    const slot = renderList({ tasks: [task(1), task(3), task(4)] });
+    const source = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(source).getByRole("button", { name: "Show tasks" }));
+    await within(source).findByText("Task 4");
+    const taskOrder = () =>
+      Array.from(source.querySelectorAll("[data-task-key]")).map((row) =>
+        row.getAttribute("data-task-key"),
+      );
+    expect(taskOrder()).toEqual(["LCH-1", "LCH-3", "LCH-4"]);
+
+    const dataTransfer = fakeDataTransfer();
+    fireEvent.dragStart(
+      source.querySelector('[data-task-key="LCH-4"]') as HTMLElement,
+      { dataTransfer },
+    );
+    const target = source.querySelector(
+      '[data-task-key="LCH-1"]',
+    ) as HTMLElement;
+    fireEvent.dragOver(source, { dataTransfer });
+    expect(source.getAttribute("data-task-drop-target")).toBeNull();
+    dropOnUpperHalf(target, dataTransfer);
+
+    await waitFor(() =>
+      expect(taskOrder()).toEqual(["LCH-4", "LCH-1", "LCH-3"]),
+    );
+    expect(
+      slot.rpcCalls
+        .filter((call) => call.method === "reorderTask")
+        .map((call) => rpcInput(call.input)),
+    ).toEqual([
+      { taskId: task(4).id, beforeTaskId: null, afterTaskId: task(1).id },
+    ]);
+    expect(
+      slot.rpcCalls.some((call) => call.method === "moveTaskToProject"),
+    ).toBe(false);
+  });
+
+  it("reorders a project's threads by dragging", async () => {
+    const slot = renderList({
+      threadsByProject: {
+        [LAUNCH.id]: [
+          { ...projectThread(LAUNCH.id, "P1"), position: 1024 },
+          { ...projectThread(LAUNCH.id, "P2"), position: 2048 },
+          { ...projectThread(LAUNCH.id, "P3"), position: 3072 },
+        ],
+      },
+    });
+    const source = await projectRow(slot, LAUNCH.id);
+    const threadOrder = () =>
+      Array.from(source.querySelectorAll("[data-project-thread-id]")).map(
+        (row) => row.getAttribute("data-project-thread-id"),
+      );
+    await waitFor(() =>
+      expect(threadOrder()).toEqual(["thr_P1", "thr_P2", "thr_P3"]),
+    );
+
+    const dataTransfer = fakeDataTransfer();
+    fireEvent.dragStart(
+      source.querySelector('[data-project-thread-id="thr_P3"]') as HTMLElement,
+      { dataTransfer },
+    );
+    dropOnUpperHalf(
+      source.querySelector('[data-project-thread-id="thr_P2"]') as HTMLElement,
+      dataTransfer,
+    );
+
+    await waitFor(() =>
+      expect(threadOrder()).toEqual(["thr_P1", "thr_P3", "thr_P2"]),
+    );
+    expect(
+      slot.rpcCalls
+        .filter((call) => call.method === "reorderProjectThread")
+        .map((call) => rpcInput(call.input)),
+    ).toEqual([
+      {
+        projectId: LAUNCH.id,
+        threadId: "thr_P3",
+        beforeThreadId: "thr_P1",
+        afterThreadId: "thr_P2",
+      },
+    ]);
   });
 
   it("ignores a task dropped back on its own project", async () => {

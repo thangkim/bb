@@ -87,7 +87,7 @@ describe("bb my-tasks CLI", () => {
     await plugin(bb);
 
     expect(stdout(await harness.runCli(["--help"]))).toContain(
-      "bb my-tasks seed-demo          Create sample folders, projects, labels, tasks, and comments",
+      "bb my-tasks seed-demo               Create sample folders, projects, labels, tasks, and comments",
     );
     await expect(harness.runCli(["seed-demo"])).resolves.toMatchObject({
       exitCode: 1,
@@ -385,6 +385,64 @@ describe("bb my-tasks CLI", () => {
     await expect(
       harness.runCli(["move", "TWO-1"]),
     ).resolves.toMatchObject({ exitCode: 1 });
+
+    await harness.dispose();
+  });
+
+  it("reorders tasks and project threads", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "tasks",
+      sdk: {
+        threads: {
+          get: async ({ threadId }: { threadId: string }) => ({
+            id: threadId,
+            title: `Worker ${threadId}`,
+            titleFallback: null,
+            status: "idle",
+          }),
+        },
+      },
+    });
+    await plugin(bb);
+    stdout(await harness.runCli(["project", "create", "--name", "Order", "--prefix", "ORD"]));
+    for (const title of ["First", "Second", "Third"]) {
+      stdout(await harness.runCli(["create", "--project", "ORD", "--title", title]));
+    }
+
+    expect(
+      stdout(await harness.runCli(["reorder", "ORD-3", "--before", "ORD-1"])),
+    ).toBe("Reordered ORD-3  Third");
+    stdout(await harness.runCli(["reorder", "ORD-1", "--after", "ORD-2"]));
+    const listed = JSON.parse(
+      stdout(await harness.runCli(["list", "--project", "ORD", "--json"])),
+    );
+    expect(listed.tasks.map((task: { key: string }) => task.key)).toEqual([
+      "ORD-3",
+      "ORD-2",
+      "ORD-1",
+    ]);
+
+    for (const threadId of ["thr_a", "thr_b"]) {
+      stdout(await harness.runCli(["project", "attach", "ORD", "--thread", threadId]));
+    }
+    expect(
+      stdout(
+        await harness.runCli([
+          "project",
+          "reorder-thread",
+          "ORD",
+          "--thread",
+          "thr_b",
+          "--after",
+          "thr_a",
+        ]),
+      ),
+    ).toBe("Reordered thr_b in ORD");
+    expect(
+      JSON.parse(
+        stdout(await harness.runCli(["project", "threads", "ORD", "--json"])),
+      ).projectThreads.map((thread: { threadId: string }) => thread.threadId),
+    ).toEqual(["thr_a", "thr_b"]);
 
     await harness.dispose();
   });
@@ -1184,7 +1242,7 @@ describe("bb my-tasks CLI", () => {
     );
 
     expect(stdout(await harness.runCli(["--help"]))).toContain(
-      "bb my-tasks detach             Detach an agent thread from a task",
+      "bb my-tasks detach                  Detach an agent thread from a task",
     );
 
     stdout(
@@ -1267,7 +1325,7 @@ describe("bb my-tasks CLI", () => {
     );
 
     expect(stdout(await harness.runCli(["--help"]))).toContain(
-      "bb my-tasks project attach     Attach an existing agent thread to a project",
+      "bb my-tasks project attach          Attach an existing agent thread to a project",
     );
 
     stdout(
@@ -2316,7 +2374,7 @@ describe("bb my-tasks CLI", () => {
     );
 
     expect(stdout(await harness.runCli(["--help"]))).toContain(
-      "bb my-tasks project dispatch   Start a new agent thread for a whole project",
+      "bb my-tasks project dispatch        Start a new agent thread for a whole project",
     );
     expect(
       stdout(
@@ -2352,7 +2410,7 @@ describe("bb my-tasks CLI", () => {
 
     const top = await harness.runCli(["--help"]);
     expect(top).toMatchObject({ exitCode: 0, stderr: "" });
-    expect(top.stdout).toContain("bb my-tasks list               List and filter");
+    expect(top.stdout).toContain("bb my-tasks list                    List and filter");
 
     const statusHelp = stdout(await harness.runCli(["status", "--help"]));
     expect(statusHelp).toContain("Plugin health only");

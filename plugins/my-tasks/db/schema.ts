@@ -351,6 +351,23 @@ export const TASKS_SCHEMA_MIGRATIONS = [
     CREATE INDEX idx_attachments_task ON attachments(task_id);
     CREATE INDEX idx_attachments_comment ON attachments(comment_id);
   `,
+  `
+    ALTER TABLE project_threads ADD COLUMN position REAL NOT NULL DEFAULT 0;
+
+    UPDATE project_threads SET position = (
+      SELECT ranked.rank * 1024 FROM (
+        SELECT id, ROW_NUMBER() OVER (
+          PARTITION BY project_id
+          ORDER BY attached_at DESC, id DESC
+        ) AS rank
+        FROM project_threads
+      ) ranked
+      WHERE ranked.id = project_threads.id
+    );
+
+    CREATE INDEX idx_project_threads_project_position
+      ON project_threads(project_id, position, id);
+  `,
 ] as const;
 
 export function initializeTasksSchema(db: PluginDatabase): void {

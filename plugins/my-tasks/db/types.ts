@@ -113,6 +113,7 @@ export interface ProjectThread {
   projectId: string;
   threadId: string;
   title: string;
+  position: number;
   attachedAt: string;
 }
 
@@ -178,6 +179,11 @@ export interface MoveProjectInput {
   status: ProjectStatus;
   beforeProjectId: string | null;
   afterProjectId: string | null;
+}
+
+export interface ReorderInput {
+  beforeId: string | null;
+  afterId: string | null;
 }
 
 export interface CreateTaskInput {

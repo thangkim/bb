@@ -86,6 +86,7 @@ machine; pass `--machine <id-or-name>` to target another enrolled machine.
 | `bb my-tasks project create\|list\|show\|update`  | Manage projects: status, priority, due date, description, folder, color, prefix, and bb-project link. `list`/`show` report progress.      |
 | `bb my-tasks project dispatch <prefix> --preset <name>` | Start a new agent thread for the whole project and attach it at the project level, not to a task.                              |
 | `bb my-tasks project attach\|detach\|threads <prefix>` | Attach the current thread (or `--thread <id>`) to a project, detach it, or list the threads attached at the project level.            |
+| `bb my-tasks project reorder-thread <prefix>` | Move an attached thread (`--thread <id>`, default the current thread) `--after`/`--before` another attached thread in the project's thread list. |
 | `bb my-tasks project move <prefix>`               | Move a project to a status column, optionally `--after`/`--before` another project in that column.                                         |
 | `bb my-tasks project complete <prefix>`           | Mark a project done and every open task in it done in one step, as the list row checkbox does.                                             |
 | `bb my-tasks project brief <prefix>`              | Show the project brief, or update it with `--problem`, `--context`, `--priority-note`, `--solution`, `--clear`, `--add-decision`, `--remove-decision`. |
@@ -95,6 +96,7 @@ machine; pass `--machine <id-or-name>` to target another enrolled machine.
 | `bb my-tasks show <key-or-id>`                    | Show the complete task record, including comments, attachments, and attached threads.                                                      |
 | `bb my-tasks update <key-or-id>`                  | Mark done (`--status done`) or reopen (`--status todo`), or update priority, title, description, due date, or labels.                     |
 | `bb my-tasks move <key-or-id> --project <prefix>` | Move a task into another project. It gets the next key there and keeps comments, attachments, and threads; labels from the old project are removed. |
+| `bb my-tasks reorder <key-or-id>`                 | Move a task `--after`/`--before` another task in the same project; with neither, it moves to the end.                                      |
 | `bb my-tasks comment <key-or-id>`                 | Add a Markdown comment from inline text or a file; optionally notify the latest responding task agent.                                     |
 | `bb my-tasks attachment add\|get\|list\|remove`   | Add, fetch, list, or remove task, comment, or project (`--project <prefix>`) attachments. Referenced attachments require `remove --remove-references`. |
 | `bb my-tasks preset list\|create\|update\|delete` | Manage reusable agent execution presets.                                                                                                   |
@@ -147,7 +149,9 @@ highlight follows the focused thread pane and stays on the last focused thread
 while you work in the My Tasks pane.
 
 Drag a task onto another project in the list (or use **Move to project** in its
-right-click menu) to move it there.
+right-click menu) to move it there. Inside an expanded project row, drag a task
+above or below another task, or a project-level thread above or below another
+thread, to change their order. New project-level threads appear at the top.
 
 In the app, every task row has **New thread** (pick a preset) and **Attach
 thread** (search your bb threads). Every project row in the list, collapsed

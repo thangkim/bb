@@ -794,6 +794,7 @@ export function registerTasksCli(
             ["attach", "Attach an existing agent thread to a project"],
             ["detach", "Detach an agent thread from a project"],
             ["threads", "List agent threads attached to a project"],
+            ["reorder-thread", "Change an attached thread's place in a project's thread list"],
           ],
         ),
         "project create": cliCommand({
@@ -1463,6 +1464,65 @@ export function registerTasksCli(
                     ]),
                     "No attached threads.",
                   );
+            });
+          },
+        }),
+
+        "project reorder-thread": cliCommand({
+          summary: "Change an attached thread's place in a project's thread list",
+          description:
+            "Pass --after or --before another thread attached to the same project. With neither, the thread moves to the end of the list.",
+          positionals: [
+            {
+              name: "prefix-or-id",
+              description: "Tracker project prefix such as ABC, or its ULID",
+              required: true,
+            },
+          ],
+          options: {
+            thread: {
+              type: "string",
+              placeholder: "thread-id",
+              aliases: ["thread-id"],
+              description:
+                "Thread to move; defaults to BB_THREAD_ID or the invoking thread",
+            },
+            after: {
+              type: "string",
+              placeholder: "thread-id",
+              description: "Place directly after this attached thread",
+            },
+            before: {
+              type: "string",
+              placeholder: "thread-id",
+              description: "Place directly before this attached thread",
+            },
+            json: JSON_OPTION,
+          },
+          run(input, ctx) {
+            return guard(async () => {
+              const project = await resolveProject(
+                domain,
+                input.positionals["prefix-or-id"],
+              );
+              const threadId = resolveInvokingThreadId(
+                input.options.thread,
+                ctx,
+              );
+              const { projectThread } =
+                tasksRpcContract.reorderProjectThread.output.parse(
+                  await domain.reorderProjectThread(
+                    tasksRpcContract.reorderProjectThread.input.parse({
+                      projectId: project.id,
+                      threadId,
+                      beforeThreadId: input.options.after ?? null,
+                      afterThreadId: input.options.before ?? null,
+                    }),
+                  ),
+                );
+              return input.options.json
+                ? JSON.stringify({ project, projectThread })
+                : `Reordered ${projectThread.threadId} in ${project.prefix}`;
             });
           },
         }),
@@ -2307,6 +2367,53 @@ export function registerTasksCli(
                 : moved.key === task.key
                   ? `${task.key} is already in ${project.prefix}`
                   : `Moved ${task.key} to ${moved.key}  ${moved.title}`;
+            });
+          },
+        }),
+
+        reorder: cliCommand({
+          summary: "Change a task's place in its project's task list",
+          description:
+            "Pass --after or --before another task in the same project. With neither, the task moves to the end of the list.",
+          positionals: [KEY_POSITIONAL],
+          options: {
+            after: {
+              type: "string",
+              placeholder: "key-or-id",
+              description: "Place directly after this task",
+            },
+            before: {
+              type: "string",
+              placeholder: "key-or-id",
+              description: "Place directly before this task",
+            },
+            json: JSON_OPTION,
+          },
+          run(input) {
+            return guard(async () => {
+              const task = await resolveTask(
+                domain,
+                input.positionals["key-or-id"],
+              );
+              const after = input.options.after
+                ? await resolveTask(domain, input.options.after)
+                : null;
+              const before = input.options.before
+                ? await resolveTask(domain, input.options.before)
+                : null;
+              const { task: reordered } =
+                tasksRpcContract.reorderTask.output.parse(
+                  await domain.reorderTask(
+                    tasksRpcContract.reorderTask.input.parse({
+                      taskId: task.id,
+                      beforeTaskId: after?.id ?? null,
+                      afterTaskId: before?.id ?? null,
+                    }),
+                  ),
+                );
+              return input.options.json
+                ? JSON.stringify({ task: reordered })
+                : `Reordered ${reordered.key}  ${reordered.title}`;
             });
           },
         }),

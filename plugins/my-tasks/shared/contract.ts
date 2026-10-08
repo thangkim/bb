@@ -227,6 +227,7 @@ const projectThreadSchema = z
     projectId: idSchema,
     threadId: z.string().startsWith("thr_"),
     title: z.string(),
+    position: z.number(),
     attachedAt: z.string(),
   })
   .strict();
@@ -564,6 +565,16 @@ export const tasksRpcContract = defineRpcContract({
       .strict(),
     output: taskMutationResultSchema,
   },
+  reorderTask: {
+    input: z
+      .object({
+        taskId: idSchema,
+        beforeTaskId: idSchema.nullable().default(null),
+        afterTaskId: idSchema.nullable().default(null),
+      })
+      .strict(),
+    output: z.object({ task: taskSchema }).strict(),
+  },
   deleteTask: {
     input: z.object({ taskId: idSchema }).strict(),
     output: z.object({ deleted: z.boolean() }).strict(),
@@ -667,6 +678,17 @@ export const tasksRpcContract = defineRpcContract({
   listProjectThreadsBatch: {
     input: z.object({ projectIds: z.array(idSchema).min(1).max(500) }).strict(),
     output: z.object({ projectThreads: z.array(projectThreadSchema) }).strict(),
+  },
+  reorderProjectThread: {
+    input: z
+      .object({
+        projectId: idSchema,
+        threadId: z.string().startsWith("thr_"),
+        beforeThreadId: z.string().startsWith("thr_").nullable().default(null),
+        afterThreadId: z.string().startsWith("thr_").nullable().default(null),
+      })
+      .strict(),
+    output: z.object({ projectThread: projectThreadSchema }).strict(),
   },
   listThreadLinks: {
     input: z.object({ threadId: z.string().startsWith("thr_") }).strict(),

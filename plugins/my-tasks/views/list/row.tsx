@@ -12,6 +12,7 @@ import { Icon } from "@/components/ui/icon";
 import { TaskCheckbox } from "./icons.js";
 import { cn } from "@/lib/utils";
 import { TaskChecklist } from "../tasks/checklist.js";
+import { isReorderDragIn } from "../tasks/reorder.js";
 import {
   ProjectThreadActions,
   ProjectThreadLinks,
@@ -82,7 +83,12 @@ export function ProjectRow({
         data-task-drop-target={taskDragOver || undefined}
         data-active-thread-project={activeThreadProject || undefined}
         onDragOver={(event) => {
-          if (!isTaskDrag(event.dataTransfer)) return;
+          if (
+            !isTaskDrag(event.dataTransfer) ||
+            isReorderDragIn(event.dataTransfer, "task", project.id)
+          ) {
+            return;
+          }
           event.preventDefault();
           event.stopPropagation();
           event.dataTransfer.dropEffect = "move";
@@ -223,6 +229,7 @@ export function ProjectRow({
                 threads={visibleThreads}
                 error={threadsError}
                 busyThreadIds={busyThreadIds}
+                onError={onError}
                 className={
                   expanded
                     ? "mb-1 border-b border-border-hairline pb-1.5"

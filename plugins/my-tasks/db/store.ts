@@ -35,6 +35,7 @@ import type {
   PresetEnvironmentKind,
   Project,
   ProjectThread,
+  ReorderInput,
   Task,
   TaskLabel,
   TaskRowMeta,
@@ -158,11 +159,17 @@ interface TaskThreadRow {
   updated_at: string;
 }
 
+interface PositionedRow {
+  id: string;
+  position: number;
+}
+
 interface ProjectThreadRow {
   id: string;
   project_id: string;
   thread_id: string;
   title: string;
+  position: number;
   attached_at: string;
 }
 
@@ -452,6 +459,7 @@ function projectThreadFromRow(row: ProjectThreadRow): ProjectThread {
     projectId: row.project_id,
     threadId: row.thread_id,
     title: row.title,
+    position: row.position,
     attachedAt: row.attached_at,
   };
 }
@@ -1288,6 +1296,126 @@ export function createTasksStore(db: PluginDatabase) {
     return moveTaskToProjectTransaction(id, projectId);
   }
 
+  function reorderedPosition(
+    table: "tasks" | "project_threads",
+    projectId: string,
+    id: string,
+    input: ReorderInput,
+  ): number {
+    if (input.beforeId === id || input.afterId === id) {
+      throw new Error("An item cannot be its own reorder neighbor");
+    }
+    const readAnchor = db.prepare<[string, string], PositionedRow>(
+      `SELECT id, position FROM ${table} WHERE id = ? AND project_id = ?`,
+    );
+    const readNext = db.prepare<
+      [string, string, number, number, string],
+      PositionedRow
+    >(
+      `
+      SELECT id, position FROM ${table}
+      WHERE project_id = ? AND id <> ?
+        AND (position > ? OR (position = ? AND id > ?))
+      ORDER BY position, id
+      LIMIT 1
+    `,
+    );
+    const readPrevious = db.prepare<
+      [string, string, number, number, string],
+      PositionedRow
+    >(
+      `
+      SELECT id, position FROM ${table}
+      WHERE project_id = ? AND id <> ?
+        AND (position < ? OR (position = ? AND id < ?))
+      ORDER BY position DESC, id DESC
+      LIMIT 1
+    `,
+    );
+    const anchor = (anchorId: string | null): PositionedRow | undefined => {
+      if (anchorId === null) return undefined;
+      const row = readAnchor.get(anchorId, projectId);
+      if (!row) {
+        throw new Error(`Reorder neighbor is not in this project: ${anchorId}`);
+      }
+      return row;
+    };
+    const neighbors = (): [
+      PositionedRow | undefined,
+      PositionedRow | undefined,
+    ] => {
+      const before = anchor(input.beforeId);
+      const after = anchor(input.afterId);
+      if (before && !after) {
+        return [
+          before,
+          readNext.get(projectId, id, before.position, before.position, before.id),
+        ];
+      }
+      if (after && !before) {
+        return [
+          readPrevious.get(projectId, id, after.position, after.position, after.id),
+          after,
+        ];
+      }
+      return [before, after];
+    };
+
+    let [before, after] = neighbors();
+    if (before && after) {
+      if (
+        before.position > after.position ||
+        (before.position === after.position && before.id >= after.id)
+      ) {
+        throw new Error(
+          "The before neighbor must sort before the after neighbor",
+        );
+      }
+      if (after.position - before.position <= MIN_POSITION_GAP) {
+        const rows = db
+          .prepare<[string], { id: string }>(
+            `SELECT id FROM ${table} WHERE project_id = ? ORDER BY position, id`,
+          )
+          .all(projectId);
+        const update = db.prepare<[number, string]>(
+          `UPDATE ${table} SET position = ? WHERE id = ?`,
+        );
+        rows.forEach((row, index) =>
+          update.run((index + 1) * POSITION_STEP, row.id),
+        );
+        [before, after] = neighbors();
+      }
+    }
+    if (before && after) return (before.position + after.position) / 2;
+    if (before) return before.position + POSITION_STEP;
+    if (after) return after.position - POSITION_STEP;
+    return (
+      db
+        .prepare<[string, string], { position: number }>(
+          `
+          SELECT COALESCE(MAX(position), 0) + ${POSITION_STEP} AS position
+          FROM ${table} WHERE project_id = ? AND id <> ?
+        `,
+        )
+        .get(projectId, id)?.position ?? POSITION_STEP
+    );
+  }
+
+  const reorderTaskTransaction = db.transaction(
+    (id: string, input: ReorderInput): Task => {
+      const task = requireTask(id);
+      const position = reorderedPosition("tasks", task.projectId, id, input);
+      db.prepare<[number, string]>(
+        "UPDATE tasks SET position = ? WHERE id = ?",
+      ).run(position, id);
+      return requireTask(id);
+    },
+  );
+
+  function reorderTask(id: string, input: ReorderInput): Task {
+    return reorderTaskTransaction(id, input);
+  }
+
   function deleteTask(id: string): boolean {
     return (
       db.prepare<[string]>("DELETE FROM tasks WHERE id = ?").run(id).changes > 0
@@ -1812,11 +1940,18 @@ export function createTasksStore(db: PluginDatabase) {
     requireProject(input.projectId);
     const id = createOrValidateUlid(input.id);
     const timestamp = nowIso();
-    db.prepare<[string, string, string, string, string]>(
+    db.prepare<[string, string, string, string, string, string]>(
       `
       INSERT INTO project_threads (
-        id, project_id, thread_id, title, attached_at
-      ) VALUES (?, ?, ?, ?, ?)
+        id, project_id, thread_id, title, position, attached_at
+      ) VALUES (
+        ?, ?, ?, ?,
+        (
+          SELECT COALESCE(MIN(position), ${POSITION_STEP * 2}) - ${POSITION_STEP}
+          FROM project_threads WHERE project_id = ?
+        ),
+        ?
+      )
       ON CONFLICT (project_id, thread_id) DO UPDATE SET
         title = excluded.title
     `,
@@ -1825,6 +1960,7 @@ export function createTasksStore(db: PluginDatabase) {
       input.projectId,
       validateThreadId(input.threadId),
       requireNonEmpty(input.title, "Project thread title"),
+      input.projectId,
       timestamp,
     );
     const thread = getProjectThreadByThreadId(input.projectId, input.threadId);
@@ -1838,7 +1974,7 @@ export function createTasksStore(db: PluginDatabase) {
         `
         SELECT * FROM project_threads
         WHERE project_id = ?
-        ORDER BY attached_at DESC, id DESC
+        ORDER BY position, id
       `,
       )
       .all(projectId)
@@ -1858,13 +1994,52 @@ export function createTasksStore(db: PluginDatabase) {
           `
           SELECT * FROM project_threads
           WHERE project_id IN (${placeholders})
-          ORDER BY project_id, attached_at DESC, id DESC
+          ORDER BY project_id, position, id
         `,
         )
         .all(...ids);
       threads.push(...rows.map(projectThreadFromRow));
     }
     return threads;
+  }
+
+  const reorderProjectThreadTransaction = db.transaction(
+    (projectId: string, threadId: string, input: ReorderInput) => {
+      const thread = getProjectThreadByThreadId(projectId, threadId);
+      if (!thread) {
+        throw new Error(
+          `Thread ${threadId} is not attached to project ${projectId}`,
+        );
+      }
+      const neighborId = (neighborThreadId: string | null): string | null => {
+        if (neighborThreadId === null) return null;
+        const neighbor = getProjectThreadByThreadId(projectId, neighborThreadId);
+        if (!neighbor) {
+          throw new Error(
+            `Thread ${neighborThreadId} is not attached to project ${projectId}`,
+          );
+        }
+        return neighbor.id;
+      };
+      const position = reorderedPosition("project_threads", projectId, thread.id, {
+        beforeId: neighborId(input.beforeId),
+        afterId: neighborId(input.afterId),
+      });
+      db.prepare<[number, string]>(
+        "UPDATE project_threads SET position = ? WHERE id = ?",
+      ).run(position, thread.id);
+      const reordered = getProjectThreadByThreadId(projectId, threadId);
+      if (!reordered) throw new Error("Project thread reorder failed");
+      return reordered;
+    },
+  );
+
+  function reorderProjectThread(
+    projectId: string,
+    threadId: string,
+    input: ReorderInput,
+  ): ProjectThread {
+    return reorderProjectThreadTransaction(projectId, threadId, input);
   }
 
   function deleteProjectThread(id: string): boolean {
@@ -2025,6 +2200,7 @@ export function createTasksStore(db: PluginDatabase) {
     listTasks,
     updateTask,
     moveTaskToProject,
+    reorderTask,
     deleteTask,
     createLabel,
     getLabel,
@@ -2060,6 +2236,7 @@ export function createTasksStore(db: PluginDatabase) {
     getProjectThreadByThreadId,
     listProjectThreads,
     listProjectThreadsForProjects,
+    reorderProjectThread,
     listProjectsByThreadId,
     deleteProjectThread,
     createPreset,

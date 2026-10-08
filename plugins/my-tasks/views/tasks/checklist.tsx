@@ -11,6 +11,7 @@ import type {
 } from "../../shared/contract.js";
 import { errorMessage } from "../../shared/errors.js";
 import { readShowCompletedTasks } from "../../shared/settings.js";
+import { sortItems } from "../../shared/sort.js";
 import { useTasksRpc } from "../../shell/data.js";
 import { useTasksNavigation } from "../../shell/routes.js";
 import { useOpenThreadInSplit } from "../../components/use-open-thread-in-split.js";
@@ -33,6 +34,12 @@ import {
 import { useListTaskEdits } from "../list/use-task-edits.js";
 import { AttachThreadPicker, NewThreadMenu } from "./thread-actions.js";
 import { useMoveTaskToProject, writeDraggedTask } from "./move-task.js";
+import {
+  DropLine,
+  useReorderList,
+  type DropPlacement,
+  type ReorderItemProps,
+} from "./reorder.js";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -162,6 +169,8 @@ interface TaskChecklistRowProps {
   otherProjects: readonly Project[];
   unlinkedProjectId: string | null;
   pending: boolean;
+  dragProps: ReorderItemProps;
+  dropPlacement: DropPlacement | null;
   onEdit: TaskEditFn;
   onDelete: () => void;
   onMoveToProject: (projectId: string) => void;
@@ -177,6 +186,8 @@ function TaskChecklistRow({
   otherProjects,
   unlinkedProjectId,
   pending,
+  dragProps,
+  dropPlacement,
   onEdit,
   onDelete,
   onMoveToProject,
@@ -200,9 +211,10 @@ function TaskChecklistRow({
       <div
         data-task-key={task.key}
         aria-busy={pending || undefined}
-        draggable
+        {...dragProps}
         onDragStart={(event) => {
           event.stopPropagation();
+          dragProps.onDragStart(event);
           writeDraggedTask(event.dataTransfer, {
             taskId: task.id,
             projectId: task.projectId,
@@ -210,7 +222,7 @@ function TaskChecklistRow({
         }}
         data-active-thread-task={activeThreadTask || undefined}
         className={cn(
-          "-mx-1.5 rounded-md px-1.5 py-1",
+          "relative -mx-1.5 rounded-md px-1.5 py-1",
           activeThreadTask && "bg-surface-selected",
           pending && "opacity-70",
         )}
@@ -288,6 +300,7 @@ function TaskChecklistRow({
             </div>
           </div>
         ) : null}
+        <DropLine placement={dropPlacement} />
       </div>
     </TaskContextMenu>
   );
@@ -389,7 +402,7 @@ export function TaskChecklist({
   const [completedHere, setCompletedHere] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
-  const { edit } = edits;
+  const { edit, reorder } = edits;
   const editTask = useCallback<TaskEditFn>(
     (task, patch) => {
       if (patch.status === "done") {
@@ -401,7 +414,7 @@ export function TaskChecklist({
   );
   const displayTasks = useMemo(() => {
     if (tasks.data === undefined) return undefined;
-    const edited = editedTasks(tasks.data, edits.entries);
+    const edited = sortItems(editedTasks(tasks.data, edits.entries), "manual");
     if (showCompleted) return edited;
     return edited.filter(
       (task) => task.status !== "done" || completedHere.has(task.id),
@@ -425,6 +438,12 @@ export function TaskChecklist({
       ? projectId
       : null;
   const moveTask = useMoveTaskToProject(onError);
+  const reorderList = useReorderList<Task>({
+    kind: "task",
+    scopeId: projectId,
+    items: displayTasks ?? [],
+    onReorder: (task, { before, after }) => reorder(task, before, after),
+  });
 
   if (displayTasks === undefined) {
     return (
@@ -442,7 +461,7 @@ export function TaskChecklist({
   }
 
   return (
-    <div className={cn("flex flex-col", className)}>
+    <div className={cn("flex flex-col", className)} {...reorderList.listProps}>
       {displayTasks.map((task) => (
         <TaskChecklistRow
           key={task.id}
@@ -454,6 +473,8 @@ export function TaskChecklist({
           otherProjects={otherProjects}
           unlinkedProjectId={unlinkedProjectId}
           pending={edits.pending.has(task.id)}
+          dragProps={reorderList.itemProps(task)}
+          dropPlacement={reorderList.dropPlacement(task.id)}
           onEdit={editTask}
           onDelete={() => edits.remove(task)}
           onMoveToProject={(targetId) => moveTask(task.id, targetId)}

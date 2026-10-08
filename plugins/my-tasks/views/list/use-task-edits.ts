@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Task } from "../../shared/contract.js";
 import { errorMessage } from "../../shared/errors.js";
 import { useTasksRpc } from "../../shell/data.js";
+import { positionBetween } from "../tasks/reorder.js";
 import {
   beginEdit,
   pendingIds,
@@ -16,6 +17,11 @@ interface ListTaskEditController {
   entries: TaskEntries;
   pending: ReadonlySet<string>;
   edit: (task: Task, patch: TaskEdit) => void;
+  reorder: (
+    task: Task,
+    before: Task | undefined,
+    after: Task | undefined,
+  ) => void;
   remove: (task: Task) => void;
 }
 
@@ -59,6 +65,33 @@ export function useListTaskEdits(
     [rpc],
   );
 
+  const reorder = useCallback(
+    (task: Task, before: Task | undefined, after: Task | undefined) => {
+      const gen = (genRef.current += 1);
+      const patch: TaskEdit = { position: positionBetween(before, after) };
+      setEntries((prev) => beginEdit(prev, task.id, patch, gen));
+
+      void rpc
+        .call("reorderTask", {
+          taskId: task.id,
+          beforeTaskId: before?.id ?? null,
+          afterTaskId: after?.id ?? null,
+        })
+        .then(
+          (result) => {
+            setEntries((prev) =>
+              settleSuccess(prev, task.id, patch, gen, result.task),
+            );
+          },
+          (error: unknown) => {
+            setEntries((prev) => settleFailure(prev, task.id, patch, gen));
+            onErrorRef.current(errorMessage(error));
+          },
+        );
+    },
+    [rpc],
+  );
+
   const remove = useCallback(
     (task: Task) => {
       void rpc.call("deleteTask", { taskId: task.id }).then(
@@ -77,5 +110,5 @@ export function useListTaskEdits(
 
   const pending = useMemo(() => pendingIds(entries), [entries]);
 
-  return { entries, pending, edit, remove };
+  return { entries, pending, edit, reorder, remove };
 }

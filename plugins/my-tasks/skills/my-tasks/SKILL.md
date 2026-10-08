@@ -175,6 +175,9 @@ each renders its own card.
   in the linked bb project within 10 minutes is attached to the project.
 - `bb my-tasks move ABC-12 --project XYZ` moves a task to another project and
   gives it a new key there (for example `XYZ-4`); use the new key afterwards.
+- `bb my-tasks reorder ABC-12 --after ABC-3` (or `--before`) changes a task's
+  place in its project. `bb my-tasks project reorder-thread ABC --thread <id>
+  --after <thread-id>` (or `--before`) does the same for project-level threads.
 - Write one comment per meaningful milestone. Combine related facts into a
   useful update; never spam progress pings, command-by-command narration, or
   repeated status messages.

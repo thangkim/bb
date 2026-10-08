@@ -112,7 +112,10 @@ export function settleSuccess(
   const prev = entries.get(taskId);
   if (prev === undefined) return entries;
   const { edit, gens } = makeEntry(prev);
-  if (patch.status !== undefined && gens.status === gen) {
+  if (
+    (patch.status !== undefined && gens.status === gen) ||
+    (patch.position !== undefined && gens.position === gen)
+  ) {
     edit.position = serverTask.position;
     gens.position = gen;
   }

@@ -1082,6 +1082,150 @@ describe("tasks storage", () => {
     }
   });
 
+  it("reorders tasks within a project, inferring a missing neighbor", async () => {
+    const { db, harness, store } = setup();
+    try {
+      const project = createProject(store, "ORD");
+      const other = createProject(store, "OTH");
+      const [first, second, third] = ["First", "Second", "Third"].map(
+        (title) => store.createTask({ projectId: project.id, title }),
+      );
+      const foreign = store.createTask({ projectId: other.id, title: "Away" });
+      const order = () =>
+        store
+          .listTasks({ projectId: project.id })
+          .map((task) => task.title);
+
+      store.reorderTask(third!.id, { beforeId: first!.id, afterId: null });
+      expect(order()).toEqual(["First", "Third", "Second"]);
+
+      store.reorderTask(second!.id, { beforeId: null, afterId: first!.id });
+      expect(order()).toEqual(["Second", "First", "Third"]);
+
+      store.reorderTask(second!.id, { beforeId: null, afterId: null });
+      expect(order()).toEqual(["First", "Third", "Second"]);
+
+      expect(() =>
+        store.reorderTask(first!.id, { beforeId: foreign.id, afterId: null }),
+      ).toThrow(/not in this project/);
+      expect(() =>
+        store.reorderTask(first!.id, {
+          beforeId: second!.id,
+          afterId: third!.id,
+        }),
+      ).toThrow(/must sort before/);
+
+      db.prepare("UPDATE tasks SET position = ? WHERE id = ?").run(
+        1,
+        first!.id,
+      );
+      db.prepare("UPDATE tasks SET position = ? WHERE id = ?").run(
+        1.000_000_1,
+        third!.id,
+      );
+      const squeezed = store.reorderTask(second!.id, {
+        beforeId: first!.id,
+        afterId: third!.id,
+      });
+      expect(order()).toEqual(["First", "Second", "Third"]);
+      expect(squeezed.position).toBe(1536);
+    } finally {
+      await harness.dispose();
+    }
+  });
+
+  it("lists new project threads first and keeps a manual thread order", async () => {
+    const { harness, store } = setup();
+    try {
+      const project = createProject(store, "THR");
+      const other = createProject(store, "OUT");
+      for (const threadId of ["thr_a", "thr_b", "thr_c"]) {
+        store.upsertProjectThread({
+          projectId: project.id,
+          threadId,
+          title: threadId,
+        });
+      }
+      store.upsertProjectThread({
+        projectId: other.id,
+        threadId: "thr_out",
+        title: "Elsewhere",
+      });
+      const order = () =>
+        store
+          .listProjectThreads(project.id)
+          .map((thread) => thread.threadId);
+      expect(order()).toEqual(["thr_c", "thr_b", "thr_a"]);
+
+      store.reorderProjectThread(project.id, "thr_c", {
+        beforeId: "thr_a",
+        afterId: null,
+      });
+      expect(order()).toEqual(["thr_b", "thr_a", "thr_c"]);
+
+      store.upsertProjectThread({
+        projectId: project.id,
+        threadId: "thr_c",
+        title: "Renamed",
+      });
+      expect(order()).toEqual(["thr_b", "thr_a", "thr_c"]);
+      expect(
+        store
+          .listProjectThreadsForProjects([project.id])
+          .map((thread) => thread.threadId),
+      ).toEqual(["thr_b", "thr_a", "thr_c"]);
+
+      expect(() =>
+        store.reorderProjectThread(project.id, "thr_a", {
+          beforeId: "thr_out",
+          afterId: null,
+        }),
+      ).toThrow(/not attached/);
+    } finally {
+      await harness.dispose();
+    }
+  });
+
+  it("backfills project thread order newest first", async () => {
+    const { db, harness } = setup();
+    try {
+      const store = createTasksStore(db);
+      const project = createProject(store, "OLD");
+      db.exec(`
+        DELETE FROM schema_version WHERE version = ${TASKS_SCHEMA_MIGRATIONS.length};
+        DROP INDEX idx_project_threads_project_position;
+        ALTER TABLE project_threads DROP COLUMN position;
+      `);
+      const insert = db.prepare(
+        "INSERT INTO project_threads (id, project_id, thread_id, title, attached_at) VALUES (?, ?, ?, ?, ?)",
+      );
+      insert.run(
+        "01J00000000000000000000010",
+        project.id,
+        "thr_old",
+        "Old",
+        "2026-07-01T00:00:00.000Z",
+      );
+      insert.run(
+        "01J00000000000000000000011",
+        project.id,
+        "thr_new",
+        "New",
+        "2026-07-02T00:00:00.000Z",
+      );
+
+      const migrated = createTasksStore(db).listProjectThreads(project.id);
+      expect(
+        migrated.map((thread) => [thread.threadId, thread.position]),
+      ).toEqual([
+        ["thr_new", 1024],
+        ["thr_old", 2048],
+      ]);
+    } finally {
+      await harness.dispose();
+    }
+  });
+
   it("rejects a project thread whose thread id is not thr_-prefixed", async () => {
     const { harness, store } = setup();
     try {

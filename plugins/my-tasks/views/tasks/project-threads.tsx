@@ -1,8 +1,11 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { experimental_useSidebarThreads } from "@get-bb/plugin-sdk/app";
 import type { ProjectThread } from "../../shared/contract.js";
+import { errorMessage } from "../../shared/errors.js";
+import { useTasksRpc } from "../../shell/data.js";
 import { useProjectThreads } from "../list/data.js";
 import { ThreadLink } from "./checklist.js";
+import { DropLine, positionBetween, useReorderList } from "./reorder.js";
 import { AttachThreadPicker, NewProjectThreadButton } from "./thread-actions.js";
 import { cn } from "@/lib/utils";
 
@@ -73,11 +76,119 @@ export function useSideChatsByThread(): ReadonlyMap<
   }, [threads]);
 }
 
+interface PositionOverride {
+  position: number;
+  gen: number;
+}
+
+type PositionOverrides = ReadonlyMap<string, PositionOverride>;
+
+export function pruneSettledOverrides(
+  overrides: PositionOverrides,
+  threads: readonly ProjectThread[],
+): PositionOverrides {
+  if (overrides.size === 0) return overrides;
+  const positions = new Map(
+    threads.map((thread) => [thread.id, thread.position]),
+  );
+  const next = new Map(
+    [...overrides].filter(([id, override]) => {
+      const position = positions.get(id);
+      return position !== undefined && position !== override.position;
+    }),
+  );
+  return next.size === overrides.size ? overrides : next;
+}
+
+export function orderedProjectThreads(
+  threads: readonly ProjectThread[],
+  overrides: PositionOverrides,
+): readonly ProjectThread[] {
+  if (overrides.size === 0) return threads;
+  return threads
+    .map((thread) => {
+      const override = overrides.get(thread.id);
+      return override ? { ...thread, position: override.position } : thread;
+    })
+    .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
+}
+
+function useReorderedProjectThreads(
+  projectId: string,
+  threads: readonly ProjectThread[],
+  onError: (message: string) => void,
+) {
+  const rpc = useTasksRpc();
+  const [overrides, setOverrides] = useState<PositionOverrides>(
+    () => new Map(),
+  );
+  const genRef = useRef(0);
+  const threadsRef = useRef(threads);
+  threadsRef.current = threads;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+
+  useEffect(() => {
+    setOverrides((prev) => pruneSettledOverrides(prev, threads));
+  }, [threads]);
+
+  const settle = useCallback(
+    (id: string, gen: number, position: number | null) => {
+      setOverrides((prev) => {
+        if (prev.get(id)?.gen !== gen) return prev;
+        const next = new Map(prev);
+        if (position === null) next.delete(id);
+        else next.set(id, { position, gen });
+        return pruneSettledOverrides(next, threadsRef.current);
+      });
+    },
+    [],
+  );
+
+  const reorder = useCallback(
+    (
+      thread: ProjectThread,
+      before: ProjectThread | undefined,
+      after: ProjectThread | undefined,
+    ) => {
+      const gen = (genRef.current += 1);
+      setOverrides((prev) =>
+        new Map(prev).set(thread.id, {
+          position: positionBetween(before, after),
+          gen,
+        }),
+      );
+      void rpc
+        .call("reorderProjectThread", {
+          projectId,
+          threadId: thread.threadId,
+          beforeThreadId: before?.threadId ?? null,
+          afterThreadId: after?.threadId ?? null,
+        })
+        .then(
+          (result) => settle(thread.id, gen, result.projectThread.position),
+          (error: unknown) => {
+            settle(thread.id, gen, null);
+            onErrorRef.current(errorMessage(error));
+          },
+        );
+    },
+    [rpc, projectId, settle],
+  );
+
+  const ordered = useMemo(
+    () => orderedProjectThreads(threads, overrides),
+    [threads, overrides],
+  );
+  return { ordered, reorder };
+}
+
 interface ProjectThreadLinksProps {
   projectId: string;
   threads: readonly ProjectThread[];
   error: string | null;
   busyThreadIds: ReadonlySet<string>;
+  onError: (message: string) => void;
   className?: string;
   children?: React.ReactNode;
 }
@@ -87,22 +198,40 @@ export function ProjectThreadLinks({
   threads,
   error,
   busyThreadIds,
+  onError,
   className,
   children,
 }: ProjectThreadLinksProps) {
   const sideChats = useSideChatsByThread();
+  const { ordered, reorder } = useReorderedProjectThreads(
+    projectId,
+    threads,
+    onError,
+  );
+  const reorderList = useReorderList<ProjectThread>({
+    kind: "project-thread",
+    scopeId: projectId,
+    items: ordered,
+    onReorder: (thread, { before, after }) => reorder(thread, before, after),
+  });
   return (
     <div
       data-project-threads={projectId}
       className={cn("flex flex-col gap-0.5", className)}
+      {...reorderList.listProps}
     >
       {error !== null ? (
         <span className="text-xs text-destructive">{error}</span>
       ) : null}
-      {threads.map((thread) => {
+      {ordered.map((thread) => {
         const working = busyThreadIds.has(thread.threadId);
         return (
-          <div key={thread.id} className="flex flex-col gap-0.5">
+          <div
+            key={thread.id}
+            data-project-thread-id={thread.threadId}
+            className="relative flex flex-col gap-0.5"
+            {...reorderList.itemProps(thread)}
+          >
             <ThreadLink
               threadId={thread.threadId}
               title={thread.title}
@@ -122,6 +251,7 @@ export function ProjectThreadLinks({
                 </div>
               );
             })}
+            <DropLine placement={reorderList.dropPlacement(thread.id)} />
           </div>
         );
       })}
@@ -191,6 +321,7 @@ export function ProjectThreadList({
       threads={withoutArchivedThreads(attached, unarchivedThreadIds)}
       error={threads.error}
       busyThreadIds={busyThreadIds}
+      onError={onError}
       className={className}
     >
       <ProjectThreadActions
