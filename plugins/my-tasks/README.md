@@ -153,6 +153,14 @@ right-click menu) to move it there. Inside an expanded project row, drag a task
 above or below another task, or a project-level thread above or below another
 thread, to change their order. New project-level threads appear at the top.
 
+The list remembers which status sections you collapsed and which project rows
+you expanded, and the navigation sidebar remembers which folders you collapsed.
+This view state lives in the browser's local storage
+(`bb-my-tasks:list-collapsed-statuses`, `bb-my-tasks:list-expanded-projects`,
+and `bb-my-tasks:sidebar-collapsed-folders`), so it survives reloads and moving
+between projects and views on the same device, and is shared by the All and
+Active lists.
+
 In the app, every task has **New thread** and **Attach thread** (search your
 bb threads): labelled on the task page, icon-only on a task's checklist row
 under a project. A task's **New thread** opens an empty composer for the

@@ -6,6 +6,10 @@ import type {
   SidebarProjectSummary,
 } from "../shared/contract.js";
 import { useTasksRpc } from "./data.js";
+import {
+  COLLAPSED_FOLDERS_STORAGE_KEY,
+  usePersistedToggleSet,
+} from "./collapse-state.js";
 import type { TasksRoute } from "./routes.js";
 import {
   PresetDialog,
@@ -175,8 +179,8 @@ export function TasksSidebar({
   onNavigate,
   onNewProject,
 }: TasksSidebarProps) {
-  const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(
-    new Set(),
+  const [collapsedFolders, toggleFolder] = usePersistedToggleSet(
+    COLLAPSED_FOLDERS_STORAGE_KEY,
   );
   const rpc = useTasksRpc();
   const [presetDialog, setPresetDialog] = useState<{
@@ -195,13 +199,6 @@ export function TasksSidebar({
   const activeProjectId = route.kind === "project" ? route.projectId : null;
   const openProject = (projectId: string) =>
     onNavigate({ kind: "project", projectId });
-  const toggleFolder = (folderId: string) =>
-    setCollapsedFolders((current) => {
-      const next = new Set(current);
-      if (next.has(folderId)) next.delete(folderId);
-      else next.add(folderId);
-      return next;
-    });
 
   const rootFolders = (folders ?? []).filter((f) => f.parentFolderId === null);
   const childFolders = (folders ?? []).filter((f) => f.parentFolderId !== null);

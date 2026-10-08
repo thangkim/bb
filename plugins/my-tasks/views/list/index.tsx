@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectStatus, ProjectThread } from "../../shared/contract.js";
 import { useProjects } from "../../shell/data.js";
 import { useTasksNavigation } from "../../shell/routes.js";
+import {
+  COLLAPSED_STATUSES_STORAGE_KEY,
+  usePersistedToggleSet,
+} from "../../shell/collapse-state.js";
 import { NewProjectDialog } from "../manage/new-project-dialog.js";
 import { DetailToasts, useDetailToasts } from "../detail/toast.js";
 import { EmptyState } from "../../components/empty-state.js";
@@ -89,17 +93,9 @@ export function ListView({ activeOnly = false }: ListViewProps) {
     updatePreference({ filters: next, sort });
   const setSort = (next: TaskSort) => updatePreference({ filters, sort: next });
   const [newProjectOpen, setNewProjectOpen] = useState(false);
-  const [collapsedStatuses, setCollapsedStatuses] = useState<
-    ReadonlySet<ProjectStatus>
-  >(() => new Set());
-  const toggleStatusCollapsed = (status: ProjectStatus) => {
-    setCollapsedStatuses((current) => {
-      const next = new Set(current);
-      if (next.has(status)) next.delete(status);
-      else next.add(status);
-      return next;
-    });
-  };
+  const [collapsedStatuses, toggleStatusCollapsed] = usePersistedToggleSet(
+    COLLAPSED_STATUSES_STORAGE_KEY,
+  );
 
   const projectIds = useMemo(
     () => (projects.data ?? []).map((project) => project.id),

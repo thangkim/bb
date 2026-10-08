@@ -945,6 +945,29 @@ describe("tasks app shell", () => {
     });
   });
 
+  it("remembers a collapsed sidebar folder across remounts", async () => {
+    const first = renderSlot(
+      navigationRegistration,
+      { subPath: "all" },
+      { rpc: seededRpc() },
+    );
+    await first.findByText("Tasks Plugin");
+    fireEvent.click(first.getByRole("button", { name: "bb" }));
+    expect(first.queryByText("Tasks Plugin")).toBeNull();
+    first.unmount();
+
+    const second = renderSlot(
+      navigationRegistration,
+      { subPath: "all" },
+      { rpc: seededRpc() },
+    );
+    const header = await second.findByRole("button", { name: "bb" });
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(second.queryByText("Tasks Plugin")).toBeNull();
+    fireEvent.click(header);
+    await second.findByText("Tasks Plugin");
+  });
+
   it("does not mount New project queries until the dialog opens", async () => {
     let bbProjectCalls = 0;
     const slot = renderSlot(

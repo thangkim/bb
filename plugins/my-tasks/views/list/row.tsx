@@ -10,6 +10,10 @@ import { useActiveThread } from "../../components/active-thread.js";
 import { Icon } from "@/components/ui/icon";
 import { TaskCheckbox } from "./icons.js";
 import { cn } from "@/lib/utils";
+import {
+  EXPANDED_PROJECTS_STORAGE_KEY,
+  usePersistedToggleSet,
+} from "../../shell/collapse-state.js";
 import { TaskChecklist } from "../tasks/checklist.js";
 import { isReorderDragIn } from "../tasks/reorder.js";
 import {
@@ -67,7 +71,10 @@ export function ProjectRow({
 }: ProjectRowProps) {
   const [taskDragOver, setTaskDragOver] = useState(false);
   const [openMenu, setOpenMenu] = useState<"priority" | "dueDate" | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [expandedProjects, toggleProjectExpanded] = usePersistedToggleSet(
+    EXPANDED_PROJECTS_STORAGE_KEY,
+  );
+  const expanded = expandedProjects.has(project.id);
   const working = (summary?.activeAgentCount ?? 0) > 0;
   const done = project.status === "done";
   const activeThreadProject = useActiveThread().projectIds.has(project.id);
@@ -134,7 +141,7 @@ export function ProjectRow({
             type="button"
             aria-expanded={expanded}
             aria-label={`${expanded ? "Collapse" : "Expand"} ${project.name}`}
-            onClick={() => setExpanded((open) => !open)}
+            onClick={() => toggleProjectExpanded(project.id)}
             onKeyDown={(event) => {
               if (!isBareKey(event)) return;
               if (event.key.toLowerCase() === "p") {
@@ -177,7 +184,7 @@ export function ProjectRow({
               type="button"
               aria-expanded={expanded}
               aria-label={expanded ? "Hide tasks" : "Show tasks"}
-              onClick={() => setExpanded((open) => !open)}
+              onClick={() => toggleProjectExpanded(project.id)}
               className={cn(
                 "flex size-5 cursor-pointer items-center justify-center rounded-sm p-0 hover:bg-state-active focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                 working ? "text-timeline-accent" : "text-muted-foreground",

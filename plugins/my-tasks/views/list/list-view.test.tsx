@@ -392,6 +392,58 @@ describe("projects list", () => {
     await projectRow(slot, PLANNED.id);
   });
 
+  it("remembers a collapsed status section after the list remounts", async () => {
+    const first = renderList();
+    await projectRow(first, PLANNED.id);
+    fireEvent.click(
+      first.container.querySelector(
+        '[data-status-group-header="todo"]',
+      ) as HTMLElement,
+    );
+    first.unmount();
+
+    const second = renderList();
+    await projectRow(second, LAUNCH.id);
+    expect(
+      second.container
+        .querySelector('[data-status-group-header="todo"]')
+        ?.getAttribute("aria-expanded"),
+    ).toBe("false");
+    expect(
+      second.container.querySelector(`[data-project-id="${PLANNED.id}"]`),
+    ).toBeNull();
+    expect(
+      second.container
+        .querySelector('[data-status-group-header="in_progress"]')
+        ?.getAttribute("aria-expanded"),
+    ).toBe("true");
+  });
+
+  it("remembers an expanded project after the list remounts", async () => {
+    const first = renderList();
+    const row = await projectRow(first, LAUNCH.id);
+    fireEvent.click(within(row).getByRole("button", { name: "Show tasks" }));
+    first.unmount();
+
+    const second = renderList();
+    const restored = await projectRow(second, LAUNCH.id);
+    await within(restored).findByRole("checkbox", { name: "Mark Task 1 done" });
+    within(restored).getByRole("button", { name: "Hide tasks" });
+    const other = await projectRow(second, POLISH.id);
+    within(other).getByRole("button", { name: "Show tasks" });
+  });
+
+  it("falls back to expanded sections when the stored collapse state is malformed", async () => {
+    window.localStorage.setItem(
+      "bb-my-tasks:list-collapsed-statuses",
+      "{not json",
+    );
+    window.localStorage.setItem("bb-my-tasks:list-expanded-projects", "42");
+    const slot = renderList();
+    const row = await projectRow(slot, PLANNED.id);
+    within(row).getByRole("button", { name: "Show tasks" });
+  });
+
   it("expands a project into its task checklist and checks a task off", async () => {
     const slot = renderList();
     const row = await projectRow(slot, LAUNCH.id);
