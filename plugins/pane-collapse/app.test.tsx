@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type {
   PluginAppBuilder,
@@ -43,41 +49,52 @@ function command(id: string): PluginCommandRegistration {
   return registration;
 }
 
-function splitLayout(focused: string): PluginSidebarSplitLayout {
+const PANE_IDS = ["pa", "pb", "pc"] as const;
+type PaneId = (typeof PANE_IDS)[number];
+
+function splitLayout(focused: PaneId): PluginSidebarSplitLayout {
   return {
-    panes: [
-      {
-        paneId: "pa",
-        threadId: "t-a",
-        rect: { x: 0, y: 0, width: 0.5, height: 1 },
-        isFocused: focused === "pa",
-      },
-      {
-        paneId: "pb",
-        threadId: "t-b",
-        rect: { x: 0.5, y: 0, width: 0.5, height: 1 },
-        isFocused: focused === "pb",
-      },
-    ],
+    panes: PANE_IDS.map((paneId, index) => ({
+      paneId,
+      threadId: `t-${paneId.slice(1)}`,
+      rect: { x: index / 3, y: 0, width: 1 / 3, height: 1 },
+      isFocused: focused === paneId,
+    })),
   };
 }
 
-function mountSplitDom(): Record<"pa" | "pb", HTMLElement> {
+function mountSplitDom(): Record<
+  PaneId,
+  { pane: HTMLElement; cell: HTMLElement }
+> {
   const root = document.createElement("div");
   root.dataset.splitResizeGridRoot = "";
   root.style.display = "flex";
   root.style.flexDirection = "row";
-  const panes = {} as Record<"pa" | "pb", HTMLElement>;
-  for (const paneId of ["pa", "pb"] as const) {
+  const grows: Record<PaneId, string> = { pa: "0.25", pb: "0.25", pc: "0.5" };
+  const panes = {} as Record<PaneId, { pane: HTMLElement; cell: HTMLElement }>;
+  for (const paneId of PANE_IDS) {
+    if (root.children.length > 0) {
+      const divider = document.createElement("div");
+      divider.dataset.splitResizeGridBoundary = String(root.children.length);
+      root.append(divider);
+    }
     const cell = document.createElement("div");
+    cell.style.flex = `${grows[paneId]} 1 0px`;
     const pane = document.createElement("div");
     pane.dataset.splitPaneId = paneId;
     cell.append(pane);
     root.append(cell);
-    panes[paneId] = pane;
+    panes[paneId] = { pane, cell };
   }
   document.body.append(root);
   return panes;
+}
+
+function styleText(): string {
+  return [...document.head.querySelectorAll("style")]
+    .map((style) => style.textContent)
+    .join("\n");
 }
 
 const threadA = {
@@ -86,7 +103,7 @@ const threadA = {
   hasPendingInteraction: true,
 } as PluginSidebarThread;
 
-function mountOverlay(focused: string) {
+function mountOverlay(focused: PaneId) {
   return renderSlot(
     app.appOverlays[0]!,
     {},
@@ -113,15 +130,36 @@ describe("collapsed pane strips", () => {
     const strip = await screen.findByRole("button", {
       name: "Expand Alpha thread",
     });
-    expect(panes.pa.contains(strip)).toBe(true);
-    expect(document.head.textContent).toContain(
-      'div:has(> [data-split-pane-id="pa"]) { flex: 0 0 36px !important; }',
+    expect(panes.pa.pane.contains(strip)).toBe(true);
+    expect(styleText()).toContain(
+      '[data-pane-collapse-root="0"] > :nth-child(1) { flex: 0 0 36px !important; }',
     );
 
     fireEvent.click(strip);
     expect(collapsedPanes.get().size).toBe(0);
     expect(screen.queryByRole("button", { name: /Expand/ })).toBeNull();
-    expect(document.head.textContent).not.toContain("data-split-pane-id");
+    expect(styleText()).not.toContain("data-pane-collapse-root");
+    expect(document.querySelector("[data-pane-collapse-root]")).toBeNull();
+  });
+
+  it("lets the expanded panes fill the width a collapsed pane gives up", async () => {
+    const panes = mountSplitDom();
+    mountOverlay("pb");
+    act(() => collapsedPanes.set(new Set(["pa"])));
+
+    expect(styleText()).toMatch(
+      /:nth-child\(3\) \{ flex-grow: 0\.333\d* !important; \}/,
+    );
+    expect(styleText()).toMatch(
+      /:nth-child\(5\) \{ flex-grow: 0\.666\d* !important; \}/,
+    );
+
+    panes.pc.cell.style.flex = "0.25 1 0px";
+    await waitFor(() =>
+      expect(styleText()).toContain(
+        ":nth-child(5) { flex-grow: 0.5 !important; }",
+      ),
+    );
   });
 
   it("collapses the focused pane by command and focuses its neighbour", () => {

@@ -23,7 +23,7 @@ import {
   PANE_SELECTOR,
   STRIP_ATTRIBUTE,
   canCollapse,
-  collapsedPaneCss,
+  collapsedLayoutCss,
   createCollapsedPaneStore,
   focusTargetAfterCollapse,
   newlyFocusedCollapsedPane,
@@ -32,6 +32,7 @@ import {
   withoutPane,
   type CollapsedPanes,
 } from "./collapsed-panes";
+import { readSplitDom, stampGridRoots } from "./split-dom";
 
 export const collapsedPanes = createCollapsedPaneStore();
 
@@ -118,7 +119,9 @@ function stripHosts(
       container === null ||
       container === undefined ||
       !getComputedStyle(container).flexDirection.startsWith("column");
-    return [{ paneId: pane.paneId, threadId: pane.threadId, element, vertical }];
+    return [
+      { paneId: pane.paneId, threadId: pane.threadId, element, vertical },
+    ];
   });
 }
 
@@ -202,10 +205,31 @@ export function CollapsedPaneStrips() {
     if (collapsed.size === 0) return;
     const style = document.createElement("style");
     style.dataset.bbPlugin = pluginId;
-    style.textContent = collapsedPaneCss(collapsed);
     document.head.append(style);
-    return () => style.remove();
-  }, [collapsed, pluginId]);
+    const observer = new MutationObserver(apply);
+    function apply() {
+      const dom = readSplitDom(collapsed);
+      stampGridRoots(dom.roots);
+      const css = collapsedLayoutCss(dom.grids);
+      if (style.textContent !== css) style.textContent = css;
+      observer.disconnect();
+      for (const root of dom.roots) {
+        observer.observe(root, { childList: true });
+      }
+      for (const cell of dom.cells) {
+        observer.observe(cell, {
+          attributes: true,
+          attributeFilter: ["style"],
+        });
+      }
+    }
+    apply();
+    return () => {
+      observer.disconnect();
+      style.remove();
+      stampGridRoots([]);
+    };
+  }, [collapsed, layout, pluginId]);
 
   useLayoutEffect(() => {
     setHosts(stripHosts(layout, collapsed));

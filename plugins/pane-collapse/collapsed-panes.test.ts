@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PluginSidebarSplitLayout } from "@get-bb/plugin-sdk/app";
 import {
   canCollapse,
-  collapsedPaneCss,
+  collapsedLayoutCss,
   focusTargetAfterCollapse,
   newlyFocusedCollapsedPane,
   pruneCollapsed,
@@ -82,12 +82,14 @@ describe("newlyFocusedCollapsedPane", () => {
       ],
       "b",
     );
-    expect(newlyFocusedCollapsedPane("a", focusedOnB, new Set(["b"]))).toEqual(
-      { focusedPaneId: "b", expand: "b" },
-    );
-    expect(newlyFocusedCollapsedPane("b", focusedOnB, new Set(["b"]))).toEqual(
-      { focusedPaneId: "b", expand: null },
-    );
+    expect(newlyFocusedCollapsedPane("a", focusedOnB, new Set(["b"]))).toEqual({
+      focusedPaneId: "b",
+      expand: "b",
+    });
+    expect(newlyFocusedCollapsedPane("b", focusedOnB, new Set(["b"]))).toEqual({
+      focusedPaneId: "b",
+      expand: null,
+    });
     expect(newlyFocusedCollapsedPane("a", focusedOnB, new Set())).toEqual({
       focusedPaneId: "b",
       expand: null,
@@ -105,12 +107,30 @@ describe("set helpers", () => {
   });
 });
 
-describe("collapsedPaneCss", () => {
-  it("pins each collapsed pane's split cell to a strip and escapes ids", () => {
-    const css = collapsedPaneCss(new Set(['pa"ne']));
+describe("collapsedLayoutCss", () => {
+  it("pins collapsed cells to a strip and scales the rest to fill the grid", () => {
+    const css = collapsedLayoutCss([
+      {
+        rootId: "0",
+        cells: [
+          { nthChild: 1, grow: 0.2, collapsed: false },
+          { nthChild: 3, grow: 0.2, collapsed: true },
+          { nthChild: 5, grow: 0.2, collapsed: true },
+          { nthChild: 7, grow: 0.4, collapsed: false },
+        ],
+      },
+    ]);
     expect(css).toContain(
-      '[data-split-resize-grid-root] > div:has(> [data-split-pane-id="pa\\"ne"]) { flex: 0 0 36px !important; }',
+      '[data-pane-collapse-root="0"] > :nth-child(3) { flex: 0 0 36px !important; }',
     );
-    expect(collapsedPaneCss(new Set())).toBe("");
+    expect(css).toContain(
+      '[data-pane-collapse-root="0"] > :nth-child(5) { flex: 0 0 36px !important; }',
+    );
+    expect(css).toMatch(
+      /\[data-pane-collapse-root="0"\] > :nth-child\(1\) \{ flex-grow: 0\.333\d* !important; \}/,
+    );
+    expect(css).toMatch(
+      /\[data-pane-collapse-root="0"\] > :nth-child\(7\) \{ flex-grow: 0\.666\d* !important; \}/,
+    );
   });
 });

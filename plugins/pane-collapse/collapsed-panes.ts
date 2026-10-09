@@ -7,6 +7,9 @@ export type CollapsedPanes = ReadonlySet<string>;
 export const COLLAPSED_PANE_SIZE_PX = 36;
 export const PANE_SELECTOR = "[data-split-pane-id]";
 export const STRIP_ATTRIBUTE = "data-pane-collapse-strip";
+export const ROOT_ATTRIBUTE = "data-pane-collapse-root";
+export const GRID_ROOT_SELECTOR = "[data-split-resize-grid-root]";
+export const GRID_DIVIDER_ATTRIBUTE = "data-split-resize-grid-boundary";
 
 export interface CollapsedPaneStore {
   get(): CollapsedPanes;
@@ -110,18 +113,35 @@ export function newlyFocusedCollapsedPane(
   return { focusedPaneId, expand };
 }
 
-function attributeValue(value: string): string {
-  return value.replace(/["\\]/g, "\\$&");
+export interface SplitCell {
+  nthChild: number;
+  grow: number;
+  collapsed: boolean;
 }
 
-export function collapsedPaneCss(collapsed: CollapsedPanes): string {
-  return [...collapsed]
-    .map((paneId) => {
-      const pane = `[data-split-pane-id="${attributeValue(paneId)}"]`;
-      return [
-        `[data-split-resize-grid-root] > div:has(> ${pane}) { flex: 0 0 ${COLLAPSED_PANE_SIZE_PX}px !important; }`,
-        `${pane}[data-maximized] > [${STRIP_ATTRIBUTE}] { display: none !important; }`,
-      ].join("\n");
-    })
-    .join("\n");
+export interface SplitGrid {
+  rootId: string;
+  cells: readonly SplitCell[];
+}
+
+export function collapsedLayoutCss(grids: readonly SplitGrid[]): string {
+  const rules = [
+    `${PANE_SELECTOR}[data-maximized] > [${STRIP_ATTRIBUTE}] { display: none !important; }`,
+  ];
+  for (const grid of grids) {
+    const root = `[${ROOT_ATTRIBUTE}="${grid.rootId}"]`;
+    const expanded = grid.cells.filter((cell) => !cell.collapsed);
+    const total = expanded.reduce((sum, cell) => sum + cell.grow, 0);
+    for (const cell of grid.cells) {
+      const target = `${root} > :nth-child(${cell.nthChild})`;
+      if (cell.collapsed) {
+        rules.push(
+          `${target} { flex: 0 0 ${COLLAPSED_PANE_SIZE_PX}px !important; }`,
+        );
+      } else if (total > 0) {
+        rules.push(`${target} { flex-grow: ${cell.grow / total} !important; }`);
+      }
+    }
+  }
+  return rules.join("\n");
 }
