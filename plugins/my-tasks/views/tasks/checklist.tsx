@@ -27,6 +27,7 @@ import { editedTasks } from "../list/optimistic.js";
 import {
   CHIP_TRIGGER_CLASS,
   DueDateChip,
+  PriorityEditor,
   TaskContextMenu,
   type TaskEditFn,
 } from "../list/property-menus.js";
@@ -192,6 +193,7 @@ function TaskChecklistRow({
 }: TaskChecklistRowProps) {
   const navigation = useTasksNavigation();
   const [threadsOpen, setThreadsOpen] = useState(false);
+  const [priorityOpen, setPriorityOpen] = useState(false);
   const done = task.status === "done";
   const threads = meta?.threads ?? [];
   const working = (meta?.activeThreads.length ?? 0) > 0;
@@ -283,6 +285,12 @@ function TaskChecklistRow({
               <ThreadRow key={thread.id} thread={thread} />
             ))}
             <div className="flex items-center gap-1">
+              <PriorityEditor
+                priority={task.priority}
+                onChange={(priority) => onEdit(task, { priority })}
+                open={priorityOpen}
+                onOpenChange={setPriorityOpen}
+              />
               <NewThreadButton
                 target={{ kind: "task", taskId: task.id }}
                 projectId={task.projectId}

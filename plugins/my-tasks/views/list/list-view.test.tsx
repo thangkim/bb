@@ -469,6 +469,31 @@ describe("projects list", () => {
     await within(row).findByRole("checkbox", { name: "Mark Task 1 not done" });
   });
 
+  it("shows a task's priority beside its thread actions and changes it", async () => {
+    const slot = renderList();
+    const row = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(row).getByRole("button", { name: "Show tasks" }));
+    await within(row).findByRole("checkbox", { name: "Mark Task 1 done" });
+    const taskRow = row.querySelector('[data-task-key="LCH-1"]') as HTMLElement;
+    fireEvent.click(
+      within(taskRow).getByRole("button", { name: "Show attached threads" }),
+    );
+    const priority = await within(taskRow).findByRole("button", {
+      name: "Set priority, currently No priority",
+    });
+    fireEvent.click(priority);
+    fireEvent.click(await slot.findByRole("menuitem", { name: /High/ }));
+    await waitFor(() =>
+      expect(
+        slot.rpcCalls
+          .filter((call) => call.method === "updateTask")
+          .map((call) => rpcInput(call.input)),
+      ).toContainEqual(
+        expect.objectContaining({ taskId: task(1).id, priority: "high" }),
+      ),
+    );
+  });
+
   it("shows done tasks when the Show completed tasks setting is on", async () => {
     const slot = renderList({ settings: { showCompletedTasks: true } });
     const row = await projectRow(slot, LAUNCH.id);
