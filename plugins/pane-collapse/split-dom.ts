@@ -32,11 +32,21 @@ function ancestorGridRoots(pane: HTMLElement): HTMLElement[] {
   }
 }
 
-function cellGrow(cell: HTMLElement): number {
-  const grow = Number.parseFloat(
-    cell.style.flexGrow || cell.style.flex.split(" ")[0] || "",
-  );
-  return Number.isFinite(grow) && grow >= 0 ? grow : 1;
+function parseGrow(value: string): number | null {
+  const grow = Number.parseFloat(value);
+  return Number.isFinite(grow) && grow >= 0 ? grow : null;
+}
+
+function inlineGrow(cell: HTMLElement): number | null {
+  return parseGrow(cell.style.flexGrow || cell.style.flex.split(" ")[0] || "");
+}
+
+function readCellGrow(cell: HTMLElement): { grow: number; pinned: boolean } {
+  const inline = inlineGrow(cell);
+  const effective = parseGrow(getComputedStyle(cell).flexGrow);
+  if (inline === null) return { grow: effective ?? 1, pinned: false };
+  if (effective === null) return { grow: inline, pinned: false };
+  return { grow: effective, pinned: Math.abs(effective - inline) > 1e-6 };
 }
 
 function isCollapsedCell(cell: HTMLElement, collapsed: CollapsedPanes) {
@@ -63,7 +73,7 @@ export function readSplitDom(collapsed: CollapsedPanes): SplitDom {
       rootId: String(index),
       cells: children.map((cell) => ({
         nthChild: [...root.children].indexOf(cell) + 1,
-        grow: cellGrow(cell),
+        ...readCellGrow(cell),
         collapsed: isCollapsedCell(cell, collapsed),
       })),
     };

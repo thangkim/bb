@@ -208,19 +208,16 @@ export function CollapsedPaneStrips() {
     document.head.append(style);
     const observer = new MutationObserver(apply);
     function apply() {
+      style.textContent = "";
       const dom = readSplitDom(collapsed);
       stampGridRoots(dom.roots);
-      const css = collapsedLayoutCss(dom.grids);
-      if (style.textContent !== css) style.textContent = css;
+      style.textContent = collapsedLayoutCss(dom.grids);
       observer.disconnect();
       for (const root of dom.roots) {
         observer.observe(root, { childList: true });
       }
       for (const cell of dom.cells) {
-        observer.observe(cell, {
-          attributes: true,
-          attributeFilter: ["style"],
-        });
+        observer.observe(cell, { attributes: true });
       }
     }
     apply();

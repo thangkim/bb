@@ -116,6 +116,7 @@ export function newlyFocusedCollapsedPane(
 export interface SplitCell {
   nthChild: number;
   grow: number;
+  pinned: boolean;
   collapsed: boolean;
 }
 
@@ -130,16 +131,18 @@ export function collapsedLayoutCss(grids: readonly SplitGrid[]): string {
   ];
   for (const grid of grids) {
     const root = `[${ROOT_ATTRIBUTE}="${grid.rootId}"]`;
-    const expanded = grid.cells.filter((cell) => !cell.collapsed);
-    const total = expanded.reduce((sum, cell) => sum + cell.grow, 0);
+    const scaled = grid.cells.filter((cell) => !cell.collapsed && !cell.pinned);
+    const total = scaled.reduce((sum, cell) => sum + cell.grow, 0);
     for (const cell of grid.cells) {
-      const target = `${root} > :nth-child(${cell.nthChild})`;
+      const child = ` > :nth-child(${cell.nthChild})`;
       if (cell.collapsed) {
         rules.push(
-          `${target} { flex: 0 0 ${COLLAPSED_PANE_SIZE_PX}px !important; }`,
+          `${root.repeat(3)}${child} { flex: 0 0 ${COLLAPSED_PANE_SIZE_PX}px !important; }`,
         );
-      } else if (total > 0) {
-        rules.push(`${target} { flex-grow: ${cell.grow / total} !important; }`);
+      } else if (!cell.pinned && total > 0) {
+        rules.push(
+          `${root}${child} { flex-grow: ${cell.grow / total} !important; }`,
+        );
       }
     }
   }

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   act,
   cleanup,
@@ -132,7 +132,7 @@ describe("collapsed pane strips", () => {
     });
     expect(panes.pa.pane.contains(strip)).toBe(true);
     expect(styleText()).toContain(
-      '[data-pane-collapse-root="0"] > :nth-child(1) { flex: 0 0 36px !important; }',
+      `${'[data-pane-collapse-root="0"]'.repeat(3)} > :nth-child(1) { flex: 0 0 36px !important; }`,
     );
 
     fireEvent.click(strip);
@@ -160,6 +160,26 @@ describe("collapsed pane strips", () => {
         ":nth-child(5) { flex-grow: 0.5 !important; }",
       ),
     );
+  });
+
+  it("scales only the cells another plugin has not pinned", () => {
+    const panes = mountSplitDom();
+    const computed = window.getComputedStyle.bind(window);
+    const spy = vi
+      .spyOn(window, "getComputedStyle")
+      .mockImplementation((element, pseudo) =>
+        element === panes.pc.cell
+          ? ({ flexGrow: "0.4" } as CSSStyleDeclaration)
+          : computed(element, pseudo),
+      );
+    mountOverlay("pb");
+    act(() => collapsedPanes.set(new Set(["pa"])));
+
+    expect(styleText()).toContain(
+      ":nth-child(3) { flex-grow: 1 !important; }",
+    );
+    expect(styleText()).not.toContain(":nth-child(5)");
+    spy.mockRestore();
   });
 
   it("collapses the focused pane by command and focuses its neighbour", () => {

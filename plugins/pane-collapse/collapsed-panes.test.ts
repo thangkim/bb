@@ -107,30 +107,53 @@ describe("set helpers", () => {
   });
 });
 
+const ROOT = '[data-pane-collapse-root="0"]';
+
 describe("collapsedLayoutCss", () => {
   it("pins collapsed cells to a strip and scales the rest to fill the grid", () => {
     const css = collapsedLayoutCss([
       {
         rootId: "0",
         cells: [
-          { nthChild: 1, grow: 0.2, collapsed: false },
-          { nthChild: 3, grow: 0.2, collapsed: true },
-          { nthChild: 5, grow: 0.2, collapsed: true },
-          { nthChild: 7, grow: 0.4, collapsed: false },
+          { nthChild: 1, grow: 0.2, pinned: false, collapsed: false },
+          { nthChild: 3, grow: 0.2, pinned: false, collapsed: true },
+          { nthChild: 5, grow: 0.2, pinned: false, collapsed: true },
+          { nthChild: 7, grow: 0.4, pinned: false, collapsed: false },
         ],
       },
     ]);
     expect(css).toContain(
-      '[data-pane-collapse-root="0"] > :nth-child(3) { flex: 0 0 36px !important; }',
+      `${ROOT.repeat(3)} > :nth-child(3) { flex: 0 0 36px !important; }`,
     );
     expect(css).toContain(
-      '[data-pane-collapse-root="0"] > :nth-child(5) { flex: 0 0 36px !important; }',
+      `${ROOT.repeat(3)} > :nth-child(5) { flex: 0 0 36px !important; }`,
     );
     expect(css).toMatch(
       /\[data-pane-collapse-root="0"\] > :nth-child\(1\) \{ flex-grow: 0\.333\d* !important; \}/,
     );
     expect(css).toMatch(
       /\[data-pane-collapse-root="0"\] > :nth-child\(7\) \{ flex-grow: 0\.666\d* !important; \}/,
+    );
+  });
+
+  it("leaves cells another stylesheet pins alone and fills around them", () => {
+    const css = collapsedLayoutCss([
+      {
+        rootId: "0",
+        cells: [
+          { nthChild: 1, grow: 0.19, pinned: true, collapsed: false },
+          { nthChild: 3, grow: 0.2, pinned: false, collapsed: true },
+          { nthChild: 5, grow: 0.25, pinned: false, collapsed: false },
+          { nthChild: 7, grow: 0.75, pinned: false, collapsed: false },
+        ],
+      },
+    ]);
+    expect(css).not.toContain(":nth-child(1)");
+    expect(css).toContain(
+      `${ROOT} > :nth-child(5) { flex-grow: 0.25 !important; }`,
+    );
+    expect(css).toContain(
+      `${ROOT} > :nth-child(7) { flex-grow: 0.75 !important; }`,
     );
   });
 });
