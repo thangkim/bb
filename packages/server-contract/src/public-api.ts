@@ -130,6 +130,7 @@ import type {
   EnvironmentStatusResponse,
   HostDirectoryListing,
   HostDirectoryQuery,
+  HostDiscoveredReposResponse,
   HostEnrollmentCommandResponse,
   HostReconnectResponse,
   HostListQuery,
@@ -186,6 +187,7 @@ import type {
   ReorderPinnedThreadRequest,
   ReorderProjectRequest,
   ReorderQueuedMessageRequest,
+  QueuedMessageEditHoldResponse,
   ResolvePendingInteractionRequest,
   ResolveThreadMentionsRequest,
   ResolveThreadMentionsResponse,
@@ -235,6 +237,8 @@ import type {
   ThreadChildSummaryResponse,
   ThreadEventWaitQuery,
   ThreadEventsQuery,
+  ThreadMessageQuery,
+  ThreadMessageResponse,
   ThreadSectionMutationResponse,
   ThreadSectionResponse,
   ThreadGetQuery,
@@ -242,6 +246,7 @@ import type {
   ThreadCountResponse,
   ThreadListQuery,
   ThreadListResponse,
+  ThreadConversationOutlineQuery,
   ThreadConversationOutlineResponse,
   ThreadOpenRequest,
   ThreadOpenResponse,
@@ -369,6 +374,7 @@ import {
   systemAppUpdateQuerySchema,
   threadEventWaitQuerySchema,
   threadEventsQuerySchema,
+  threadMessageQuerySchema,
   threadGetQuerySchema,
   threadCountQuerySchema,
   threadListQuerySchema,
@@ -384,6 +390,7 @@ import {
   threadTimelineQuerySchema,
   systemCliSkillsStatusQuerySchema,
   systemInstallCliSkillsRequestSchema,
+  threadConversationOutlineQuerySchema,
   timelineTurnSummaryDetailsQuerySchema,
   listEnvironmentsQuerySchema,
   updateEnvironmentRequestSchema,
@@ -408,6 +415,7 @@ import {
 import type { ApiError } from "./errors.js";
 
 type PathProjectSourceId = { param: { id: string; sourceId: string } };
+type PathThreadMessage = { param: { id: string; seq: string } };
 type PathThreadInteractionId = {
   param: { id: string; interactionId: string };
 };
@@ -936,6 +944,12 @@ export const publicApiRoutes = {
       ),
       response: jsonResponse<HostDirectoryListing>(),
     }),
+    discoveredRepos: defineRoute({
+      path: "/hosts/:id/discovered-repos",
+      method: "get",
+      request: noRequest<PathId>(),
+      response: jsonResponse<HostDiscoveredReposResponse>(),
+    }),
     file: defineRoute({
       path: "/hosts/:id/files/:filePath{.+}",
       method: "get",
@@ -1453,6 +1467,29 @@ export const publicApiRoutes = {
       >(sendQueuedMessageRequestSchema),
       response: jsonResponse<SendQueuedMessageResponse>(),
     }),
+    /**
+     * Hold a queued message while someone edits it: no automatic dispatch
+     * claims it, and the drainable rows behind it wait, until the hold is
+     * released, a save clears it, or `leaseMs` passes without a renewal.
+     * Calling it again renews the lease. Responds 409 once a dispatch has
+     * claimed the row.
+     */
+    holdQueuedMessageForEdit: defineRoute({
+      path: "/threads/:id/queued-messages/:queuedMessageId/edit-hold",
+      method: "post",
+      request: noRequest<PathThreadAndQueuedMessage>(),
+      response: jsonResponse<QueuedMessageEditHoldResponse>(),
+    }),
+    /**
+     * Release an edit hold without saving, letting the row dispatch as it
+     * would have. Releasing a row that is not held is a no-op.
+     */
+    releaseQueuedMessageEditHold: defineRoute({
+      path: "/threads/:id/queued-messages/:queuedMessageId/edit-hold",
+      method: "delete",
+      request: noRequest<PathThreadAndQueuedMessage>(),
+      response: jsonResponse<{ ok: true }>(),
+    }),
     reorderQueuedMessage: defineRoute({
       path: "/threads/:id/queued-messages/:queuedMessageId/order",
       method: "patch",
@@ -1657,7 +1694,9 @@ export const publicApiRoutes = {
     conversationOutline: defineRoute({
       path: "/threads/:id/conversation-outline",
       method: "get",
-      request: noRequest<PathId>(),
+      request: queryRequest<PathId, ThreadConversationOutlineQuery>(
+        threadConversationOutlineQuerySchema,
+      ),
       response: jsonResponse<ThreadConversationOutlineResponse>(),
     }),
     timelineTurnSummaryDetails: defineRoute({
@@ -1681,6 +1720,14 @@ export const publicApiRoutes = {
         threadEventsQuerySchema,
       ),
       response: jsonResponse<ThreadEventRow[]>(),
+    }),
+    message: defineRoute({
+      path: "/threads/:id/messages/:seq",
+      method: "get",
+      request: optionalQueryRequest<PathThreadMessage, ThreadMessageQuery>(
+        threadMessageQuerySchema,
+      ),
+      response: jsonResponse<ThreadMessageResponse>(),
     }),
     eventWait: defineRoute({
       path: "/threads/:id/events/wait",

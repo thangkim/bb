@@ -14,7 +14,6 @@ Read `testing.md` for examples and fidelity limits.
 - `ComposerLog`
 - `ComposerProvisionalTextCall`
 - `SidebarActionCall`
-- `SidebarNavigationCall`
 - `installTestPluginRuntime`
 - `CapturedPluginApp`
 - `PluginAppSource`

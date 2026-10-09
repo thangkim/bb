@@ -19,6 +19,7 @@ import {
   type PluginCommandRegistration,
   type PluginMessageActionContext,
   type PluginMessageActionRegistration,
+  type ThreadChatMessageReference,
   type PluginMessageDirectiveProps,
   type PluginNavPanelProps,
   type PluginNavPanelRegistration,
@@ -31,8 +32,6 @@ import {
   type PluginSettingDescriptor,
   type PluginSettingsSectionProps,
   type PluginSidebarFooterActionProps,
-  type ExperimentalSidebarNavigationProps,
-  type ExperimentalSidebarHeaderProps,
   type ExperimentalThreadMenuActionContext,
   type PluginSourceCodeRendererProps,
   type PluginThreadHeaderActionProps,
@@ -224,6 +223,7 @@ const THREAD_EVENT_PAYLOAD_FIELDS = {
   "experimental_thread.events": ["thread", "sequence"],
   "experimental_terminal.input": ["terminal"],
   "experimental_host.deleted": ["host"],
+  "experimental_environment.removed": ["removal"],
   "thread.created": ["thread"],
   "thread.active": ["thread"],
   "thread.idle": ["thread", "lastAssistantText"],
@@ -270,8 +270,6 @@ type SlotPropsByName = {
   experimental_newThreadPanelAction: PluginNewThreadPanelProps;
   pendingInteraction: PluginPendingInteractionProps;
   sidebarFooterAction: PluginSidebarFooterActionProps;
-  experimental_sidebarNavigation: ExperimentalSidebarNavigationProps;
-  experimental_sidebarHeader: ExperimentalSidebarHeaderProps;
   experimental_threadList: PluginThreadListProps;
   experimental_threadHeaderAction: PluginThreadHeaderActionProps;
   experimental_browserToolbarAction: ExperimentalPluginBrowserToolbarActionProps;
@@ -349,11 +347,6 @@ const FRONTEND_SLOT_PROP_FIELDS = {
   experimental_newThreadPanelAction: ["projectId", "params"],
   pendingInteraction: ["interaction", "submit", "cancel"],
   sidebarFooterAction: [],
-  experimental_sidebarNavigation: [
-    "isCompactViewport",
-    "experimental_Original",
-  ],
-  experimental_sidebarHeader: ["width", "controlSize", "isCompactViewport"],
   experimental_threadList: [
     "activeThreadId",
     "activeProjectId",
@@ -481,6 +474,24 @@ const _assertAllMessageActionRegistrationFieldsListed: MissingMessageActionRegis
   ? true
   : never = true;
 void _assertAllMessageActionRegistrationFieldsListed;
+
+const MESSAGE_REFERENCE_FIELDS = [
+  "id",
+  "threadId",
+  "role",
+  "text",
+  "sourceSeqEnd",
+  "experimental_messageSeq",
+] as const satisfies readonly (keyof ThreadChatMessageReference)[];
+
+type MissingMessageReferenceField = Exclude<
+  keyof ThreadChatMessageReference,
+  (typeof MESSAGE_REFERENCE_FIELDS)[number]
+>;
+const _assertAllMessageReferenceFieldsListed: MissingMessageReferenceField extends never
+  ? true
+  : never = true;
+void _assertAllMessageReferenceFieldsListed;
 
 const COMMAND_PALETTE_ACTION_REGISTRATION_FIELDS = [
   "defaultShortcut",
@@ -754,7 +765,12 @@ describe("bb-plugin-authoring skill", () => {
         `messageAction registration field "${field}" is not documented in the skill`,
       ).toContain(field);
     }
-    expect(skill).toContain("sourceSeqEnd");
+    for (const field of MESSAGE_REFERENCE_FIELDS) {
+      expect(
+        skill,
+        `message reference field "${field}" is not documented in the skill`,
+      ).toContain(field);
+    }
   });
 
   it("documents every commandPaletteAction registration field", () => {
