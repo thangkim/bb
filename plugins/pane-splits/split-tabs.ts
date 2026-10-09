@@ -76,7 +76,23 @@ export function advanceSplitTracker(
   return { state: { activeThreadId, panes }, created };
 }
 
-function inheritableTab(tab: ThreadTab): ThreadTab[] {
+function browserTabIdForThread(
+  tab: Extract<ThreadTab, { kind: "browser" }>,
+  threadId: string,
+): string {
+  const segments = tab.id.split(":");
+  const path =
+    segments.length === 3 && segments[0] === "browser"
+      ? decodeURIComponent(segments[1] ?? "")
+      : tab.id;
+  return [
+    "browser",
+    encodeURIComponent(`${path}@${threadId}`),
+    encodeURIComponent(tab.environmentId ?? "none"),
+  ].join(":");
+}
+
+function inheritableTab(tab: ThreadTab, threadId: string): ThreadTab[] {
   switch (tab.kind) {
     case "new-tab":
     case "side-chat":
@@ -86,7 +102,7 @@ function inheritableTab(tab: ThreadTab): ThreadTab[] {
       return tab.threadId === null ? [] : [tab];
     case "browser": {
       const { desktopTarget: _desktopTarget, ...rest } = tab;
-      return [rest];
+      return [{ ...rest, id: browserTabIdForThread(tab, threadId) }];
     }
     default:
       return [tab];
@@ -96,8 +112,11 @@ function inheritableTab(tab: ThreadTab): ThreadTab[] {
 export function inheritTabs(
   sourceTabs: readonly ThreadTab[],
   targetTabs: readonly ThreadTab[],
+  targetThreadId: string,
 ): ThreadTab[] | null {
-  const inherited = sourceTabs.flatMap(inheritableTab);
+  const inherited = sourceTabs.flatMap((tab) =>
+    inheritableTab(tab, targetThreadId),
+  );
   if (
     inherited.every(
       (tab) => tab.kind === "thread-info" || tab.kind === "git-diff",
@@ -127,7 +146,7 @@ export async function copySplitTabs(
   }
   for (let attempt = 1; ; attempt++) {
     const target = await sdk.threads.tabs.get({ threadId: creation.threadId });
-    const tabs = inheritTabs(source.tabs, target.tabs);
+    const tabs = inheritTabs(source.tabs, target.tabs, creation.threadId);
     if (tabs === null) return false;
     try {
       await sdk.threads.tabs.update({

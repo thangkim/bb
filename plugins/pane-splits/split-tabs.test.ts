@@ -122,13 +122,27 @@ describe("inheritTabs", () => {
       inheritTabs(
         [INFO, FILE, TERMINAL, BROWSER, PANEL, { id: "new", kind: "new-tab" }],
         [INFO, DIFF],
+        "thr_new",
       ),
-    ).toEqual([INFO, FILE, browser, PANEL, DIFF]);
+    ).toEqual([
+      INFO,
+      FILE,
+      { ...browser, id: "browser:docs%40thr_new:env_1" },
+      PANEL,
+      DIFF,
+    ]);
+  });
+
+  it("gives copied browser tabs an id of their own so the two views navigate independently", () => {
+    const [copy] = inheritTabs([BROWSER], [], "thr_new")!;
+    const [other] = inheritTabs([BROWSER], [], "thr_other")!;
+    expect(new Set([BROWSER.id, copy!.id, other!.id]).size).toBe(3);
+    expect(inheritTabs([BROWSER], [copy!], "thr_new")).toBeNull();
   });
 
   it("does nothing when the source only has fixed tabs or the tabs are already there", () => {
-    expect(inheritTabs([INFO, DIFF, TERMINAL], [INFO])).toBeNull();
-    expect(inheritTabs([INFO, FILE], [FILE, INFO])).toBeNull();
+    expect(inheritTabs([INFO, DIFF, TERMINAL], [INFO], "thr_new")).toBeNull();
+    expect(inheritTabs([INFO, FILE], [FILE, INFO], "thr_new")).toBeNull();
   });
 });
 
