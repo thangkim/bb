@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import {
   definePluginApp,
@@ -6,6 +6,7 @@ import {
   experimental_useSplitPanes,
   useBbContext,
   useBbNavigate,
+  useSdk,
   useSidebarSplitLayout,
   type BbNavigate,
   type ExperimentalNewThreadRequest,
@@ -19,6 +20,12 @@ import {
   recordClosedPanes,
   type ClosedPaneRecord,
 } from "./closed-panes";
+import {
+  advanceSplitTracker,
+  copySplitTabs,
+  seedSplitTracker,
+  type SplitTrackerState,
+} from "./split-tabs";
 
 export const PANE_CAP_MESSAGE = "Can't split — 8 panes is the maximum.";
 export const NOTHING_TO_REOPEN_MESSAGE = "No closed thread to reopen.";
@@ -68,6 +75,36 @@ export function PaneSplitsController() {
     [splitPanes],
   );
   experimental_useNewThreadHandler(handleNewThread);
+  return null;
+}
+
+export function SplitTabsController() {
+  const layout = useSidebarSplitLayout();
+  const { threadId } = useBbContext();
+  const sdk = useSdk();
+  const tracker = useRef<SplitTrackerState | null>(null);
+  useEffect(() => {
+    if (tracker.current === null) {
+      tracker.current = seedSplitTracker(layout, threadId);
+      return;
+    }
+    const { state, created } = advanceSplitTracker(
+      tracker.current,
+      layout,
+      threadId,
+      Date.now(),
+    );
+    tracker.current = state;
+    for (const creation of created) {
+      copySplitTabs(sdk, creation).catch((error: unknown) => {
+        console.warn(
+          `Pane Splits could not copy side panel tabs to ${creation.threadId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      });
+    }
+  }, [layout, threadId, sdk]);
   return null;
 }
 
@@ -128,6 +165,10 @@ export default definePluginApp((app) => {
   app.slots.experimental_appOverlay({
     id: "controller",
     component: PaneSplitsController,
+  });
+  app.slots.experimental_appOverlay({
+    id: "split-tabs",
+    component: SplitTabsController,
   });
 
   for (const command of SPLIT_COMMANDS) {

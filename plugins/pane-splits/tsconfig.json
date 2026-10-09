@@ -16,6 +16,8 @@
     "app.test.tsx",
     "closed-panes.ts",
     "closed-panes.test.ts",
+    "split-tabs.ts",
+    "split-tabs.test.ts",
     "vitest.config.ts"
   ]
 }

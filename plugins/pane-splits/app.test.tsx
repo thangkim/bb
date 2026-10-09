@@ -99,9 +99,10 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("registration", () => {
-  it("mounts one controller overlay", () => {
+  it("mounts the controller and split-tabs overlays", () => {
     expect(app.appOverlays.map((overlay) => overlay.id)).toEqual([
       "controller",
+      "split-tabs",
     ]);
   });
 
