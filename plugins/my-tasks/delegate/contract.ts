@@ -45,6 +45,21 @@ export const delegationRpcContract = defineRpcContract({
     input: z.object({ taskId: idSchema }).strict(),
     output: z.object({ bbProjectId: z.string().startsWith("proj_") }).strict(),
   },
+  threadSplitAttach: {
+    input: z
+      .object({
+        sourceThreadId: threadIdSchema,
+        threadId: threadIdSchema,
+        paneAgeMs: z.number().int().nonnegative(),
+      })
+      .strict(),
+    output: z
+      .object({
+        taskIds: z.array(idSchema),
+        projectIds: z.array(idSchema),
+      })
+      .strict(),
+  },
   projectThreadsDetach: {
     input: z.object({ projectId: idSchema, threadId: threadIdSchema }).strict(),
     output: z.object({ threadId: threadIdSchema }).strict(),

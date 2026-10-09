@@ -213,3 +213,113 @@ describe("task composer threads", () => {
     ).rejects.toThrow(/not linked to a bb project/);
   });
 });
+
+describe("split threads", () => {
+  function splitSetup() {
+    const context = setup();
+    const task = context.store.tasks.createTask({
+      projectId: context.project.id,
+      title: "Fix the importer",
+    });
+    const source = makeThreadResponse({
+      id: "thr_source",
+      projectId: "proj_launch",
+      createdAt: 0,
+    });
+    const threads = new Map([[source.id, source]]);
+    context.harness.sdk.stub(
+      "threads.get",
+      ({ threadId }: { threadId: string }) => threads.get(threadId),
+    );
+    context.store.tasks.upsertTaskThread({
+      taskId: task.id,
+      threadId: source.id,
+      presetName: "Attached",
+      title: "source",
+      liveStatus: "idle",
+    });
+    context.store.tasks.upsertProjectThread({
+      projectId: context.project.id,
+      threadId: source.id,
+      title: "source",
+    });
+    const addThread = (overrides: Parameters<typeof makeThreadResponse>[0]) => {
+      const thread = makeThreadResponse({
+        projectId: "proj_launch",
+        createdAt: Date.now(),
+        ...overrides,
+      });
+      threads.set(thread.id, thread);
+      return thread;
+    };
+    const split = async (threadId: string, paneAgeMs = 2_000) =>
+      delegationRpcContract.threadSplitAttach.output.parse(
+        await context.harness.callRpc("threadSplitAttach", {
+          sourceThreadId: source.id,
+          threadId,
+          paneAgeMs,
+        }),
+      );
+    return { ...context, task, addThread, split };
+  }
+
+  it("attaches a thread created in a split to the source thread's tasks and projects", async () => {
+    const { harness, store, project, task, addThread, split } = splitSetup();
+    addThread({ id: "thr_split", titleFallback: "split work", status: "active" });
+
+    expect(await split("thr_split")).toEqual({
+      taskIds: [task.id],
+      projectIds: [project.id],
+    });
+    expect(store.tasks.listTaskThreads(task.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          threadId: "thr_split",
+          title: "split work",
+          presetName: "Attached",
+          liveStatus: "working",
+        }),
+      ]),
+    );
+    expect(store.tasks.listProjectThreads(project.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ threadId: "thr_split", title: "split work" }),
+      ]),
+    );
+    expect(harness.realtimeSignals).toContainEqual({
+      channel: "threads:changed",
+      payload: { taskId: task.id },
+    });
+  });
+
+  it("ignores existing threads opened in a split, other projects, and non-composed threads", async () => {
+    const { store, task, addThread, split } = splitSetup();
+    addThread({ id: "thr_old", createdAt: Date.now() - 60_000 });
+    addThread({ id: "thr_other", projectId: "proj_other" });
+    addThread({ id: "thr_fork", originKind: "fork" });
+
+    for (const threadId of ["thr_old", "thr_other", "thr_fork", "thr_source"]) {
+      expect(await split(threadId)).toEqual({ taskIds: [], projectIds: [] });
+    }
+    expect(
+      store.tasks.listTaskThreads(task.id).map((thread) => thread.threadId),
+    ).toEqual(["thr_source"]);
+  });
+
+  it("leaves threads claimed by My Tasks New thread to their own target", async () => {
+    const { harness, store, task, addThread, split } = splitSetup();
+    const other = store.tasks.createTask({
+      projectId: task.projectId,
+      title: "Other",
+    });
+    await harness.callRpc("taskThreadsCompose", { taskId: other.id });
+    const thread = addThread({ id: "thr_claimed" });
+
+    expect(await split("thr_claimed")).toEqual({ taskIds: [], projectIds: [] });
+    await harness.emitThreadEvent("thread.created", { thread });
+    expect(await split("thr_claimed")).toEqual({ taskIds: [], projectIds: [] });
+    expect(store.tasks.listTasksByThreadId("thr_claimed")).toEqual([
+      expect.objectContaining({ id: other.id }),
+    ]);
+  });
+});

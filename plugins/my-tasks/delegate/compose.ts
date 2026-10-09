@@ -7,7 +7,7 @@ import {
   publishTasksChanged,
   type TasksApiStore,
 } from "../api";
-import type { Project } from "../db";
+import type { Project, TaskThreadLiveStatus } from "../db";
 import type { ThreadsChangedEvent } from "../shared/contract";
 import { truncateToWidth } from "../shared/text-measure";
 
@@ -17,6 +17,7 @@ export const COMPOSE_CLAIM_TTL_MS = 10 * 60 * 1000;
 const COMPOSE_CLAIM_LIMIT = 100;
 export const COMPOSED_THREAD_TITLE_WIDTH = 80;
 export const MANUAL_PRESET_NAME = "Attached";
+export const SPLIT_ATTACH_LATENCY_MS = 5_000;
 
 export type ComposeTarget =
   | { kind: "project"; projectId: string }
@@ -30,6 +31,7 @@ interface ComposeClaim {
 export interface ComposeClaims {
   claim(bbProjectId: string, target: ComposeTarget): void;
   take(bbProjectId: string): ComposeTarget | null;
+  has(bbProjectId: string): boolean;
 }
 
 export function publishThreadsChanged(bb: BbPluginApi, taskId: string): void {
@@ -61,6 +63,10 @@ export function createComposeClaims(now: () => number = Date.now): ComposeClaims
       if (!claim) return null;
       claims.delete(bbProjectId);
       return claim.expiresAt > now() ? claim.target : null;
+    },
+    has(bbProjectId) {
+      const claim = claims.get(bbProjectId);
+      return claim !== undefined && claim.expiresAt > now();
     },
   };
 }
@@ -139,6 +145,77 @@ export function attachComposedThread(
   });
   publishProjectsChanged(bb, project.id);
   return true;
+}
+
+export interface SplitAttachInput {
+  source: ThreadResponse;
+  thread: ThreadResponse;
+  paneAgeMs: number;
+  liveStatus: TaskThreadLiveStatus;
+  now: number;
+}
+
+export interface SplitAttachResult {
+  taskIds: string[];
+  projectIds: string[];
+}
+
+const NOTHING_ATTACHED: SplitAttachResult = { taskIds: [], projectIds: [] };
+
+export function attachSplitThread(
+  bb: BbPluginApi,
+  store: TasksApiStore,
+  claims: ComposeClaims,
+  input: SplitAttachInput,
+): SplitAttachResult {
+  const { source, thread } = input;
+  if (
+    thread.id === source.id ||
+    !isComposedThread(thread) ||
+    thread.projectId !== source.projectId ||
+    thread.createdAt < input.now - input.paneAgeMs - SPLIT_ATTACH_LATENCY_MS ||
+    claims.has(thread.projectId) ||
+    store.tasks.listTaskThreadsByThreadId(thread.id).length > 0 ||
+    store.tasks.listProjectsByThreadId(thread.id).length > 0
+  ) {
+    return NOTHING_ATTACHED;
+  }
+  const tasks = store.tasks.listTasksByThreadId(source.id);
+  const projects = store.tasks.listProjectsByThreadId(source.id);
+  if (tasks.length === 0 && projects.length === 0) return NOTHING_ATTACHED;
+  store.transaction(() => {
+    for (const task of tasks) {
+      store.tasks.upsertTaskThread({
+        taskId: task.id,
+        threadId: thread.id,
+        presetName: MANUAL_PRESET_NAME,
+        title: composedTitle(thread, task.title),
+        liveStatus: input.liveStatus,
+      });
+    }
+    for (const project of projects) {
+      store.tasks.upsertProjectThread({
+        projectId: project.id,
+        threadId: thread.id,
+        title: composedTitle(thread, project.name),
+      });
+    }
+  });
+  for (const task of tasks) {
+    publishThreadsChanged(bb, task.id);
+    publishTasksChanged(bb, task.id, task.projectId);
+  }
+  const projectIds = [
+    ...new Set([
+      ...tasks.map((task) => task.projectId),
+      ...projects.map((project) => project.id),
+    ]),
+  ];
+  for (const projectId of projectIds) publishProjectsChanged(bb, projectId);
+  return {
+    taskIds: tasks.map((task) => task.id),
+    projectIds: projects.map((project) => project.id),
+  };
 }
 
 export function refreshProjectThreadTitles(

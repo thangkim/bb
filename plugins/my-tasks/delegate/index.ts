@@ -25,6 +25,7 @@ import { errorMessage } from "../shared/errors";
 import { truncateToWidth } from "../shared/text-measure";
 import { delegationRpcContract } from "./contract";
 import {
+  attachSplitThread,
   composeClaimsFor,
   MANUAL_PRESET_NAME,
   publishThreadsChanged,
@@ -582,6 +583,20 @@ export function handlers(
       const bbProjectId = requireLinkedBbProject(project);
       composeClaimsFor(bb).claim(bbProjectId, { kind: "task", taskId: task.id });
       return { bbProjectId };
+    },
+
+    async threadSplitAttach(input) {
+      const [source, thread] = await Promise.all([
+        bb.sdk.threads.get({ threadId: input.sourceThreadId }),
+        bb.sdk.threads.get({ threadId: input.threadId }),
+      ]);
+      return attachSplitThread(bb, store, composeClaimsFor(bb), {
+        source,
+        thread,
+        paneAgeMs: input.paneAgeMs,
+        liveStatus: taskThreadLiveStatus(thread),
+        now: Date.now(),
+      });
     },
 
     async projectThreadsDetach(input) {

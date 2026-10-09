@@ -185,6 +185,14 @@ dialog that suggests open tasks from projects linked to the thread's bb
 project, searches all tasks and projects, and lists what the thread is already
 attached to; select an attached item to detach it.
 
+Splitting a thread that is attached to tasks or projects carries those links
+over: when you open a new split pane from the active thread (a split shortcut or
+bb's New thread beside it) and send its first message, the new thread is
+attached to the same tasks and projects. It only applies to a thread created
+in that pane, in the same bb project, while the source pane stays open; an
+existing thread opened in a split, and threads already claimed by a My Tasks
+**New thread**, are left alone.
+
 If work begins outside the Delegate action, the agent can associate its current
 thread with `bb my-tasks attach KEY`. The inverse is `bb my-tasks detach KEY
 [--thread <id>]`, and each thread card on the task page has a detach control;

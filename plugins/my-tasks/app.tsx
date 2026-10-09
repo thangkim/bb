@@ -5,6 +5,7 @@ import { TasksNavigationPanel } from "./shell/navigation-panel.js";
 import { TaskDirectiveCard, TaskEmbedPanel } from "./views/embed/index.js";
 import { ThreadLinksOverlay } from "./thread-links/dialog.js";
 import { openThreadLinks } from "./thread-links/store.js";
+import { SplitAttachController } from "./split-attach/controller.js";
 
 export default definePluginApp((app) => {
   app.slots.navPanel({
@@ -35,6 +36,10 @@ export default definePluginApp((app) => {
   app.slots.experimental_appOverlay({
     id: "thread-links",
     component: ThreadLinksOverlay,
+  });
+  app.slots.experimental_appOverlay({
+    id: "split-attach",
+    component: SplitAttachController,
   });
   app.slots.experimental_threadMenuAction({
     id: "attach",
