@@ -1,0 +1,44 @@
+{
+  "name": "bb-plugin-pane-collapse",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Temporarily collapse a split pane's thread to a narrow strip, and expand it again with one click.",
+  "engines": {
+    "bb": ">=0.0",
+    "bbPluginSdk": ">=0.5.27"
+  },
+  "bb": {
+    "name": "Pane Collapse",
+    "description": "Collapse a thread pane in a split to a narrow chat strip from its header, then click the strip to expand it again.",
+    "branding": {
+      "icon": "Columns2"
+    },
+    "server": "./server.ts",
+    "app": "./app.tsx"
+  },
+  "keywords": [
+    "bb-plugin"
+  ],
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint --ignore-pattern node_modules --ignore-pattern dist ."
+  },
+  "dependencies": {
+    "@bb/shared-ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@get-bb/plugin-sdk": "workspace:*",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "jsdom": "^29.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "vitest": "^4.1.1"
+  }
+}
