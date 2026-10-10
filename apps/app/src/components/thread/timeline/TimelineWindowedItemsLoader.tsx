@@ -56,6 +56,7 @@ export interface TimelineWindowedItemsProps {
     index: number,
     state: TimelineWindowedItemRenderState,
   ) => ReactNode;
+  pinnedToEnd: boolean;
 }
 
 export function TimelineWindowedItemsLoader(props: TimelineWindowedItemsProps) {

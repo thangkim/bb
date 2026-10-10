@@ -33,9 +33,6 @@ export const {
   experimental_useThreadMenuActions,
   experimental_useSidebarThreadPullRequest,
   experimental_useSidebarThreadSplit,
-  experimental_useSidebarNavigation,
-  experimental_useSidebarNavigationSplit,
-  experimental_SidebarNavigationIcon,
   useSidebarThreadDraft,
   useSidebarThreadDraftIds,
   useSidebarThreadRowStatus,
@@ -49,5 +46,6 @@ export const {
   experimental_useCodeTheme,
   experimental_useSplitPanes,
   experimental_useNewThreadHandler,
+  experimental_copyToClipboard,
   experimental_usePluginId,
 } = pluginSdkAppImplementation;

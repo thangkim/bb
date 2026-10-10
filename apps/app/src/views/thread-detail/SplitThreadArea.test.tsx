@@ -206,6 +206,7 @@ vi.mock("react-resizable-panels", async () => {
 
 vi.mock("@/components/ui/sidebar.js", () => ({
   useIsSidebarShowing: () => sidebarState.showing,
+  useSidebarKeepsCollapsedRail: () => false,
 }));
 
 vi.mock("@/views/RootComposeView", () => ({
@@ -273,8 +274,8 @@ vi.mock("@/components/plugin/PluginPanelRightPanelHost", () => ({
   },
 }));
 
-vi.mock("./ThreadDetailView", () => ({
-  ThreadDetailView: ({
+vi.mock("./LazyThreadDetailView", () => ({
+  LazyThreadDetailView: ({
     projectId = "proj_personal",
     threadId = "thr-a",
     timelineEnabled = true,
@@ -764,6 +765,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  window.dispatchEvent(new Event("pagehide"));
   vi.restoreAllMocks();
   threadStore.clear();
   resetPluginSlotStoreForTest();
@@ -987,7 +989,7 @@ describe("SplitThreadArea", () => {
     });
 
     expect(screen.queryByTestId("mock-collapsed-thread-rail")).toBeNull();
-    fireEvent.click(screen.getByTestId("maximize-thr-a"));
+    fireEvent.click(await screen.findByTestId("maximize-thr-a"));
 
     expect(screen.getByTestId("maximize-thr-a").textContent).toBe("restore");
     await waitFor(() => {
@@ -1031,7 +1033,7 @@ describe("SplitThreadArea", () => {
     await waitFor(() => expect(hiddenScroller.scrollTop).toBe(0));
   });
 
-  it("stops the restore loop once positions settle instead of burning 30 frames", () => {
+  it("stops the restore loop once positions settle instead of burning 30 frames", async () => {
     const frames = new Map<number, FrameRequestCallback>();
     let frameId = 0;
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
@@ -1056,7 +1058,7 @@ describe("SplitThreadArea", () => {
       path: threadPath("thr-a"),
       layout: twoPaneLayout("pane-1"),
     });
-    const hiddenScroller = screen.getByTestId("scroll-thr-b");
+    const hiddenScroller = await screen.findByTestId("scroll-thr-b");
     hiddenScroller.scrollTop = 12;
     fireEvent.scroll(hiddenScroller);
 
@@ -1728,8 +1730,10 @@ describe("SplitThreadArea", () => {
     });
 
     const toggle = await screen.findByTestId("split-workspace-panel-toggle");
-    expect(toggle.querySelector("button")?.getAttribute("aria-expanded")).toBe(
-      "true",
+    await waitFor(() =>
+      expect(
+        toggle.querySelector("button")?.getAttribute("aria-expanded"),
+      ).toBe("true"),
     );
     expect(
       screen.queryByTestId("split-workspace-empty-panel-state"),
@@ -2944,7 +2948,7 @@ describe("SplitThreadArea", () => {
       externalTo: threadPath("thr-c"),
     });
 
-    expect(screen.getByTestId("pane-thr-b")).toBeTruthy();
+    expect(await screen.findByTestId("pane-thr-b")).toBeTruthy();
     fireEvent.click(screen.getByTestId("external-nav"));
 
     expect(await screen.findByTestId("pane-thr-c")).toBeTruthy();

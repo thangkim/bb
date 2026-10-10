@@ -122,6 +122,9 @@ export const UrlLink = runtimeComponent("UrlLink");
 export const experimental_NewThreadComposer = runtimeComponent(
   "experimental_NewThreadComposer",
 );
+export const experimental_VoiceInputTextarea = runtimeComponent(
+  "experimental_VoiceInputTextarea",
+);
 export const experimental_ProviderModelPicker = runtimeComponent(
   "experimental_ProviderModelPicker",
 );
@@ -183,15 +186,6 @@ export const experimental_useSidebarThreadPullRequest = runtimeFunction(
 export const experimental_useSidebarThreadSplit = runtimeFunction(
   "experimental_useSidebarThreadSplit",
 );
-export const experimental_useSidebarNavigation = runtimeFunction(
-  "experimental_useSidebarNavigation",
-);
-export const experimental_useSidebarNavigationSplit = runtimeFunction(
-  "experimental_useSidebarNavigationSplit",
-);
-export const experimental_SidebarNavigationIcon = runtimeComponent(
-  "experimental_SidebarNavigationIcon",
-);
 export const useSidebarThreadDraft = runtimeFunction("useSidebarThreadDraft");
 export const useSidebarThreadDraftIds = runtimeFunction(
   "useSidebarThreadDraftIds",
@@ -226,4 +220,9 @@ export const experimental_useSplitPanes = runtimeFunction(
 );
 export const experimental_useNewThreadHandler = runtimeFunction(
   "experimental_useNewThreadHandler",
+);
+// bb's clipboard writer, the one bb's own copy actions use (experimental —
+// see docs/api_to_audit.md).
+export const experimental_copyToClipboard = runtimeFunction(
+  "experimental_copyToClipboard",
 );

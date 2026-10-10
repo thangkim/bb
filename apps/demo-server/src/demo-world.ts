@@ -59,6 +59,7 @@ import {
 
 const SYSTEM_CONFIG = systemConfigResponseSchema.parse({
   ...configFixture,
+  performanceDiagnosticsAvailable: false,
   generalSettings: defaultAppSettings,
   experiments: { ...defaultExperiments },
   appearance: defaultAppTheme,
@@ -187,12 +188,11 @@ function createUiPreferences(): UiPreferenceEntries {
     "sidebar.visiblePluginPanels": uiPreferenceEntry(
       "sidebar.visiblePluginPanels",
     ),
-    "sidebar.navigationProvider": uiPreferenceEntry(
-      "sidebar.navigationProvider",
-    ),
-    "sidebar.headerProvider": uiPreferenceEntry("sidebar.headerProvider"),
     "sidebar.threadListProvider": uiPreferenceEntry(
       "sidebar.threadListProvider",
+    ),
+    "infoPanel.collapsedSections": uiPreferenceEntry(
+      "infoPanel.collapsedSections",
     ),
   };
 }

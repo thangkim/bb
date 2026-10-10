@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { transcribeVoiceInput } from "@/lib/api";
 import type { PromptDraftState } from "@bb/client-core";
+import type { PluginComposerHost } from "@/components/plugin/plugin-composer-host";
 import type { PromptBoxHandle, PromptVoiceConfig } from "./PromptBoxInternal";
 import type { PromptVoiceSession } from "./plugin-voice-input";
 
@@ -27,6 +28,7 @@ export function usePromptVoice(
   draft?: {
     getCurrent: () => PromptDraftState;
     setDraft: (draft: PromptDraftState) => void;
+    submit?: PluginComposerHost["submit"];
   },
 ): PromptVoiceConfig {
   const pluginSessionRef = useRef<PromptVoiceSession | null>(null);
@@ -37,7 +39,6 @@ export function usePromptVoice(
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      sendPendingRef.current = false;
     };
   }, []);
 
@@ -71,6 +72,7 @@ export function usePromptVoice(
         ...current,
         text: `${current.text}${separator}${text}`,
       });
+      if (send) return draft.submit?.({ experimental_data: null }, undefined);
     },
     [draft, promptBoxRef],
   );
@@ -156,6 +158,7 @@ export function usePromptVoice(
   return useMemo<PromptVoiceConfig>(
     () => ({
       state: voiceInput.state,
+      microphoneWarning: voiceInput.microphoneWarning,
       isSupported: voiceInput.isSupported,
       stream: voiceInput.stream,
       start: voiceInput.start,
@@ -165,6 +168,7 @@ export function usePromptVoice(
     }),
     [
       voiceInput.state,
+      voiceInput.microphoneWarning,
       voiceInput.isSupported,
       voiceInput.stream,
       voiceInput.start,
