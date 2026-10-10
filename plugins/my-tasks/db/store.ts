@@ -1868,6 +1868,19 @@ export function createTasksStore(db: PluginDatabase) {
       .map(taskThreadFromRow);
   }
 
+  function listUnfinishedTaskThreads(): TaskThread[] {
+    return db
+      .prepare<[], TaskThreadRow>(
+        `
+        SELECT * FROM task_threads
+        WHERE live_status <> 'completed'
+        ORDER BY task_id, id
+      `,
+      )
+      .all()
+      .map(taskThreadFromRow);
+  }
+
   function taskRowMeta(taskIds: readonly string[]): Map<string, TaskRowMeta> {
     const byTask = new Map<string, TaskRowMeta>();
     for (const taskId of taskIds) {
@@ -2229,6 +2242,7 @@ export function createTasksStore(db: PluginDatabase) {
     listTaskThreadsByThreadId,
     listTasksByThreadId,
     listTaskThreads,
+    listUnfinishedTaskThreads,
     taskRowMeta,
     updateTaskThreadStatus,
     deleteTaskThread,

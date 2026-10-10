@@ -70,6 +70,7 @@ function useActivityFeed(taskId: string) {
     },
     ["comments:changed", "tasks:changed"],
     [taskId],
+    { scope: { taskId } },
   );
 }
 

@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { useSettings } from "@get-bb/plugin-sdk/app";
 import type {
   Label,
   Project,
   ProjectThread,
   SidebarProjectSummary,
 } from "../../shared/contract.js";
+import { readShowCollapsedProjectThreads } from "../../shared/settings.js";
 import { ProgressBar } from "../../components/progress-bar.js";
 import { useActiveThread } from "../../components/active-thread.js";
 import { Icon } from "@/components/ui/icon";
@@ -79,6 +81,12 @@ export function ProjectRow({
   const done = project.status === "done";
   const activeThreadProject = useActiveThread().projectIds.has(project.id);
   const visibleThreads = withoutArchivedThreads(threads, unarchivedThreadIds);
+  const showCollapsedThreads = readShowCollapsedProjectThreads(
+    useSettings().values,
+  );
+  const showThreads = expanded || showCollapsedThreads;
+  const hasThreadLinks =
+    showThreads && (visibleThreads.length > 0 || threadsError !== null);
 
   return (
     <ProjectContextMenu project={project} onEdit={onEdit} onDelete={onDelete}>
@@ -225,9 +233,9 @@ export function ProjectRow({
             />
           </div>
         </div>
-        {visibleThreads.length > 0 || threadsError !== null || expanded ? (
+        {hasThreadLinks || expanded ? (
           <div className="pb-2 pl-10.5 pr-3.5">
-            {visibleThreads.length > 0 || threadsError !== null ? (
+            {hasThreadLinks ? (
               <ProjectThreadLinks
                 projectId={project.id}
                 threads={visibleThreads}

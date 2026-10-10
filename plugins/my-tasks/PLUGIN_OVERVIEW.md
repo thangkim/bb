@@ -7,7 +7,9 @@ Turn a plan into tracked tasks, hand each task to an agent, and see the worker's
 - **New thread** and **Attach thread** on every task; clicking a thread opens it in a split pane.
 - **New thread** on a project or a task opens an empty composer beside the list. The thread you send from it is attached to that project or task.
 - **Splits keep links**: a thread created in a split pane opened from an attached thread joins the same tasks and projects.
+- **Side chats nest under their thread**: side chats you replied in are listed under the project or task thread they branch from.
 - **Attach to My Tasks…** in every thread's menu: search projects and tasks, and attach or detach the thread in one dialog.
+- **Thread header badge**: an attached thread's header shows its task (or its project when no task is attached); click it to open the task or project.
 - Markdown comments with a **Notify last responding agent** switch. The comment goes to the worker thread and resumes it when idle.
 - A **Delegate** menu that starts a worker thread from a preset. A preset sets the provider, model, reasoning level, permission mode, and instructions.
 - Live thread cards on each task and a **Task** panel action inside a thread.

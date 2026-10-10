@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PluginNavPanelProps } from "@get-bb/plugin-sdk/app";
+import {
+  useSidebarSplitLayout,
+  type PluginNavPanelProps,
+} from "@get-bb/plugin-sdk/app";
 import { useProjects } from "./data.js";
+import { usePersistentPaneWidth } from "./pane-width.js";
 import {
   parseTasksRoute,
   useTasksNavigation,
@@ -101,6 +105,7 @@ function TasksAppShellContent({ subPath }: PluginNavPanelProps) {
   };
 
   const mainRef = useRef<HTMLElement>(null);
+  usePersistentPaneWidth(mainRef, useSidebarSplitLayout());
   const [boardUsable, setBoardUsable] = useState(true);
   useEffect(() => {
     const main = mainRef.current;

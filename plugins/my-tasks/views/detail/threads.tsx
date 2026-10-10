@@ -22,6 +22,8 @@ import {
   storeLastPresetId,
 } from "./last-preset.js";
 import { useTasksRpc } from "../../shell/data.js";
+import { useLiveThreadTitle } from "../tasks/live-thread-title.js";
+import { SideChatLinks } from "../tasks/side-chats.js";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -83,49 +85,54 @@ function ThreadCard({
   onDetach: () => void;
 }) {
   const openThread = useOpenThreadInSplit();
+  const title = useLiveThreadTitle(thread.threadId, thread.title);
   const meta = THREAD_STATUS_META[thread.liveStatus];
   return (
-    <div className="mb-2 flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2 shadow-2xs">
-      <span
-        className={cn(
-          "flex shrink-0 items-center gap-1.5 text-xs font-medium",
-          meta.textClassName,
-        )}
-      >
+    <div className="mb-2 flex flex-col gap-1">
+      <div className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2 shadow-2xs">
         <span
-          aria-hidden
-          className={cn("size-1.5 rounded-full", meta.dotClassName)}
-        />
-        {meta.label}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium">{thread.title}</div>
-        <div className="text-xs text-muted-foreground">
-          {thread.presetName} · attached {formatRelativeTime(thread.attachedAt)}
+          className={cn(
+            "flex shrink-0 items-center gap-1.5 text-xs font-medium",
+            meta.textClassName,
+          )}
+        >
+          <span
+            aria-hidden
+            className={cn("size-1.5 rounded-full", meta.dotClassName)}
+          />
+          {meta.label}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">{title}</div>
+          <div className="text-xs text-muted-foreground">
+            {thread.presetName} · attached{" "}
+            {formatRelativeTime(thread.attachedAt)}
+          </div>
         </div>
+        <ThreadPullRequestPill
+          pullRequest={pullRequest}
+          unavailable={pullRequestUnavailable}
+        />
+        <button
+          type="button"
+          className="flex shrink-0 items-center gap-1 text-xs font-medium underline decoration-input underline-offset-2 hover:decoration-current"
+          onClick={() => openThread(thread.threadId)}
+        >
+          Open thread
+          <Icon name="ArrowUpRight" className="size-3" />
+        </button>
+        <button
+          type="button"
+          aria-label={`Detach ${title}`}
+          title="Detach from task"
+          disabled={busy}
+          className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-state-hover hover:text-foreground disabled:opacity-70"
+          onClick={onDetach}
+        >
+          <Icon name="X" className="size-3" />
+        </button>
       </div>
-      <ThreadPullRequestPill
-        pullRequest={pullRequest}
-        unavailable={pullRequestUnavailable}
-      />
-      <button
-        type="button"
-        className="flex shrink-0 items-center gap-1 text-xs font-medium underline decoration-input underline-offset-2 hover:decoration-current"
-        onClick={() => openThread(thread.threadId)}
-      >
-        Open thread
-        <Icon name="ArrowUpRight" className="size-3" />
-      </button>
-      <button
-        type="button"
-        aria-label={`Detach ${thread.title}`}
-        title="Detach from task"
-        disabled={busy}
-        className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-state-hover hover:text-foreground disabled:opacity-70"
-        onClick={onDetach}
-      >
-        <Icon name="X" className="size-3" />
-      </button>
+      <SideChatLinks threadId={thread.threadId} className="pl-3" />
     </div>
   );
 }

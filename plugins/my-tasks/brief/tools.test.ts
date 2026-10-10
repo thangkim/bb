@@ -1,15 +1,22 @@
-import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
+import {
+  createFakePluginHost,
+  makePluginAgentConfigurationContext,
+} from "@get-bb/plugin-sdk/testing";
 import { describe, expect, it } from "vitest";
 import { createStore } from "../api";
 import { readBrief } from "./brief";
 import {
+  MY_TASKS_SKILL,
   READ_BRIEF_TOOL,
   registerProjectBrief,
   UPDATE_BRIEF_TOOL,
 } from ".";
 
 function setup() {
-  const { bb, harness } = createFakePluginHost({ pluginId: "tasks" });
+  const { bb, harness } = createFakePluginHost({
+    pluginId: "tasks",
+    agentSkillIds: [MY_TASKS_SKILL],
+  });
   const store = createStore(bb);
   registerProjectBrief(bb, store);
   const project = store.tasks.createProject({
@@ -120,20 +127,37 @@ describe("project brief tools", () => {
     );
   });
 
-  it("tells only linked threads to ask before updating the brief", () => {
+  it("offers the brief tools and instructions only to linked threads", async () => {
     const { harness, store, project } = setup();
-    const provider = harness.registrations.instructionProvider!;
-    expect(provider({ threadId: "thr_none", projectId: "proj_x" })).toBeNull();
+    const resolve = (threadId: string) =>
+      harness.resolveAgentConfiguration(
+        makePluginAgentConfigurationContext({
+          thread: {
+            id: threadId,
+            title: null,
+            parentThreadId: null,
+            sourceThreadId: null,
+          },
+        }),
+      );
+
+    const unlinked = await resolve("thr_none");
+    expect(unlinked.tools).toEqual([]);
+    expect(unlinked.skills).toEqual([MY_TASKS_SKILL]);
+    expect(unlinked.instructions).toBeNull();
+
     store.tasks.upsertProjectThread({
       projectId: project.id,
       threadId: "thr_linked",
       title: "Linked",
     });
-    const instructions = provider({
-      threadId: "thr_linked",
-      projectId: "proj_x",
-    });
-    expect(instructions).toContain('PRD "Connect repo"');
-    expect(instructions).toContain("only after the user agrees");
+    const linked = await resolve("thr_linked");
+    expect(linked.tools.map((tool) => tool.name)).toEqual([
+      READ_BRIEF_TOOL,
+      UPDATE_BRIEF_TOOL,
+    ]);
+    expect(linked.skills).toEqual([MY_TASKS_SKILL]);
+    expect(linked.instructions).toContain('PRD "Connect repo"');
+    expect(linked.instructions).toContain("only after the user agrees");
   });
 });

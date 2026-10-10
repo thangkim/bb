@@ -115,11 +115,11 @@ function ProjectThreads({
       />
       <div className="flex flex-col gap-0.5">
         {rows.map(({ task, thread }) => (
-          <div key={thread.id} className="flex min-w-0 items-center gap-2">
+          <div key={thread.id} className="flex min-w-0 items-start gap-2">
             <div className="min-w-0 flex-1">
               <ThreadRow thread={thread} />
             </div>
-            <span className="max-w-[45%] shrink-0 truncate text-xs text-subtle-foreground">
+            <span className="max-w-[45%] shrink-0 truncate py-0.5 text-xs text-subtle-foreground">
               → {task.title}
             </span>
           </div>

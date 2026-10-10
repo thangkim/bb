@@ -7,6 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { COMPACT_VIEWPORT_QUERY } from "@/components/ui/hooks/use-compact-viewport";
 import type {
@@ -130,7 +131,16 @@ interface Fixture {
   presets?: Preset[];
   sidebarThreadIds?: string[];
   archivedThreadIds?: string[];
-  sideChats?: { id: string; title: string; sourceThreadId: string }[];
+  sideChats?: {
+    id: string;
+    title: string;
+    sourceThreadId: string;
+    replied?: boolean;
+    pluginId?: string;
+    status?: PluginSidebarThread["status"];
+    createdAt?: number;
+  }[];
+  renamedThreads?: Record<string, string>;
   settings?: Record<string, boolean>;
   threadLinks?: Record<string, { tasks: Task[]; projects: Project[] }>;
   focusedThreadId?: string;
@@ -146,6 +156,19 @@ function renderList(fixture: Fixture = {}) {
       .map((thread) => thread.threadId)
       .filter((threadId) => !archived.has(threadId)),
   ]);
+  const storedTitles = new Map(
+    [
+      ...Object.values(fixture.threadsByTask ?? {}).flat(),
+      ...Object.values(fixture.threadsByProject ?? {}).flat(),
+    ].map((thread) => [thread.threadId, thread.title]),
+  );
+  const sidebarThread = (threadId: string) => {
+    const title =
+      fixture.renamedThreads?.[threadId] ??
+      storedTitles.get(threadId) ??
+      "Worker";
+    return { ...makeSidebarThread(threadId), title, displayTitle: title };
+  };
   const tasks = [...(fixture.tasks ?? [task(1), task(2, "done")])];
   return renderSlot(
     app.navPanels[0]!,
@@ -174,13 +197,16 @@ function renderList(fixture: Fixture = {}) {
           }),
       sidebarThreads: {
         threads: [
-          ...[...unarchivedThreadIds].map(makeSidebarThread),
+          ...[...unarchivedThreadIds].map(sidebarThread),
           ...(fixture.sideChats ?? []).map((sideChat) => ({
             ...makeSidebarThread(sideChat.id),
+            title: sideChat.replied === false ? null : sideChat.title,
             displayTitle: sideChat.title,
             sourceThreadId: sideChat.sourceThreadId,
             originKind: "fork" as const,
-            originPluginId: "side-chat",
+            originPluginId: sideChat.pluginId ?? "side-chat",
+            status: sideChat.status ?? "idle",
+            createdAt: sideChat.createdAt ?? 1,
             isHidden: true,
           })),
         ],
@@ -341,7 +367,10 @@ function dropOnUpperHalf(
     Object.defineProperty(event, "clientY", { value: 104 });
     return event;
   };
-  fireEvent(target, atUpperHalf(createEvent.dragOver(target, { dataTransfer })));
+  fireEvent(
+    target,
+    atUpperHalf(createEvent.dragOver(target, { dataTransfer })),
+  );
   expect(target.querySelector('[data-drop-line="before"]')).not.toBeNull();
   fireEvent(target, atUpperHalf(createEvent.drop(target, { dataTransfer })));
   fireEvent.dragEnd(target, { dataTransfer });
@@ -587,6 +616,68 @@ describe("projects list", () => {
     expect(slot.navigateCalls).toEqual([]);
   });
 
+  it("puts a task's priority and thread actions right under its name, above its threads", async () => {
+    const first = task(1);
+    const slot = renderList({
+      tasks: [first],
+      threadsByTask: { [first.id]: [thread(first.id, "W1")] },
+      sidebarThreadIds: ["thr_W1"],
+    });
+    const row = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(row).getByRole("button", { name: "Show tasks" }));
+    fireEvent.click(
+      await within(row).findByRole("button", {
+        name: "Show attached threads",
+      }),
+    );
+    const worker = await within(row).findByRole("button", { name: /Worker/ });
+    const priority = within(row).getByRole("button", {
+      name: "Set priority, currently No priority",
+    });
+    expect(
+      priority.compareDocumentPosition(worker) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("shows a task thread's current title after the thread is renamed", async () => {
+    const first = task(1);
+    const slot = renderList({
+      tasks: [first],
+      threadsByTask: { [first.id]: [thread(first.id, "W1")] },
+      sidebarThreadIds: ["thr_W1"],
+      renamedThreads: { thr_W1: "Renamed worker" },
+    });
+    const row = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(row).getByRole("button", { name: "Show tasks" }));
+    fireEvent.click(
+      await within(row).findByRole("button", {
+        name: "Show attached threads",
+      }),
+    );
+    expect(
+      await within(row).findByRole("button", { name: /^Renamed worker/ }),
+    ).toBeTruthy();
+    expect(within(row).queryByRole("button", { name: /^Worker/ })).toBeNull();
+  });
+
+  it("shows a project thread's current title after the thread is renamed", async () => {
+    const slot = renderList({
+      threadsByProject: { [LAUNCH.id]: [projectThread(LAUNCH.id, "P1")] },
+      renamedThreads: { thr_P1: "Renamed project worker" },
+    });
+    const row = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(row).getByRole("button", { name: "Show tasks" }));
+    expect(
+      await within(row).findByRole("button", {
+        name: "Renamed project worker",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(row).queryByRole("button", { name: "Project worker P1" }),
+    ).toBeNull();
+  });
+
   it("lists project-level threads above the tasks and opens one beside the list", async () => {
     const slot = renderList({
       tasks: [task(1)],
@@ -631,6 +722,7 @@ describe("projects list", () => {
       ],
     });
     const row = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(row).getByRole("button", { name: "Show tasks" }));
     const projectThreads = row.querySelector(
       `[data-project-threads="${LAUNCH.id}"]`,
     ) as HTMLElement;
@@ -653,6 +745,115 @@ describe("projects list", () => {
     });
   });
 
+  it("lists only replied side chats under a project thread, oldest first, from either side chat plugin", async () => {
+    const slot = renderList({
+      threadsByProject: { [LAUNCH.id]: [projectThread(LAUNCH.id, "P1")] },
+      sidebarThreadIds: ["thr_P1"],
+      sideChats: [
+        {
+          id: "thr_S2",
+          title: "Later question",
+          sourceThreadId: "thr_P1",
+          pluginId: "side-chat-plus",
+          createdAt: 20,
+        },
+        {
+          id: "thr_S1",
+          title: "Earlier question",
+          sourceThreadId: "thr_P1",
+          createdAt: 10,
+        },
+        {
+          id: "thr_S3",
+          title: "Opened, never asked",
+          sourceThreadId: "thr_P1",
+          replied: false,
+        },
+        {
+          id: "thr_S4",
+          title: "First reply running",
+          sourceThreadId: "thr_P1",
+          replied: false,
+          status: "active",
+          createdAt: 30,
+        },
+      ],
+    });
+    const row = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(row).getByRole("button", { name: "Show tasks" }));
+    await within(row).findByRole("button", { name: "Project worker P1" });
+    const sideChats = row.querySelector(
+      '[data-side-chats="thr_P1"]',
+    ) as HTMLElement;
+    expect(
+      within(sideChats)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual([
+      "Earlier question",
+      "Later question",
+      "First reply running — Working",
+    ]);
+  });
+
+  it("nests a task thread's side chats under it in the task row", async () => {
+    const first = task(1);
+    const slot = renderList({
+      tasks: [first],
+      threadsByTask: {
+        [first.id]: [thread(first.id, "W1"), thread(first.id, "W2")],
+      },
+      sidebarThreadIds: ["thr_W1", "thr_W2"],
+      sideChats: [
+        { id: "thr_S1", title: "Why this test?", sourceThreadId: "thr_W1" },
+      ],
+    });
+    const row = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(row).getByRole("button", { name: "Show tasks" }));
+    fireEvent.click(
+      await within(row).findByRole("button", {
+        name: "Show attached threads",
+      }),
+    );
+    const sideChat = await within(row).findByRole("button", {
+      name: "Why this test?",
+    });
+    const [parent, other] = within(row).getAllByRole("button", {
+      name: "Worker — Working",
+    });
+    expect(parent?.parentElement?.contains(sideChat)).toBe(true);
+    expect(other?.parentElement?.contains(sideChat)).toBe(false);
+    fireEvent.click(sideChat);
+    expect(slot.sidebarActionCalls).toContainEqual({
+      method: "open",
+      threadId: "thr_S1",
+      options: { split: true },
+    });
+  });
+
+  it("highlights the task of a focused side chat's parent thread", async () => {
+    const first = task(1);
+    const slot = renderList({
+      tasks: [first, task(3)],
+      focusedThreadId: "thr_S1",
+      threadLinks: { thr_W1: { tasks: [first], projects: [] } },
+      sideChats: [
+        { id: "thr_S1", title: "Side question", sourceThreadId: "thr_W1" },
+      ],
+    });
+    const launch = await projectRow(slot, LAUNCH.id);
+    await waitFor(() =>
+      expect(launch.hasAttribute("data-active-thread-project")).toBe(true),
+    );
+    fireEvent.click(within(launch).getByRole("button", { name: "Show tasks" }));
+    await within(launch).findByRole("checkbox", { name: "Mark Task 3 done" });
+    expect(
+      launch
+        .querySelector(`[data-task-key="${first.key}"]`)
+        ?.hasAttribute("data-active-thread-task"),
+    ).toBe(true);
+  });
+
   it("hides archived project threads from the row", async () => {
     const slot = renderList({
       threadsByProject: {
@@ -665,6 +866,7 @@ describe("projects list", () => {
       archivedThreadIds: ["thr_P2", "thr_P3"],
     });
     const row = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(row).getByRole("button", { name: "Show tasks" }));
     const projectThreads = row.querySelector(
       `[data-project-threads="${LAUNCH.id}"]`,
     ) as HTMLElement;
@@ -679,27 +881,45 @@ describe("projects list", () => {
       }),
     ).toBeNull();
     const polish = await projectRow(slot, POLISH.id);
+    fireEvent.click(within(polish).getByRole("button", { name: "Show tasks" }));
+    await within(polish).findByRole("button", { name: "Hide tasks" });
     expect(
       polish.querySelector(`[data-project-threads="${POLISH.id}"]`),
     ).toBeNull();
   });
 
-  it("shows project threads below the row and icon-only thread actions beside the due date", async () => {
+  it("hides project threads until the row is expanded and keeps icon-only thread actions beside the due date", async () => {
     const slot = renderList({
       threadsByProject: { [LAUNCH.id]: [projectThread(LAUNCH.id, "P1")] },
     });
     const row = await projectRow(slot, LAUNCH.id);
+    await waitFor(() =>
+      expect(
+        slot.rpcCalls.some((call) => call.method === "listProjectThreadsBatch"),
+      ).toBe(true),
+    );
     expect(
-      within(row).getByRole("button", { name: "Show tasks" }),
-    ).toBeTruthy();
-    const projectThreads = row.querySelector(
-      `[data-project-threads="${LAUNCH.id}"]`,
-    ) as HTMLElement;
+      row.querySelector(`[data-project-threads="${LAUNCH.id}"]`),
+    ).toBeNull();
+    fireEvent.click(within(row).getByRole("button", { name: "Show tasks" }));
+    const projectThreads = await waitFor(() => {
+      const element = row.querySelector(
+        `[data-project-threads="${LAUNCH.id}"]`,
+      );
+      if (element === null) throw new Error("project threads not rendered");
+      return element as HTMLElement;
+    });
     expect(
       await within(projectThreads).findByRole("button", {
         name: "Project worker P1",
       }),
     ).toBeTruthy();
+    fireEvent.click(within(row).getByRole("button", { name: "Hide tasks" }));
+    await waitFor(() =>
+      expect(
+        row.querySelector(`[data-project-threads="${LAUNCH.id}"]`),
+      ).toBeNull(),
+    );
     const actions = row.querySelector(
       `[data-project-thread-actions="${LAUNCH.id}"]`,
     ) as HTMLElement;
@@ -723,6 +943,30 @@ describe("projects list", () => {
     );
     expect(batches).toHaveLength(1);
     expect(rpcInput(batches[0]!.input).projectIds).toContain(LAUNCH.id);
+  });
+
+  it("lists project threads on collapsed rows when the Show threads on collapsed projects setting is on", async () => {
+    const slot = renderList({
+      threadsByProject: { [LAUNCH.id]: [projectThread(LAUNCH.id, "P1")] },
+      settings: { showCollapsedProjectThreads: true },
+    });
+    const row = await projectRow(slot, LAUNCH.id);
+    expect(
+      within(row).getByRole("button", { name: "Show tasks" }),
+    ).toBeTruthy();
+    const projectThreads = await waitFor(() => {
+      const element = row.querySelector(
+        `[data-project-threads="${LAUNCH.id}"]`,
+      );
+      if (element === null) throw new Error("project threads not rendered");
+      return element as HTMLElement;
+    });
+    expect(
+      await within(projectThreads).findByRole("button", {
+        name: "Project worker P1",
+      }),
+    ).toBeTruthy();
+    expect(within(row).queryByRole("button", { name: "Add task" })).toBeNull();
   });
 
   it("opens an empty composer for the whole project from its collapsed row", async () => {
@@ -756,7 +1000,8 @@ describe("projects list", () => {
     ).toEqual([{ projectId: LAUNCH.id }]);
     expect(
       slot.rpcCalls.some(
-        (call) => call.method === "delegate" || call.method === "delegateProject",
+        (call) =>
+          call.method === "delegate" || call.method === "delegateProject",
       ),
     ).toBe(false);
   });
@@ -1092,6 +1337,7 @@ describe("projects list", () => {
       },
     });
     const source = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(source).getByRole("button", { name: "Show tasks" }));
     const threadOrder = () =>
       Array.from(source.querySelectorAll("[data-project-thread-id]")).map(
         (row) => row.getAttribute("data-project-thread-id"),

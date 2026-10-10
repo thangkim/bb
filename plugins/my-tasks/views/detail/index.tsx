@@ -131,12 +131,14 @@ function TaskDetail({ task }: { task: Task }) {
       (await query.call("listAttachments", { taskId: task.id })).attachments,
     ["tasks:changed"],
     [task.id],
+    { scope: { taskId: task.id } },
   );
   const threads = useTasksQuery(
     async (query) =>
       (await query.call("listTaskThreads", { taskId: task.id })).taskThreads,
     ["threads:changed"],
     [task.id],
+    { scope: { taskId: task.id } },
   );
   const presets = useTasksQuery(
     async (query) => (await query.call("listPresets")).presets,
@@ -146,6 +148,7 @@ function TaskDetail({ task }: { task: Task }) {
     async (query) => query.call("listTaskPullRequests", { taskId: task.id }),
     ["threads:changed"],
     [task.id],
+    { scope: { taskId: task.id } },
   );
   const refreshPullRequests = pullRequests.refresh;
   const hasActivePullRequest = (pullRequests.data?.pullRequests ?? []).some(
@@ -158,10 +161,9 @@ function TaskDetail({ task }: { task: Task }) {
   }, [refreshPullRequests]);
   useEffect(() => {
     if (!hasActivePullRequest) return;
-    const timer = window.setInterval(
-      refreshPullRequests,
-      ACTIVE_PULL_REQUEST_REFRESH_MS,
-    );
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") refreshPullRequests();
+    }, ACTIVE_PULL_REQUEST_REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [hasActivePullRequest, refreshPullRequests]);
 

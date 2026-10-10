@@ -30,6 +30,7 @@ export function useProjectTasks(projectId: string) {
     async (rpc) => sortItems(await listAllTasks(rpc, { projectId }), "manual"),
     ["tasks:changed", "threads:changed"],
     [projectId],
+    { scope: { projectId } },
   );
 }
 

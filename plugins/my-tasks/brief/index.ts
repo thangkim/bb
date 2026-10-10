@@ -11,6 +11,7 @@ import {
 
 export const READ_BRIEF_TOOL = "my_tasks_project_brief";
 export const UPDATE_BRIEF_TOOL = "my_tasks_update_project_brief";
+export const MY_TASKS_SKILL = "my-tasks";
 
 const BRIEF_OUTPUT_MAX_CHARS = 20_000;
 const INSTRUCTION_PROJECT_LIMIT = 5;
@@ -242,7 +243,13 @@ export function registerProjectBrief(
     },
   });
 
-  bb.agents.contributeInstructions(({ threadId }) =>
-    briefInstructions(linkedProjects(store, threadId)),
-  );
+  bb.agents.configure(({ thread }) => {
+    const instructions = briefInstructions(linkedProjects(store, thread.id));
+    if (instructions === null) return { tools: [], skills: [MY_TASKS_SKILL] };
+    return {
+      tools: [READ_BRIEF_TOOL, UPDATE_BRIEF_TOOL],
+      skills: [MY_TASKS_SKILL],
+      instructions,
+    };
+  });
 }

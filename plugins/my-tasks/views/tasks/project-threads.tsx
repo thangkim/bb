@@ -4,22 +4,16 @@ import type { ProjectThread } from "../../shared/contract.js";
 import { errorMessage } from "../../shared/errors.js";
 import { useTasksRpc } from "../../shell/data.js";
 import { useProjectThreads } from "../list/data.js";
-import { ThreadLink } from "./checklist.js";
+import { isBusyThread, SideChatLinks } from "./side-chats.js";
+import { ThreadLink } from "./thread-link.js";
 import { DropLine, positionBetween, useReorderList } from "./reorder.js";
 import { AttachThreadPicker, NewThreadButton } from "./thread-actions.js";
 import { cn } from "@/lib/utils";
 
-const BUSY_STATUSES = new Set(["starting", "active", "stopping"]);
-
 export function useBusyThreadIds(): ReadonlySet<string> {
   const { threads } = experimental_useSidebarThreads();
   return useMemo(
-    () =>
-      new Set(
-        threads
-          .filter((thread) => BUSY_STATUSES.has(thread.status))
-          .map((thread) => thread.id),
-      ),
+    () => new Set(threads.filter(isBusyThread).map((thread) => thread.id)),
     [threads],
   );
 }
@@ -44,36 +38,6 @@ export function withoutArchivedThreads(
     unarchivedThreadIds.has(thread.threadId),
   );
   return visible.length === threads.length ? threads : visible;
-}
-
-const SIDE_CHAT_PLUGIN_ID = "side-chat";
-
-interface SideChat {
-  id: string;
-  title: string;
-}
-
-export function useSideChatsByThread(): ReadonlyMap<
-  string,
-  readonly SideChat[]
-> {
-  const { threads } = experimental_useSidebarThreads();
-  return useMemo(() => {
-    const byParent = new Map<string, SideChat[]>();
-    for (const thread of threads) {
-      if (
-        thread.originKind !== "fork" ||
-        thread.originPluginId !== SIDE_CHAT_PLUGIN_ID ||
-        thread.sourceThreadId === null
-      ) {
-        continue;
-      }
-      const siblings = byParent.get(thread.sourceThreadId) ?? [];
-      siblings.push({ id: thread.id, title: thread.displayTitle });
-      byParent.set(thread.sourceThreadId, siblings);
-    }
-    return byParent;
-  }, [threads]);
 }
 
 interface PositionOverride {
@@ -202,7 +166,6 @@ export function ProjectThreadLinks({
   className,
   children,
 }: ProjectThreadLinksProps) {
-  const sideChats = useSideChatsByThread();
   const { ordered, reorder } = useReorderedProjectThreads(
     projectId,
     threads,
@@ -238,19 +201,7 @@ export function ProjectThreadLinks({
               statusLabel={working ? "Working" : null}
               working={working}
             />
-            {(sideChats.get(thread.threadId) ?? []).map((sideChat) => {
-              const sideWorking = busyThreadIds.has(sideChat.id);
-              return (
-                <div key={sideChat.id} className="flex flex-col pl-4">
-                  <ThreadLink
-                    threadId={sideChat.id}
-                    title={sideChat.title}
-                    statusLabel={sideWorking ? "Working" : null}
-                    working={sideWorking}
-                  />
-                </div>
-              );
-            })}
+            <SideChatLinks threadId={thread.threadId} />
             <DropLine placement={reorderList.dropPlacement(thread.id)} />
           </div>
         );

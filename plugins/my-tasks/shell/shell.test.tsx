@@ -519,6 +519,46 @@ describe("tasks app shell", () => {
     );
   });
 
+  it("refetches an open task detail only for changes to that task", async () => {
+    const task = pagerTask("TSK-4", "todo", 1);
+    let threadCalls = 0;
+    let commentCalls = 0;
+    const slot = renderSlot(
+      app.navPanels[0]!,
+      { subPath: "task/TSK-4" },
+      {
+        rpc: seededRpc({
+          getTaskByKey: () => ({ task }),
+          listTasks: () => ({ tasks: [task], nextCursor: null }),
+          listAttachments: () => ({ attachments: [] }),
+          listTaskThreads: () => {
+            threadCalls += 1;
+            return { taskThreads: [] };
+          },
+          listComments: () => {
+            commentCalls += 1;
+            return { comments: [] };
+          },
+        }),
+      },
+    );
+    await slot.findByRole("textbox", { name: "Task title" });
+    await waitFor(() => expect(threadCalls).toBeGreaterThan(0));
+    await waitFor(() => expect(commentCalls).toBeGreaterThan(0));
+    const threadsBefore = threadCalls;
+    const commentsBefore = commentCalls;
+
+    await slot.emitRealtime("threads:changed", { taskId: "other-task" });
+    await slot.emitRealtime("comments:changed", { taskId: "other-task" });
+    expect(threadCalls).toBe(threadsBefore);
+    expect(commentCalls).toBe(commentsBefore);
+
+    await slot.emitRealtime("threads:changed", { taskId: task.id });
+    await slot.emitRealtime("comments:changed", { taskId: task.id });
+    await waitFor(() => expect(threadCalls).toBeGreaterThan(threadsBefore));
+    await waitFor(() => expect(commentCalls).toBeGreaterThan(commentsBefore));
+  });
+
   describe("last-known snapshot", () => {
     const projectsKey = querySnapshotStorageKey("projects");
     const foldersKey = querySnapshotStorageKey("folders");

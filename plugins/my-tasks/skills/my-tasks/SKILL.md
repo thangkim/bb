@@ -100,7 +100,11 @@ For task dispatch and execution presets, read
 
    `bb my-tasks links` lists the tasks and projects the current thread is
    attached to. People attach from a thread's menu with **Attach to My
-   Tasks…**.
+   Tasks…**. An attached thread's header shows the same link after its
+   title: the first task's title in blue (with `+N` for more tasks), or the
+   project name when no task is attached. Clicking it opens the picker to
+   change the link. A split pane collapsed by Pane Collapse shows the same
+   task or project on its strip.
 
 ## Keep the project brief current
 
@@ -116,8 +120,8 @@ or to a task in it, get a reminder in their instructions.
   `my_tasks_update_project_brief` with only what changed, and report it.
 - Delete decisions that were dropped or reversed (`removeDecisions`); do not
   keep superseded ones. Reword in place with `replaceDecisions`.
-- Pass `project` (a prefix) when the thread is linked to several projects or
-  none. Without the tools, use `bb my-tasks project brief ABC` to read it and
+- Pass `project` (a prefix) when the thread is linked to several projects.
+  The tools exist only in threads attached to a project or task. Without them, use `bb my-tasks project brief ABC` to read it and
   `--problem`, `--context`, `--priority-note`, `--solution`, `--clear`,
   `--add-decision`, and `--remove-decision` to change it.
 
@@ -151,6 +155,11 @@ each renders its own card.
   `bb my-tasks project list` and `project show` report status, priority, due
   date, and progress. A task's done state is `bb my-tasks update ABC-12
   --status done|todo`.
+- List display settings are plugin config, not `bb my-tasks` flags:
+  `bb plugin config my-tasks set showCompletedTasks true` keeps done tasks in
+  project task lists, and
+  `bb plugin config my-tasks set showCollapsedProjectThreads true` lists
+  project threads on collapsed project rows. Both default to false.
 - Repeatable options (`--label`, `--status`, `--priority`, `--add-label`,
   `--remove-label`) accept a repeated flag or one comma-separated list.
 - Unknown options and stray arguments are errors, never ignored, and every

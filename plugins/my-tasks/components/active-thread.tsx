@@ -6,10 +6,12 @@ import {
   type ReactNode,
 } from "react";
 import {
+  experimental_useSidebarThreads,
   useBbContext,
   useSidebarSplitLayout,
   type PluginSidebarSplitLayout,
 } from "@get-bb/plugin-sdk/app";
+import { isSideChatShapedThread } from "../shared/side-chat.js";
 import { useTasksQuery } from "../shell/data.js";
 
 export interface ActiveThreadLinks {
@@ -56,14 +58,37 @@ function useActiveThreadId(): string | null {
   return resolveActiveThreadId(layout, routeThreadId, lastFocused);
 }
 
+function useLinkedThreadId(threadId: string | null): string | null {
+  const { threads } = experimental_useSidebarThreads();
+  return useMemo(() => {
+    if (threadId === null) return null;
+    const thread = threads.find((candidate) => candidate.id === threadId);
+    if (
+      thread === undefined ||
+      thread.sourceThreadId === null ||
+      !isSideChatShapedThread({
+        originKind: thread.originKind,
+        originPluginId: thread.originPluginId,
+        visibility: thread.isHidden ? "hidden" : "visible",
+      })
+    ) {
+      return threadId;
+    }
+    return thread.sourceThreadId;
+  }, [threadId, threads]);
+}
+
 export function ActiveThreadProvider({ children }: { children: ReactNode }) {
   const threadId = useActiveThreadId();
+  const linkedThreadId = useLinkedThreadId(threadId);
   const links = useTasksQuery(
     async (rpc) => {
-      if (threadId === null) return null;
-      const result = await rpc.call("listThreadLinks", { threadId });
+      if (linkedThreadId === null) return null;
+      const result = await rpc.call("listThreadLinks", {
+        threadId: linkedThreadId,
+      });
       return {
-        threadId,
+        linkedThreadId,
         projectIds: new Set([
           ...result.projects.map((project) => project.id),
           ...result.tasks.map((task) => task.projectId),
@@ -72,16 +97,16 @@ export function ActiveThreadProvider({ children }: { children: ReactNode }) {
       };
     },
     ["tasks:changed", "projects:changed", "threads:changed"],
-    [threadId],
+    [linkedThreadId],
   );
   const value = useMemo<ActiveThreadLinks>(() => {
     if (threadId === null) return NO_ACTIVE_THREAD;
     const data = links.data;
-    if (!data || data.threadId !== threadId) {
+    if (!data || data.linkedThreadId !== linkedThreadId) {
       return { ...NO_ACTIVE_THREAD, threadId };
     }
-    return data;
-  }, [threadId, links.data]);
+    return { threadId, projectIds: data.projectIds, taskIds: data.taskIds };
+  }, [threadId, linkedThreadId, links.data]);
   return (
     <ActiveThreadContext.Provider value={value}>
       {children}

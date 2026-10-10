@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
-import { makeTask, rpcInput } from "../../test-fixtures.js";
+import { makeSidebarThread, makeTask, rpcInput } from "../../test-fixtures.js";
 
 if (!window.matchMedia) {
   window.matchMedia = (query: string) => ({
@@ -222,6 +222,44 @@ describe("task detail pull request pills", () => {
           name: "Pull request #12: Ship the PR pill (Merged)",
         }),
       ).toBeTruthy();
+    });
+  });
+});
+
+describe("task detail side chats", () => {
+  it("lists a thread's side chats under its card and opens them in a split", async () => {
+    const slot = renderSlot(
+      app.navPanels[0]!,
+      { subPath: "task/TSK-5" },
+      {
+        rpc: detailRpc(),
+        sidebarThreads: {
+          threads: [
+            {
+              ...makeSidebarThread("thr_side0001"),
+              title: "Why the retry?",
+              displayTitle: "Why the retry?",
+              sourceThreadId: "thr_worker000",
+              originKind: "fork",
+              originPluginId: "side-chat-plus",
+              isHidden: true,
+            },
+          ],
+        },
+      },
+    );
+
+    const sideChat = await slot.findByRole("button", {
+      name: "Why the retry?",
+    });
+    expect(
+      sideChat.closest('[data-side-chats="thr_worker000"]'),
+    ).not.toBeNull();
+    fireEvent.click(sideChat);
+    expect(slot.sidebarActionCalls).toContainEqual({
+      method: "open",
+      threadId: "thr_side0001",
+      options: { split: true },
     });
   });
 });

@@ -26,16 +26,6 @@ function liveStatusFromThread(thread: SdkThread): TaskThreadLiveStatus {
   }
 }
 
-function trackedThreads(store: TasksApiStore): TaskThread[] {
-  const tracked: TaskThread[] = [];
-  for (const task of store.tasks.listTasks()) {
-    for (const thread of store.tasks.listTaskThreads(task.id)) {
-      tracked.push(thread);
-    }
-  }
-  return tracked;
-}
-
 function statusCommentBody(
   thread: TaskThread,
   liveStatus: Extract<TaskThreadLiveStatus, "completed" | "failed">,
@@ -119,19 +109,9 @@ async function reconcileTrackedThreads(
   bb: BbPluginApi,
   store: TasksApiStore,
 ): Promise<void> {
-  const nonTerminalThreads = trackedThreads(store).filter(
-    (thread) => !TERMINAL_LIVE_STATUSES.has(thread.liveStatus),
-  );
-
-  for (const trackedThread of nonTerminalThreads) {
+  for (const trackedThread of store.tasks.listUnfinishedTaskThreads()) {
     await reconcileTrackedThread(bb, store, trackedThread);
   }
-}
-
-function hasNonTerminalTrackedThreads(store: TasksApiStore): boolean {
-  return trackedThreads(store).some(
-    (thread) => !TERMINAL_LIVE_STATUSES.has(thread.liveStatus),
-  );
 }
 
 function waitForNextReconciliation(
@@ -175,7 +155,7 @@ export async function registerLifecycle(
   bb.background.service("thread-status-reconcile", {
     async start(signal) {
       while (!signal.aborted) {
-        if (!hasNonTerminalTrackedThreads(store)) {
+        if (store.tasks.listUnfinishedTaskThreads().length === 0) {
           await waitForNextReconciliation(
             signal,
             THREAD_STATUS_IDLE_INTERVAL_MS,

@@ -13,7 +13,6 @@ import { readShowCompletedTasks } from "../../shared/settings.js";
 import { sortItems } from "../../shared/sort.js";
 import { useTasksRpc } from "../../shell/data.js";
 import { useTasksNavigation } from "../../shell/routes.js";
-import { useOpenThreadInSplit } from "../../components/use-open-thread-in-split.js";
 import { useActiveThread } from "../../components/active-thread.js";
 import { isActiveThread, THREAD_STATUS_META } from "../detail/meta.js";
 import {
@@ -33,6 +32,8 @@ import {
 } from "../list/property-menus.js";
 import { useListTaskEdits } from "../list/use-task-edits.js";
 import { AttachThreadPicker, NewThreadButton } from "./thread-actions.js";
+import { SideChatLinks } from "./side-chats.js";
+import { ThreadLink } from "./thread-link.js";
 import { useMoveTaskToProject, writeDraggedTask } from "./move-task.js";
 import {
   DropLine,
@@ -113,50 +114,15 @@ function LabelChips({
 
 export function ThreadRow({ thread }: { thread: TaskThread }) {
   return (
-    <ThreadLink
-      threadId={thread.threadId}
-      title={thread.title}
-      statusLabel={THREAD_STATUS_META[thread.liveStatus].label}
-      working={isActiveThread(thread)}
-    />
-  );
-}
-
-export function ThreadLink({
-  threadId,
-  title,
-  statusLabel,
-  working,
-}: {
-  threadId: string;
-  title: string;
-  statusLabel: string | null;
-  working: boolean;
-}) {
-  const openThread = useOpenThreadInSplit();
-  const active = useActiveThread().threadId === threadId;
-  return (
-    <button
-      type="button"
-      aria-label={statusLabel === null ? title : `${title} — ${statusLabel}`}
-      data-active-thread={active || undefined}
-      onClick={() => openThread(threadId)}
-      className={cn(
-        "relative z-10 flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-left text-xs hover:text-foreground",
-        active
-          ? "bg-state-active text-foreground"
-          : "text-subtle-foreground hover:bg-state-hover",
-      )}
-    >
-      <Icon name="MessageSquare" className="size-3 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">{title}</span>
-      {working ? (
-        <Icon
-          name="RotateCcw"
-          className="size-3 shrink-0 animate-spin text-timeline-accent"
-        />
-      ) : null}
-    </button>
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <ThreadLink
+        threadId={thread.threadId}
+        title={thread.title}
+        statusLabel={THREAD_STATUS_META[thread.liveStatus].label}
+        working={isActiveThread(thread)}
+      />
+      <SideChatLinks threadId={thread.threadId} />
+    </div>
   );
 }
 
@@ -281,9 +247,6 @@ function TaskChecklistRow({
         </div>
         {threadsOpen ? (
           <div className="ml-7 mt-1 flex flex-col gap-0.5">
-            {threads.map((thread) => (
-              <ThreadRow key={thread.id} thread={thread} />
-            ))}
             <div className="flex items-center gap-1">
               <PriorityEditor
                 priority={task.priority}
@@ -305,6 +268,9 @@ function TaskChecklistRow({
                 compact
               />
             </div>
+            {threads.map((thread) => (
+              <ThreadRow key={thread.id} thread={thread} />
+            ))}
           </div>
         ) : null}
         <DropLine placement={dropPlacement} />

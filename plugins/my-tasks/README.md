@@ -161,16 +161,28 @@ and `bb-my-tasks:sidebar-collapsed-folders`), so it survives reloads and moving
 between projects and views on the same device, and is shared by the All and
 Active lists.
 
+When My Tasks sits side by side with other panes in a split, it keeps the
+width you last dragged it to (stored in `localStorage` as
+`bb-my-tasks:pane-width`) instead of the share bb assigns when panes open or
+close; the other panes take the rest. bb has no plugin API for pane sizes, so
+the plugin overrides the `flex-grow` of the pane's `[data-split-resize-grid-root]`
+cell with a stylesheet and follows bb's divider while you drag it. Until you
+drag it once, bb's sizing applies. Stacked splits and a lone pane are left
+alone.
+
 In the app, every task has **New thread** and **Attach thread** (search your
 bb threads): labelled on the task page, icon-only on a task's checklist row
 under a project. A task's **New thread** opens an empty composer for the
 project's linked bb project, like a project's, and attaches the thread you send
 to that task. To start a thread with the task's details already in the prompt,
 use the **Dispatch** control in the task's properties or `bb my-tasks delegate`.
-Every project row in the list, collapsed
-or expanded, lists the project's own threads under its priority and due date,
-with icon-only **New thread** and **Attach thread** buttons beside the due
-date; expanding a row adds its tasks below. A project's **New thread** opens an
+Every project row in the list has icon-only
+**New thread** and **Attach thread** buttons beside its due date. Project rows
+start collapsed with their threads hidden; expanding a row lists the project's
+own threads under its priority and due date, with its tasks below. Turn on
+**Show threads on collapsed projects** in Settings → Plugins → My Tasks, or run
+`bb plugin config my-tasks set showCollapsedProjectThreads true`, to list
+project threads on collapsed rows too. A project's **New thread** opens an
 empty composer for the project's linked bb project beside the list (or in place
 when splits are unavailable) and starts nothing; the first thread you send from
 bb in that project within 10 minutes is attached to the project. To start a
@@ -179,11 +191,23 @@ thread with the project's details already in the prompt, use
 The project page shows the same threads with the labelled actions. Those
 threads belong to the project, not to any task. Clicking a thread opens it in a split
 pane.
+Side chats you replied in are listed under the thread they branch from, in
+project rows, task rows, and the task page's thread cards. Side chats from both
+Side chat and Side chat+ are included; one you opened but never sent a message
+in stays out of the list. Opening a side chat highlights its parent thread's
+task and project.
 Going the other way, every thread's menu (right-click a sidebar row, its "…"
 button, or the thread header menu) has **Attach to My Tasks…**. It opens a
 dialog that suggests open tasks from projects linked to the thread's bb
 project, searches all tasks and projects, and lists what the thread is already
 attached to; select an attached item to detach it.
+
+An attached thread's header shows what it belongs to, left of the header
+actions: the task key and title when the thread is attached to a task (with
+`+N` when there are more), otherwise the project name. Clicking a task opens it
+in the thread's **Task** side panel; clicking a project opens its project page.
+On phone-width viewports it collapses to an icon. `bb my-tasks links` prints
+the same links from the CLI.
 
 Splitting a thread that is attached to tasks or projects carries those links
 over: when you open a new split pane from the active thread (a split shortcut or
@@ -200,17 +224,25 @@ use either to drop a thread that died or moved on to other work. The task
 page and `bb my-tasks threads` list live threads before completed or failed ones,
 newest first.
 
+With the Sidebar Tabs plugin installed, My Tasks also fills the sidebar's
+**Projects** tab with the same topbar, status and priority filters, and project
+list as the All projects page. Opening a project or task from the sidebar opens
+it in the My Tasks panel. Filters, sort, and collapsed status groups are shared
+with the All projects page.
+
 ## Project brief
 
 A project's description doubles as its brief: Problem, Context, Priority,
-Solution, and a Decisions list. Agents get two tools,
-`my_tasks_project_brief` and `my_tasks_update_project_brief`, which change one
-section or one decision at a time, so threads working on the same project do
-not overwrite each other. Threads attached to the project or one of its tasks
-are told to ask before updating the brief; saying "summarize thread into
+Solution, and a Decisions list. Threads attached to a project or one of its
+tasks get two tools, `my_tasks_project_brief` and
+`my_tasks_update_project_brief`, which change one section or one decision at a
+time, so threads working on the same project do not overwrite each other. Those
+threads are told to ask before updating the brief; saying "summarize thread into
 project" or "update project summary" asks for the update directly. Dropped
 decisions are deleted. Other headings and text in the description are kept.
-Instructions reach a thread when its agent session starts or resumes.
+Other threads do not get the tools and use `bb my-tasks project brief` instead.
+Tools and instructions reach a thread when its agent session starts or resumes,
+so a thread attached mid-session gets them on its next session.
 
 ## Task mentions
 

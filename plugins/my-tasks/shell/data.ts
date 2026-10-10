@@ -56,20 +56,55 @@ const INVALIDATION_CHANNELS = [
 
 type InvalidationChannel = (typeof INVALIDATION_CHANNELS)[number];
 
+interface InvalidationScope {
+  taskId?: string;
+  projectId?: string;
+}
+
+function payloadId(
+  payload: unknown,
+  key: keyof InvalidationScope,
+): string | undefined {
+  if (typeof payload !== "object" || payload === null) return undefined;
+  if (!(key in payload)) return undefined;
+  const value: unknown = Reflect.get(payload, key);
+  return typeof value === "string" ? value : undefined;
+}
+
+function outOfScope(scope: InvalidationScope, payload: unknown): boolean {
+  return (["taskId", "projectId"] as const).some((key) => {
+    const expected = scope[key];
+    const changed = payloadId(payload, key);
+    return (
+      expected !== undefined && changed !== undefined && changed !== expected
+    );
+  });
+}
+
 function useInvalidation(
   channels: readonly InvalidationChannel[],
   onInvalidate: () => void,
+  scope: InvalidationScope,
 ): void {
-  const ref = useRef({ channels, onInvalidate });
-  ref.current = { channels, onInvalidate };
-  const fire = useCallback((channel: InvalidationChannel) => {
-    if (ref.current.channels.includes(channel)) ref.current.onInvalidate();
+  const ref = useRef({ channels, onInvalidate, scope });
+  ref.current = { channels, onInvalidate, scope };
+  const fire = useCallback((channel: InvalidationChannel, payload: unknown) => {
+    const current = ref.current;
+    if (!current.channels.includes(channel)) return;
+    if (outOfScope(current.scope, payload)) return;
+    current.onInvalidate();
   }, []);
-  useRealtime("tasks:changed", () => fire("tasks:changed"));
-  useRealtime("projects:changed", () => fire("projects:changed"));
-  useRealtime("comments:changed", () => fire("comments:changed"));
-  useRealtime("threads:changed", () => fire("threads:changed"));
+  useRealtime("tasks:changed", (payload) => fire("tasks:changed", payload));
+  useRealtime("projects:changed", (payload) =>
+    fire("projects:changed", payload),
+  );
+  useRealtime("comments:changed", (payload) =>
+    fire("comments:changed", payload),
+  );
+  useRealtime("threads:changed", (payload) => fire("threads:changed", payload));
 }
+
+const NO_SCOPE: InvalidationScope = {};
 
 interface TasksQuery<T> {
   data: T | undefined;
@@ -89,6 +124,7 @@ export function useTasksQuery<T>(
   deps: readonly unknown[] = [],
   options: {
     snapshot?: TasksQuerySnapshot<T>;
+    scope?: InvalidationScope;
   } = {},
 ): TasksQuery<T> {
   const rpc = useTasksRpc();
@@ -155,7 +191,7 @@ export function useTasksQuery<T>(
       finish();
     };
   }, [refresh, generation, beginGenerationWork, endGenerationWork]);
-  useInvalidation(channels, refresh);
+  useInvalidation(channels, refresh, options.scope ?? NO_SCOPE);
   return { ...state, refresh };
 }
 
