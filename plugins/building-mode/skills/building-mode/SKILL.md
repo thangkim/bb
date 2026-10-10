@@ -1,6 +1,6 @@
 ---
 name: building-mode
-description: Annotate bb's own interface with source-mapped context, read the resolved bb UI feedback, or update saved annotation comments through the plugin RPC.
+description: Annotate bb's own interface with source-mapped context, preview or read the resolved bb UI feedback behind a mention pill, or update saved annotation comments through the plugin RPC.
 ---
 
 Install the plugin from a bb checkout with `bb plugin install ./plugins/building-mode`, then enable Building Mode in Settings → Plugins.
@@ -45,6 +45,19 @@ Each mention resolves to compact Markdown feedback: a `## bb UI feedback: <route
 - **Source trail** and **React**, when present.
 - **Classes**, other **Attributes**, **Position**, and **Context**: up to 300 characters of visible text from the nearest ancestor that adds text around the element.
 - **Feedback:** the comment.
+
+## Previewing a mention
+
+Pill labels are truncated. Rest the pointer on a Building Mode pill for about a third of a second, in the composer or in a sent message, to open a popover with the full context that pill sends: the same Markdown described under **Resolved context**, with the current comment. The popover opens above the pill when there is room, otherwise below; long prompts scroll inside it. Moving the pointer into the popover keeps it open; leaving both the pill and the popover, pressing a key, or pressing outside it closes it. Pressing inside it does not move focus out of the composer. A pill whose saved record is gone says the annotation is no longer available. Other mention pills are unaffected.
+
+Read the same text without the UI through the `preview` RPC, which returns `{ "context": string | null }` (`null` for an unknown ID):
+
+```sh
+echo '{ "id": "annotation-id" }' > annotation-preview.json
+bb plugin rpc call building-mode preview --input-file annotation-preview.json --json
+```
+
+The popover finds pills through the host's rendered mention markup (`.prompt-mention-pill` and its `data-prompt-mention-resource` JSON), which is not a public plugin API, so a host markup change can silently disable it without affecting sending.
 
 ## Updating comments
 

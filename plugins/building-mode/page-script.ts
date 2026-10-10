@@ -360,28 +360,46 @@ export function installBuildingMode(
     };
   }
 
+  const writtenStyles = new WeakMap<HTMLElement, Map<string, string>>();
+
+  function setStyle(
+    node: HTMLElement,
+    property: "display" | "left" | "top" | "width" | "height",
+    value: string,
+  ): void {
+    let written = writtenStyles.get(node);
+    if (written === undefined) {
+      written = new Map();
+      writtenStyles.set(node, written);
+    }
+    if (written.get(property) === value) return;
+    written.set(property, value);
+    node.style[property] = value;
+  }
+
   function place(node: HTMLElement, rect: DOMRect): void {
-    node.style.left = `${rect.left}px`;
-    node.style.top = `${rect.top}px`;
-    node.style.width = `${rect.width}px`;
-    node.style.height = `${rect.height}px`;
+    setStyle(node, "left", `${rect.left}px`);
+    setStyle(node, "top", `${rect.top}px`);
+    setStyle(node, "width", `${rect.width}px`);
+    setStyle(node, "height", `${rect.height}px`);
   }
 
   function showHover(element: Element | null): void {
     hovered = element;
     if (element === null) {
-      hoverBox.style.display = "none";
-      hoverLabel.style.display = "none";
+      setStyle(hoverBox, "display", "none");
+      setStyle(hoverLabel, "display", "none");
       return;
     }
     const rect = element.getBoundingClientRect();
     place(hoverBox, rect);
-    hoverBox.style.display = "block";
+    setStyle(hoverBox, "display", "block");
     const source = sourcesFor(element)[0]?.split("/").pop();
-    hoverLabel.textContent = `${elementName(element)}  ${Math.round(rect.width)}×${Math.round(rect.height)}${source === undefined ? "" : `  ${source}`}`;
-    hoverLabel.style.display = "block";
-    hoverLabel.style.left = `${Math.max(4, Math.min(rect.left, innerWidth - 324))}px`;
-    hoverLabel.style.top = `${rect.top > 26 ? rect.top - 24 : rect.bottom + 4}px`;
+    const label = `${elementName(element)}  ${Math.round(rect.width)}×${Math.round(rect.height)}${source === undefined ? "" : `  ${source}`}`;
+    if (hoverLabel.textContent !== label) hoverLabel.textContent = label;
+    setStyle(hoverLabel, "display", "block");
+    setStyle(hoverLabel, "left", `${Math.max(4, Math.min(rect.left, innerWidth - 324))}px`);
+    setStyle(hoverLabel, "top", `${rect.top > 26 ? rect.top - 24 : rect.bottom + 4}px`);
   }
 
   function targetAt(x: number, y: number): Element | null {
@@ -416,10 +434,10 @@ export function installBuildingMode(
       const rect = annotation.element.getBoundingClientRect();
       const visible =
         annotation.element.isConnected && rect.width + rect.height > 0;
-      annotation.pin.style.display = visible ? "block" : "none";
-      annotation.pin.style.left = `${rect.left}px`;
-      annotation.pin.style.top = `${rect.top}px`;
-      annotation.outline.style.display = visible && active ? "block" : "none";
+      setStyle(annotation.pin, "display", visible ? "block" : "none");
+      setStyle(annotation.pin, "left", `${rect.left}px`);
+      setStyle(annotation.pin, "top", `${rect.top}px`);
+      setStyle(annotation.outline, "display", visible && active ? "block" : "none");
       place(annotation.outline, rect);
     }
     if (hovered !== null && editor === null) {

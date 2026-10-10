@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  SOURCE_LOCATIONS_FLAG,
   repositoryRelativePath,
   sourceLocationsConfig,
   sourceLocationsEnabled,
@@ -108,7 +109,12 @@ describe("sourceLocations", () => {
   const serve = { command: "serve", mode: "development" } as const;
   const build = { command: "build", mode: "production" } as const;
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("always stamps the dev server and stamps builds only when the flag is 1", () => {
+    vi.stubEnv(SOURCE_LOCATIONS_FLAG, undefined);
     expect(sourceLocationsEnabled(serve, undefined)).toBe(true);
     expect(sourceLocationsEnabled(build, undefined)).toBe(false);
     expect(sourceLocationsEnabled(build, "0")).toBe(false);

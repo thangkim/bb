@@ -85,4 +85,21 @@ describe("building mode server", () => {
       harness.callRpc("save", { ...record, element }),
     ).rejects.toThrow();
   });
+
+  it("previews the same context the mention resolves to, and null once it is gone", async () => {
+    const { harness, provider } = await setup();
+    await harness.callRpc("save", record);
+    await harness.callRpc("update", { id: record.id, comment: "Make it blue" });
+
+    const preview = z
+      .object({ context: z.string().nullable() })
+      .parse(await harness.callRpc("preview", { id: record.id }));
+    const resolved = await provider.resolve(record.id);
+
+    expect(preview.context).toBe(resolved.context);
+    expect(preview.context).toContain("**Feedback:** Make it blue");
+    expect(await harness.callRpc("preview", { id: "missing" })).toEqual({
+      context: null,
+    });
+  });
 });

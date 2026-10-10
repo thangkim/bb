@@ -12,6 +12,7 @@ import {
   onAppAnnotationToggle,
   requestAppAnnotationToggle,
 } from "./app-target.js";
+import { AnnotationMentionPreviewOverlay } from "./mention-preview.js";
 
 export const APP_ANNOTATION_COMMAND_ID = "annotate-app";
 export const copyAnnotationPromptCommand: PluginCommandRegistration = {
@@ -58,6 +59,10 @@ export default definePluginApp((app) => {
   app.slots.experimental_appOverlay({
     id: "app-annotations",
     component: AppAnnotationsOverlay,
+  });
+  app.slots.experimental_appOverlay({
+    id: "annotation-mention-preview",
+    component: AnnotationMentionPreviewOverlay,
   });
   app.commands.register({
     id: APP_ANNOTATION_COMMAND_ID,
