@@ -1,0 +1,41 @@
+{
+  "name": "bb-plugin-pane-arrangement-menu",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Move a split pane's Full Screen, Move and Close actions from the thread header buttons into the thread's \"…\" menu.",
+  "engines": {
+    "bb": ">=0.0",
+    "bbPluginSdk": ">=0.5.27"
+  },
+  "bb": {
+    "name": "Pane Arrangement Menu",
+    "description": "Hide the Full Screen and Close pane buttons in split pane thread headers and offer Full Screen, Move pane and Close pane in the thread's \"…\" menu instead.",
+    "branding": {
+      "icon": "Maximize2"
+    },
+    "server": "./server.ts",
+    "app": "./app.tsx"
+  },
+  "keywords": [
+    "bb-plugin"
+  ],
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint --ignore-pattern node_modules --ignore-pattern dist ."
+  },
+  "devDependencies": {
+    "@get-bb/plugin-sdk": "workspace:*",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "jsdom": "^29.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "vitest": "^4.1.1"
+  }
+}
