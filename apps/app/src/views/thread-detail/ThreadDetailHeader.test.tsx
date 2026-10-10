@@ -298,6 +298,38 @@ describe("ThreadDetailHeader", () => {
     expect(screen.queryByText("Responsive menu actions")).toBeNull();
   });
 
+  it("renders title plugin actions between the title and the thread menu", () => {
+    render(
+      <PaneContext.Provider value={PANE_CONTEXT}>
+        <ThreadDetailHeader
+          actionsMenu={() => <span>Thread menu</span>}
+          childPillLabel={null}
+          isSecondaryPanelOpen={false}
+          onOpenThreadGitAction={vi.fn()}
+          onToggleSecondaryPanel={vi.fn()}
+          pluginActions={<span>Row plugin action</span>}
+          pluginTitleActions={<span>Linked task</span>}
+          threadHeaderGitActions={[]}
+          threadId={THREAD_ID}
+          threadTitle="Titled thread"
+        />
+      </PaneContext.Provider>,
+    );
+
+    const title = screen.getByText("Titled thread");
+    const linkedTask = screen.getByText("Linked task");
+    const menu = screen.getByText("Thread menu");
+    const rowAction = screen.getByText("Row plugin action");
+    const follows = (before: Element, after: Element) =>
+      Boolean(
+        before.compareDocumentPosition(after) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    expect(follows(title, linkedTask)).toBe(true);
+    expect(follows(linkedTask, menu)).toBe(true);
+    expect(follows(menu, rowAction)).toBe(true);
+  });
+
   it("renders serialized mentions in the thread title as pills", () => {
     const { container } = render(
       <PaneContext.Provider value={PANE_CONTEXT}>

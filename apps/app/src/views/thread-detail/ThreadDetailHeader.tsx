@@ -58,6 +58,7 @@ interface ThreadDetailHeaderProps {
   onOpenThreadGitAction: (target: ThreadGitActionDialogTarget) => void;
   onToggleSecondaryPanel: () => void;
   pluginActions?: ReactNode;
+  pluginTitleActions?: ReactNode;
   threadHeaderGitActions: ThreadHeaderGitAction[];
   threadId: string;
   threadTitle: string;
@@ -72,6 +73,7 @@ export function ThreadDetailHeader({
   onOpenThreadGitAction,
   onToggleSecondaryPanel,
   pluginActions,
+  pluginTitleActions,
   threadHeaderGitActions,
   threadId,
   threadTitle,
@@ -160,6 +162,7 @@ export function ThreadDetailHeader({
         }
         className={cn(
           "relative min-w-0",
+          pluginTitleActions != null && "min-w-12 shrink-[100]",
           isSplitPaneHeader && "-my-1 -ml-2 rounded-md px-2 py-1",
           isSplitPaneHeader && isFocused && CONTEXT_SELECTION_SURFACE_CLASS,
         )}
@@ -186,10 +189,20 @@ export function ThreadDetailHeader({
           {childPillLabel}
         </Pill>
       ) : null}
+      {pluginTitleActions == null ? null : (
+        <span
+          className={cn(
+            "flex min-w-0 items-center empty:hidden",
+            usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
+          )}
+        >
+          {pluginTitleActions}
+        </span>
+      )}
       {actionsMenu == null ? null : (
         <span
           className={cn(
-            "flex items-center",
+            "flex shrink-0 items-center",
             usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
           )}
         >

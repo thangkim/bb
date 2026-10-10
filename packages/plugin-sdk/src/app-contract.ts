@@ -1587,6 +1587,13 @@ export interface PluginThreadHeaderActionRegistration {
    */
   title: string;
   component: ComponentType<PluginThreadHeaderActionProps>;
+  /**
+   * Where the host renders the component. `"actions"` (default) puts it at the
+   * left end of the action row. `"title"` puts it right after the thread
+   * title, before the thread actions menu; use it for a label that describes
+   * the thread, and keep it short — it shares the row with the title.
+   */
+  placement?: "actions" | "title";
 }
 
 export interface ExperimentalPluginBrowserToolbarActionRegistration {

@@ -2544,6 +2544,13 @@ function ThreadDetailViewInternal(
           projectId={thread.projectId}
         />
       }
+      pluginTitleActions={
+        <PluginThreadHeaderActions
+          threadId={thread.id}
+          projectId={thread.projectId}
+          placement="title"
+        />
+      }
       threadHeaderGitActions={
         executionUnavailable ? [] : gitActions.threadHeaderGitActions
       }

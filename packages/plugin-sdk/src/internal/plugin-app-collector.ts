@@ -810,10 +810,20 @@ export function collectPluginAppRegistrations(
         const kind = "slots.experimental_threadHeaderAction";
         const id = requireSlotId(kind, registration?.id);
         requireUniqueId(kind, seenIds.threadHeaderAction, id);
+        if (
+          registration.placement !== undefined &&
+          registration.placement !== "actions" &&
+          registration.placement !== "title"
+        ) {
+          throw new Error(`${kind}: "placement" must be "actions" or "title"`);
+        }
         collected.threadHeaderActions.push({
           id,
           title: requireNonEmptyString(kind, "title", registration.title),
           component: requireComponent(kind, registration.component),
+          ...(registration.placement === undefined
+            ? {}
+            : { placement: registration.placement }),
         });
       },
       experimental_browserToolbarAction(registration) {

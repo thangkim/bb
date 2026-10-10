@@ -163,6 +163,10 @@ A common pairing with a replaced sidebar: hide child threads from the list and
 surface them here instead, filtering `experimental_useSidebarThreads()` by
 `parentThreadId === threadId`.
 
+Set `placement: "title"` to render the component right after the thread title,
+before the thread actions menu, instead of in the action row. Use it for a
+short label that describes the thread, such as the task it belongs to.
+
 ### A control in the Browser toolbar
 
 `app.slots.experimental_browserToolbarAction` renders a component beside the

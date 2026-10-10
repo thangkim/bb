@@ -1,22 +1,28 @@
 import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { PluginSlotMount } from "./PluginSlotMount";
 import { usePluginSlots } from "@/lib/plugin-slots";
+import { cn } from "@bb/shared-ui/lib/utils";
 
 export function PluginThreadHeaderActions({
   threadId,
   projectId,
+  placement = "actions",
 }: {
   threadId: string;
   projectId: string;
+  placement?: "actions" | "title";
 }) {
   const { threadHeaderActions } = usePluginSlots();
   const isCompactViewport = useIsCompactViewport();
+  const slots = threadHeaderActions.filter(
+    (slot) => (slot.placement ?? "actions") === placement,
+  );
 
-  if (threadHeaderActions.length === 0) return null;
+  if (slots.length === 0) return null;
 
   return (
     <>
-      {threadHeaderActions.map((slot) => {
+      {slots.map((slot) => {
         const Component = slot.component;
         return (
           <PluginSlotMount
@@ -30,7 +36,10 @@ export function PluginThreadHeaderActions({
             <span
               role="group"
               aria-label={slot.title}
-              className="flex max-h-7 max-w-64 shrink-0 items-center"
+              className={cn(
+                "flex max-h-7 max-w-64 items-center",
+                placement === "title" ? "min-w-0" : "shrink-0",
+              )}
             >
               <Component
                 threadId={threadId}
