@@ -142,6 +142,36 @@ describe("collapsed pane strips", () => {
     expect(document.querySelector("[data-pane-collapse-root]")).toBeNull();
   });
 
+  it("shows the thread's linked task or project on the strip and follows changes", async () => {
+    const panes = mountSplitDom();
+    const badge = document.createElement("button");
+    panes.pa.pane.append(badge);
+    mountOverlay("pb");
+    act(() => collapsedPanes.set(new Set(["pa"])));
+    await screen.findByRole("button", { name: "Expand Alpha thread" });
+
+    badge.dataset.linkedWorkKind = "task";
+    badge.dataset.linkedWorkLabel = "Write the launch post";
+    const strip = await screen.findByRole("button", {
+      name: "Expand Alpha thread — Task Write the launch post",
+    });
+    expect(strip.textContent).toBe("Alpha threadWrite the launch post");
+
+    badge.dataset.linkedWorkKind = "project";
+    badge.dataset.linkedWorkLabel = "Launch";
+    badge.dataset.linkedWorkColor = "#ff0000";
+    await screen.findByRole("button", {
+      name: "Expand Alpha thread — Project Launch",
+    });
+    expect(
+      strip.querySelector<HTMLElement>(".rounded-full:not(.bg-attention)")
+        ?.style.backgroundColor,
+    ).toBe("rgb(255, 0, 0)");
+
+    badge.remove();
+    await screen.findByRole("button", { name: "Expand Alpha thread" });
+  });
+
   it("lets the expanded panes fill the width a collapsed pane gives up", async () => {
     const panes = mountSplitDom();
     mountOverlay("pb");

@@ -32,6 +32,7 @@ import {
   withoutPane,
   type CollapsedPanes,
 } from "./collapsed-panes";
+import { usePaneLinkedWork } from "./linked-work";
 import { readSplitDom, stampGridRoots } from "./split-dom";
 
 export const collapsedPanes = createCollapsedPaneStore();
@@ -127,19 +128,29 @@ function stripHosts(
 
 interface CollapsedStripProps {
   pluginId: string;
+  pane: HTMLElement;
   title: string;
   vertical: boolean;
   needsInput: boolean;
   onExpand: () => void;
 }
 
+const UPRIGHT_VERTICAL_TEXT_CLASS =
+  "[writing-mode:vertical-rl] [text-orientation:upright]";
+
 function CollapsedStrip({
   pluginId,
+  pane,
   title,
   vertical,
   needsInput,
   onExpand,
 }: CollapsedStripProps) {
+  const work = usePaneLinkedWork(pane);
+  const label =
+    work === null
+      ? title
+      : `${title} — ${work.kind === "task" ? "Task" : "Project"} ${work.label}`;
   return (
     <div
       data-bb-plugin={pluginId}
@@ -148,8 +159,8 @@ function CollapsedStrip({
     >
       <button
         type="button"
-        aria-label={`Expand ${title}`}
-        title={title}
+        aria-label={`Expand ${label}`}
+        title={label}
         onClick={onExpand}
         className={cn(
           "flex size-full cursor-pointer items-center gap-2 overflow-hidden text-muted-foreground hover:bg-state-hover hover:text-foreground",
@@ -165,11 +176,36 @@ function CollapsedStrip({
         <span
           className={cn(
             "min-h-0 min-w-0 truncate text-xs",
-            vertical && "[writing-mode:vertical-rl]",
+            vertical && UPRIGHT_VERTICAL_TEXT_CLASS,
           )}
         >
           {title}
         </span>
+        {work === null ? null : (
+          <span
+            aria-hidden
+            className={cn(
+              "flex min-h-0 min-w-0 items-center gap-1.5 text-xs",
+              vertical && "mt-2 flex-col",
+            )}
+          >
+            {work.kind === "project" && work.color !== null ? (
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{ backgroundColor: work.color }}
+              />
+            ) : null}
+            <span
+              className={cn(
+                "min-h-0 min-w-0 truncate",
+                work.kind === "task" && "text-timeline-accent",
+                vertical && UPRIGHT_VERTICAL_TEXT_CLASS,
+              )}
+            >
+              {work.label}
+            </span>
+          </span>
+        )}
       </button>
     </div>
   );
@@ -242,6 +278,7 @@ export function CollapsedPaneStrips() {
         return createPortal(
           <CollapsedStrip
             pluginId={pluginId}
+            pane={host.element}
             title={thread?.displayTitle ?? "Thread"}
             vertical={host.vertical}
             needsInput={thread?.hasPendingInteraction ?? false}
