@@ -3,6 +3,7 @@ import {
   countPatchLines,
   loadFocusedDiff,
   parseFocusedDiffParams,
+  sameFocusedDiff,
   type FocusedDiffSdk,
 } from "./diff.js";
 
@@ -112,6 +113,22 @@ describe("loadFocusedDiff", () => {
       kind: "unavailable",
       message: "This environment is not a git repository.",
     });
+  });
+});
+
+describe("sameFocusedDiff", () => {
+  it("treats a re-polled identical result as unchanged and any difference as new", () => {
+    const patch = { kind: "patch", patch: "+a", truncated: false } as const;
+    expect(sameFocusedDiff(patch, { ...patch })).toBe(true);
+    expect(sameFocusedDiff(patch, { ...patch, patch: "+b" })).toBe(false);
+    expect(sameFocusedDiff(patch, { ...patch, truncated: true })).toBe(false);
+    expect(sameFocusedDiff(patch, { kind: "unchanged" })).toBe(false);
+    expect(
+      sameFocusedDiff(
+        { kind: "unavailable", message: "x" },
+        { kind: "unavailable", message: "y" },
+      ),
+    ).toBe(false);
   });
 });
 

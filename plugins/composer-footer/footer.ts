@@ -8,10 +8,27 @@ function pinFooter(composer: Element) {
   }
 }
 
+function pinWithin(node: Node) {
+  if (!(node instanceof Element)) return;
+  if (node.matches(COMPOSER_SELECTOR)) pinFooter(node);
+  node.querySelectorAll(COMPOSER_SELECTOR).forEach(pinFooter);
+}
+
+function pinChanged(records: MutationRecord[]) {
+  for (const record of records) {
+    if (record.type === "attributes") {
+      if (record.target instanceof Element && record.target.matches(COMPOSER_SELECTOR)) {
+        pinFooter(record.target);
+      }
+      continue;
+    }
+    record.addedNodes.forEach(pinWithin);
+  }
+}
+
 export function keepComposerFooterVisible(shell: Element): () => void {
-  const pinAll = () => shell.querySelectorAll(COMPOSER_SELECTOR).forEach(pinFooter);
-  pinAll();
-  const observer = new MutationObserver(pinAll);
+  shell.querySelectorAll(COMPOSER_SELECTOR).forEach(pinFooter);
+  const observer = new MutationObserver(pinChanged);
   observer.observe(shell, {
     subtree: true,
     childList: true,

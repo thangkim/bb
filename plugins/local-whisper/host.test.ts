@@ -242,6 +242,7 @@ function createFakeRuntime(
     languageRequests,
     downloads,
     fireIdleTimer,
+    scheduledTimers: () => timers.length,
   };
 }
 
@@ -598,6 +599,43 @@ describe("Local Whisper server lifecycle", () => {
         await harness.experimental_call("status", statusInput(false)),
       ).toMatchObject({ running: true }),
     );
+    await harness.experimental_dispose();
+  });
+
+  it("counts idle time from the last dictation, not from status checks", async () => {
+    const runtime = createFakeRuntime();
+    const harness = harnessFor(runtime);
+
+    await harness.experimental_call("transcribe", transcribeInput());
+    expect(runtime.scheduledTimers()).toBe(1);
+    await harness.experimental_call("status", statusInput(true));
+    await harness.experimental_call("status", statusInput(true));
+    expect(runtime.scheduledTimers()).toBe(1);
+
+    runtime.fireIdleTimer();
+    expect(runtime.children[0]!.kill).toHaveBeenCalledOnce();
+    await harness.experimental_dispose();
+  });
+
+  it("waits for the next dictation to reload a model unloaded while idle", async () => {
+    const runtime = createFakeRuntime();
+    const harness = harnessFor(runtime);
+
+    await harness.experimental_call("status", statusInput(true));
+    await vi.waitFor(() => expect(runtime.children).toHaveLength(1));
+    runtime.fireIdleTimer();
+    expect(runtime.children[0]!.kill).toHaveBeenCalledOnce();
+    expect(harness.experimental_getRetainedWorkerLeaseCount()).toBe(0);
+
+    await harness.experimental_call("status", statusInput(true));
+    expect(runtime.children).toHaveLength(1);
+    expect(harness.experimental_getRetainedWorkerLeaseCount()).toBe(0);
+
+    await harness.experimental_call("transcribe", transcribeInput());
+    expect(runtime.children).toHaveLength(2);
+    runtime.fireIdleTimer();
+    await harness.experimental_call("status", statusInput(true));
+    expect(runtime.children).toHaveLength(2);
     await harness.experimental_dispose();
   });
 

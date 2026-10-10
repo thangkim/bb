@@ -76,7 +76,7 @@ export default function localWhisperPlugin(bb: BbPluginApi): void {
       type: "boolean",
       label: "Preload the model",
       description:
-        "Start loading the model when bb checks voice input availability, so the first dictation does not wait for it.",
+        "Start loading the model when bb checks voice input availability, so the first dictation does not wait for it. Once the model unloads after being idle, it loads again on your next dictation.",
       default: true,
     },
     keepLoadedMinutes: {

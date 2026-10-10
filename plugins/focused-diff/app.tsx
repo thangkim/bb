@@ -13,6 +13,7 @@ import {
   countPatchLines,
   loadFocusedDiff,
   parseFocusedDiffParams,
+  sameFocusedDiff,
   type FocusedDiffResult,
 } from "./diff.js";
 import {
@@ -79,7 +80,14 @@ function useFocusedDiff(threadId: string, path: string) {
     controllerRef.current = controller;
     loadFocusedDiff(sdk, threadId, path, controller.signal).then(
       (result) => {
-        if (!controller.signal.aborted) setState(result);
+        if (controller.signal.aborted) return;
+        setState((current) =>
+          current.kind !== "loading" &&
+          current.kind !== "error" &&
+          sameFocusedDiff(current, result)
+            ? current
+            : result,
+        );
       },
       (error: unknown) => {
         if (controller.signal.aborted) return;

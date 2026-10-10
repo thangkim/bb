@@ -53,6 +53,19 @@ export function countPatchLines(patch: string): PatchStats {
   return { insertions, deletions };
 }
 
+export function sameFocusedDiff(
+  left: FocusedDiffResult,
+  right: FocusedDiffResult,
+): boolean {
+  if (left.kind === "patch" && right.kind === "patch") {
+    return left.patch === right.patch && left.truncated === right.truncated;
+  }
+  if (left.kind === "unavailable" && right.kind === "unavailable") {
+    return left.message === right.message;
+  }
+  return left.kind === right.kind;
+}
+
 export async function loadFocusedDiff(
   sdk: FocusedDiffSdk,
   threadId: string,

@@ -42,7 +42,7 @@ Change settings in Settings → Installed plugins → Local Whisper or with `bb 
 | Key                 | Default    | Meaning                                                                                             |
 | ------------------- | ---------- | --------------------------------------------------------------------------------------------------- |
 | `languages`         | `en,ru,vi` | Languages you speak. Detection chooses among them; one code forces it; empty allows every language. |
-| `preload`           | `true`     | Load the model in the background when bb checks voice availability, so the first dictation is warm. |
+| `preload`           | `true`     | Load the model in the background when bb checks voice availability, so the first dictation is warm. After an idle unload, the next dictation loads it again. |
 | `keepLoadedMinutes` | `60`       | Minutes the model stays loaded after the last use. Turbo holds about 2 GB of memory while loaded.   |
 | `modelPath`         | empty      | Absolute path to a ggml model.                                                                      |
 | `serverPath`        | empty      | Absolute path to `whisper-server`.                                                                  |

@@ -52,6 +52,20 @@ describe("keepComposerFooterVisible", () => {
     stop();
   });
 
+  it("marks a composer nested inside a newly mounted subtree", async () => {
+    const { shell, composer } = renderShell();
+    composer.remove();
+    const stop = keepComposerFooterVisible(shell);
+    const wrapper = document.createElement("section");
+    const nested = document.createElement("div");
+    nested.setAttribute("data-follow-up-composer", "");
+    wrapper.append(nested);
+    shell.append(wrapper);
+    await flushMutations();
+    expect(nested.hasAttribute(FOOTER_VISIBLE_ATTRIBUTE)).toBe(true);
+    stop();
+  });
+
   it("stops restoring the marker after cleanup", async () => {
     const { shell, composer } = renderShell();
     const stop = keepComposerFooterVisible(shell);

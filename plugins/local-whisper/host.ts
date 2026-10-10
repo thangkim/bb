@@ -152,6 +152,7 @@ export function createLocalWhisperHostEntry(
   let lifecycleSignal: AbortSignal | null = null;
   let workerLease: ExperimentalHostWorkerLease | null = null;
   let cancelIdleStop: (() => void) | null = null;
+  let unloadedWhileIdle = false;
   let languageModelDownload: Promise<void> | null = null;
   let languageModelFailure: { at: number; message: string } | null = null;
   const segmentCache = createSegmentCache(deps.now);
@@ -178,10 +179,15 @@ export function createLocalWhisperHostEntry(
     return lifecycleSignal;
   }
 
+  function unloadWhileIdle(): void {
+    unloadedWhileIdle = true;
+    stopServers();
+  }
+
   function keepLoaded(context: HandlerContext, keepLoadedMs: number): void {
     workerLease ??= context.experimental_retainWorker();
     cancelIdleStop?.();
-    cancelIdleStop = deps.schedule(keepLoadedMs, stopServers);
+    cancelIdleStop = deps.schedule(keepLoadedMs, unloadWhileIdle);
   }
 
   async function resolveLanguageModel(
@@ -538,18 +544,20 @@ export function createLocalWhisperHostEntry(
     handlers: {
       async status(input, context) {
         const lifecycle = enter(context);
+        const preload = input.preload && !unloadedWhileIdle;
         const result = await status(
-          input,
+          { ...input, preload },
           context.experimental_paths.dataDir,
           lifecycle,
         );
-        if (result.ready && input.preload) {
+        if (result.ready && preload && cancelIdleStop === null) {
           keepLoaded(context, input.keepLoadedMs);
         }
         return result;
       },
       async transcribe(input, context) {
         const lifecycle = enter(context);
+        unloadedWhileIdle = false;
         keepLoaded(context, input.keepLoadedMs);
         return transcribe(
           input,

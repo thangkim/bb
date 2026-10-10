@@ -87,12 +87,14 @@ const KIND_TONES: Record<Alert["kind"], string> = {
   done: "text-success",
 };
 
-function useNow(intervalMs: number): number {
+function useNow(intervalMs: number, enabled: boolean): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    if (!enabled) return;
+    setNow(Date.now());
     const timer = setInterval(() => setNow(Date.now()), intervalMs);
     return () => clearInterval(timer);
-  }, [intervalMs]);
+  }, [intervalMs, enabled]);
   return now;
 }
 
@@ -157,7 +159,7 @@ function AttentionOverlay() {
   const settings = readSettings(values);
   const [alerts, setAlerts] = useState<readonly Alert[]>([]);
   const [expanded, setExpanded] = useState(false);
-  const now = useNow(30_000);
+  const now = useNow(30_000, alerts.length > 0);
 
   const settingsRef = useRef(settings);
   const threadIdRef = useRef(context.threadId);
