@@ -256,8 +256,8 @@ describe("task detail side chats", () => {
       sideChat.closest('[data-side-chats="thr_worker000"]'),
     ).not.toBeNull();
     fireEvent.click(sideChat);
-    expect(slot.sidebarActionCalls).toContainEqual({
-      method: "open",
+    expect(slot.navigateCalls).toContainEqual({
+      method: "toThread",
       threadId: "thr_side0001",
       options: { split: true },
     });

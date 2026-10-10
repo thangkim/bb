@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
-  experimental_useSidebarThreadActions,
   experimental_useSplitPanes,
+  useBbNavigate,
   useRpc,
 } from "@get-bb/plugin-sdk/app";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -86,7 +86,7 @@ export function NewThreadButton({
 }) {
   const rpc = useRpc<DelegationRpcContract>();
   const splitPanes = experimental_useSplitPanes();
-  const threadActions = experimental_useSidebarThreadActions();
+  const navigate = useBbNavigate();
   const [opening, setOpening] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
 
@@ -108,10 +108,7 @@ export function NewThreadButton({
           })
         : "unavailable";
       if (placed === "unavailable" || placed === "at-cap") {
-        threadActions.openNewThread({
-          projectId: bbProjectId,
-          focusPrompt: true,
-        });
+        navigate.toCompose({ projectId: bbProjectId, focusPrompt: true });
       }
     } catch (error) {
       onError(errorMessage(error));

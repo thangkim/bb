@@ -59,6 +59,77 @@ describe("collectPluginAppRegistrations — experimental_appOverlay", () => {
   });
 });
 
+describe("collectPluginAppRegistrations — experimental_threadAction", () => {
+  const item = () => null;
+  const useData = () => 1;
+
+  it("collects a thread action with its hooks", () => {
+    const definition = definePluginApp((app) => {
+      app.slots.experimental_threadAction({
+        id: "notifications",
+        title: "Notifications",
+        icon: "Notification",
+        group: "3_settings",
+        order: 5,
+        useData,
+        item,
+      });
+    });
+    expect(collectPluginAppRegistrations(definition).threadActions).toEqual([
+      {
+        id: "notifications",
+        title: "Notifications",
+        icon: "Notification",
+        group: "3_settings",
+        order: 5,
+        useData,
+        item,
+      },
+    ]);
+  });
+
+  it("rejects two thread actions with the same id", () => {
+    const definition = definePluginApp((app) => {
+      app.slots.experimental_threadAction({
+        id: "a",
+        title: "One",
+        icon: "Pin",
+        group: "2_organize",
+        item,
+      });
+      app.slots.experimental_threadAction({
+        id: "a",
+        title: "Two",
+        icon: "Pin",
+        group: "2_organize",
+        item,
+      });
+    });
+    expect(() => collectPluginAppRegistrations(definition)).toThrow(/"a"/);
+  });
+
+  it.each([
+    ["item", { item: null }, '"item" must be a function'],
+    ["useData", { item, useData: 1 }, '"useData" must be a function'],
+    ["icon", { item, icon: "" }, "icon"],
+    ["group", { item, group: "" }, "group"],
+    ["order", { item, order: Number.NaN }, '"order" must be a finite number'],
+  ])("rejects a malformed %s", (_field, fields, message) => {
+    const definition = definePluginApp((app) => {
+      app.slots.experimental_threadAction({
+        id: "a",
+        title: "One",
+        icon: "Pin",
+        group: "2_organize",
+        ...fields,
+      } as unknown as Parameters<
+        typeof app.slots.experimental_threadAction
+      >[0]);
+    });
+    expect(() => collectPluginAppRegistrations(definition)).toThrow(message);
+  });
+});
+
 describe("collectPluginAppRegistrations — experimental_threadHeaderAction", () => {
   it("collects a header action", () => {
     const definition = definePluginApp((app) => {
@@ -515,11 +586,6 @@ describe("collectPluginAppRegistrations", () => {
         icon: "Zap",
         run,
       });
-      app.slots.experimental_threadMenuAction({
-        id: "attach",
-        title: "Attach",
-        run,
-      });
       app.composer.customize({
         id: "improve-prompt",
         scopes: ["thread", "new-thread"],
@@ -595,9 +661,6 @@ describe("collectPluginAppRegistrations", () => {
     ]);
     expect(registrations.messageActions).toEqual([
       { id: "summarize", title: "Summarize", icon: "Zap", run },
-    ]);
-    expect(registrations.experimentalThreadMenuActions).toEqual([
-      { id: "attach", title: "Attach", run },
     ]);
     expect(registrations.composerCustomizations).toEqual([
       {
@@ -864,35 +927,6 @@ describe("collectPluginAppRegistrations", () => {
             run: () => {},
           });
           app.slots.messageAction({
-            id: "a",
-            title: "B",
-            run: () => {},
-          });
-        }),
-      /duplicate id "a"/,
-    ],
-    [
-      "thread menu action without a run function",
-      () =>
-        definePluginApp((app) => {
-          app.slots.experimental_threadMenuAction({
-            id: "no-run",
-            title: "No run",
-            run: undefined as never,
-          });
-        }),
-      /"run" must be a function/,
-    ],
-    [
-      "duplicate thread menu action id",
-      () =>
-        definePluginApp((app) => {
-          app.slots.experimental_threadMenuAction({
-            id: "a",
-            title: "A",
-            run: () => {},
-          });
-          app.slots.experimental_threadMenuAction({
             id: "a",
             title: "B",
             run: () => {},

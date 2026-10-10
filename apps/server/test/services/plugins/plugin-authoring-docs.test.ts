@@ -32,9 +32,9 @@ import {
   type PluginSettingDescriptor,
   type PluginSettingsSectionProps,
   type PluginSidebarFooterActionProps,
-  type ExperimentalThreadMenuActionContext,
   type PluginSourceCodeRendererProps,
   type PluginThreadHeaderActionProps,
+  type PluginThreadActionItemInput,
   type ExperimentalPluginBrowserToolbarActionProps,
   type PluginThreadListProps,
   type PluginSidebarFooterActionRegistration,
@@ -221,6 +221,7 @@ void _assertAllAuthModesListed;
 
 const THREAD_EVENT_PAYLOAD_FIELDS = {
   "experimental_thread.events": ["thread", "sequence"],
+  "experimental_thread.parentChanged": ["thread", "previousParentThreadId"],
   "experimental_terminal.input": ["terminal"],
   "experimental_host.deleted": ["host"],
   "experimental_environment.removed": ["removal"],
@@ -272,13 +273,13 @@ type SlotPropsByName = {
   sidebarFooterAction: PluginSidebarFooterActionProps;
   experimental_threadList: PluginThreadListProps;
   experimental_threadHeaderAction: PluginThreadHeaderActionProps;
+  experimental_threadAction: PluginThreadActionItemInput<unknown>;
   experimental_browserToolbarAction: ExperimentalPluginBrowserToolbarActionProps;
   fileOpener: PluginFileOpenerProps;
   experimental_sourceCodeRenderer: PluginSourceCodeRendererProps;
   experimental_diffRenderer: PluginDiffRendererProps;
   messageDirective: PluginMessageDirectiveProps;
   messageAction: PluginMessageActionContext;
-  experimental_threadMenuAction: ExperimentalThreadMenuActionContext;
   commandPaletteAction: PluginCommandContext;
   experimental_providerIcon: PluginProviderIconRegistration;
   experimental_timelineRenderer: PluginTimelineRendererProps;
@@ -359,6 +360,7 @@ const FRONTEND_SLOT_PROP_FIELDS = {
     "projectId",
     "isCompactViewport",
   ],
+  experimental_threadAction: ["thread", "data", "sdk", "navigate"],
   experimental_browserToolbarAction: [
     "threadId",
     "tabId",
@@ -391,7 +393,6 @@ const FRONTEND_SLOT_PROP_FIELDS = {
     "openPanel",
     "composer",
   ],
-  experimental_threadMenuAction: ["threadId", "projectId"],
   commandPaletteAction: ["threadId", "projectId", "openPanel"],
   experimental_providerIcon: ["providerKind", "providerId", "icon"],
   experimental_timelineRenderer: [

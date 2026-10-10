@@ -26,9 +26,9 @@ import type {
   ExperimentalIconRegistration,
   PluginSettingsSectionRegistration,
   PluginSidebarFooterActionRegistration,
-  ExperimentalThreadMenuActionRegistration,
   PluginSourceCodeRendererRegistration,
   PluginThreadHeaderActionRegistration,
+  PluginThreadActionRegistration,
   ExperimentalPluginBrowserToolbarActionRegistration,
   PluginThreadListRegistration,
   PluginThreadPanelActionRegistration,
@@ -354,13 +354,13 @@ export interface CollectedPluginAppRegistrations {
   experimentalSidebarFooterItems: CollectedExperimentalSidebarFooterItem[];
   threadLists: PluginThreadListRegistration[];
   threadHeaderActions: PluginThreadHeaderActionRegistration[];
+  threadActions: PluginThreadActionRegistration<unknown>[];
   browserToolbarActions: ExperimentalPluginBrowserToolbarActionRegistration[];
   fileOpeners: PluginFileOpenerRegistration[];
   sourceCodeRenderers: PluginSourceCodeRendererRegistration[];
   diffRenderers: PluginDiffRendererRegistration[];
   messageDirectives: PluginMessageDirectiveRegistration[];
   messageActions: PluginMessageActionRegistration[];
-  experimentalThreadMenuActions: ExperimentalThreadMenuActionRegistration[];
   commandPaletteActions: CollectedPluginCommandRegistration[];
   providerIcons: CollectedPluginProviderIconRegistration[];
   icons: ExperimentalIconRegistration[];
@@ -479,13 +479,13 @@ export function collectPluginAppRegistrations(
     experimentalSidebarFooterItems: [],
     threadLists: [],
     threadHeaderActions: [],
+    threadActions: [],
     browserToolbarActions: [],
     fileOpeners: [],
     sourceCodeRenderers: [],
     diffRenderers: [],
     messageDirectives: [],
     messageActions: [],
-    experimentalThreadMenuActions: [],
     commandPaletteActions: [],
     providerIcons: [],
     icons: [],
@@ -508,13 +508,13 @@ export function collectPluginAppRegistrations(
     sidebarFooterItem: new Set<string>(),
     threadList: new Set<string>(),
     threadHeaderAction: new Set<string>(),
+    threadAction: new Set<string>(),
     browserToolbarAction: new Set<string>(),
     fileOpener: new Set<string>(),
     sourceCodeRenderer: new Set<string>(),
     diffRenderer: new Set<string>(),
     messageDirective: new Set<string>(),
     messageAction: new Set<string>(),
-    threadMenuAction: new Set<string>(),
     command: new Set<string>(),
     providerIcon: new Set<string>(),
     timelineRenderer: new Set<string>(),
@@ -800,6 +800,39 @@ export function collectPluginAppRegistrations(
             : { placement: registration.placement }),
         });
       },
+      experimental_threadAction(registration) {
+        const kind = "slots.experimental_threadAction";
+        const id = requireSlotId(kind, registration?.id);
+        requireUniqueId(kind, seenIds.threadAction, id);
+        if (typeof registration.item !== "function") {
+          throw new Error(`${kind}: "item" must be a function`);
+        }
+        if (
+          registration.useData !== undefined &&
+          typeof registration.useData !== "function"
+        ) {
+          throw new Error(`${kind}: "useData" must be a function`);
+        }
+        if (
+          registration.order !== undefined &&
+          !Number.isFinite(registration.order)
+        ) {
+          throw new Error(`${kind}: "order" must be a finite number`);
+        }
+        collected.threadActions.push({
+          id,
+          title: requireNonEmptyString(kind, "title", registration.title),
+          icon: requireNonEmptyString(kind, "icon", registration.icon),
+          group: requireNonEmptyString(kind, "group", registration.group),
+          ...(registration.order !== undefined
+            ? { order: registration.order }
+            : {}),
+          ...(registration.useData !== undefined
+            ? { useData: registration.useData }
+            : {}),
+          item: registration.item,
+        });
+      },
       experimental_browserToolbarAction(registration) {
         const kind = "slots.experimental_browserToolbarAction";
         const id = requireSlotId(kind, registration?.id);
@@ -870,24 +903,6 @@ export function collectPluginAppRegistrations(
           throw new Error(`${kind}: "run" must be a function`);
         }
         collected.messageActions.push({
-          id,
-          title: requireNonEmptyString(kind, "title", registration.title),
-          ...(registration.icon !== undefined
-            ? {
-                icon: requireNonEmptyString(kind, "icon", registration.icon),
-              }
-            : {}),
-          run: registration.run,
-        });
-      },
-      experimental_threadMenuAction(registration) {
-        const kind = "slots.experimental_threadMenuAction";
-        const id = requireSlotId(kind, registration?.id);
-        requireUniqueId(kind, seenIds.threadMenuAction, id);
-        if (typeof registration.run !== "function") {
-          throw new Error(`${kind}: "run" must be a function`);
-        }
-        collected.experimentalThreadMenuActions.push({
           id,
           title: requireNonEmptyString(kind, "title", registration.title),
           ...(registration.icon !== undefined

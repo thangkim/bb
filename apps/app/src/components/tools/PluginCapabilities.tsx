@@ -279,15 +279,15 @@ function pluginAppSurfaceItems(
     ),
     ...namedSlotItems(
       pluginId,
-      slots.experimentalThreadMenuActions,
-      "thread-menu-action",
-      "Adds an action to thread menus.",
-    ),
-    ...namedSlotItems(
-      pluginId,
       slots.threadHeaderActions,
       "thread-header",
       "Adds an action to thread headers.",
+    ),
+    ...namedSlotItems(
+      pluginId,
+      slots.threadActions,
+      "thread-action",
+      "Adds an action to thread menus.",
     ),
     ...namedSlotItems(
       pluginId,

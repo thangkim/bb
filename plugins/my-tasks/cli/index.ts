@@ -27,7 +27,6 @@ import { handlers as delegationHandlers } from "../delegate";
 import { briefText, updateProjectBrief } from "../brief";
 import { BRIEF_TEXT_SECTIONS } from "../brief/brief";
 import {
-  presetReasoningLevelSchema,
   tasksRpcContract,
   PRESET_PERMISSION_MODES,
   PRIORITIES,
@@ -2935,10 +2934,10 @@ export function registerTasksCli(
               description: "Model id as the provider spells it",
             },
             reasoning: {
-              type: "enum",
-              values: presetReasoningLevelSchema.options,
+              type: "string",
+              placeholder: "level",
               required: true,
-              description: "Reasoning level the provider supports",
+              description: "Reasoning level as the provider spells it",
             },
             permission: {
               type: "enum",
@@ -3036,9 +3035,9 @@ export function registerTasksCli(
               description: "Model id as the provider spells it",
             },
             reasoning: {
-              type: "enum",
-              values: presetReasoningLevelSchema.options,
-              description: "Reasoning level the provider supports",
+              type: "string",
+              placeholder: "level",
+              description: "Reasoning level as the provider spells it",
             },
             permission: {
               type: "enum",

@@ -90,7 +90,7 @@ describe("new thread button", () => {
     expect(
       slot.rpcCalls.map((call) => [call.method, rpcInput(call.input)]),
     ).toEqual([["projectThreadsCompose", { projectId: PROJECT_ID }]]);
-    expect(slot.sidebarActionCalls).toEqual([]);
+    expect(slot.navigateCalls).toEqual([]);
     expect(errors).toEqual([]);
   });
 
@@ -111,9 +111,9 @@ describe("new thread button", () => {
       const { slot } = render({ splitResult });
       fireEvent.click(slot.getByRole("button", { name: "New thread" }));
       await waitFor(() =>
-        expect(slot.sidebarActionCalls).toEqual([
+        expect(slot.navigateCalls).toEqual([
           {
-            method: "openNewThread",
+            method: "toCompose",
             options: { projectId: "proj_linked", focusPrompt: true },
           },
         ]),
@@ -134,7 +134,7 @@ describe("new thread button", () => {
       expect(errors).toEqual(["Project is not linked to a bb project"]),
     );
     expect(splitCalls).toEqual([]);
-    expect(slot.sidebarActionCalls).toEqual([]);
+    expect(slot.navigateCalls).toEqual([]);
   });
 });
 

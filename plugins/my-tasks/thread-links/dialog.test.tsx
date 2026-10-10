@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  useBbNavigate,
+  useSdk,
+  type PluginThreadActionItemInput,
+} from "@get-bb/plugin-sdk/app";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { makeProject, makeTask, rpcInput } from "../test-fixtures.js";
 import { closeThreadLinks } from "./store.js";
@@ -50,13 +55,20 @@ function renderOverlay(links: {
   projects: (typeof otherProject)[];
 }) {
   const overlay = app.appOverlays.find((entry) => entry.id === "thread-links");
-  const action = app.experimentalThreadMenuActions.find(
-    (entry) => entry.id === "attach",
-  );
+  const action = app.threadActions.find((entry) => entry.id === "attach");
   expect(overlay).toBeDefined();
   expect(action).toMatchObject({ title: "Attach to My Tasks…" });
+  const Overlay = overlay!.component;
+  let context: Pick<
+    PluginThreadActionItemInput<unknown>,
+    "sdk" | "navigate"
+  > | null = null;
+  function Harness() {
+    context = { sdk: useSdk(), navigate: useBbNavigate() };
+    return <Overlay />;
+  }
   const slot = renderSlot(
-    { component: overlay!.component },
+    { component: Harness },
     {},
     {
       rpc: {
@@ -78,8 +90,23 @@ function renderOverlay(links: {
       },
     },
   );
+  const item = action!.item({
+    ...context!,
+    data: undefined,
+    thread: {
+      id: THREAD_ID,
+      projectId: BB_PROJECT_ID,
+      parentThreadId: null,
+      archivedAt: null,
+      pinnedAt: null,
+      sectionId: null,
+      isUnread: false,
+      status: "idle",
+      environment: null,
+    },
+  });
   act(() => {
-    void action!.run({ threadId: THREAD_ID, projectId: BB_PROJECT_ID });
+    void item!.run({ requestRename: () => {} });
   });
   return slot;
 }

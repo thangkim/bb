@@ -2,18 +2,55 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, waitFor } from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
-import type { PluginSidebarSplitLayout } from "@get-bb/plugin-sdk/app";
+import {
+  useBbNavigate,
+  useSdk,
+  type PluginSidebarSplitLayout,
+  type PluginThreadActionItemInput,
+} from "@get-bb/plugin-sdk/app";
 import { DECORATED_ATTRIBUTE } from "./pane-arrangement";
 import { mountMenu, mountPane } from "./test-dom";
 
 const app = await loadPluginApp(() => import("./app"));
 
-function action(id: string) {
-  const registration = app.experimentalThreadMenuActions.find(
+type ItemContext = Pick<
+  PluginThreadActionItemInput<unknown>,
+  "sdk" | "navigate"
+>;
+
+function captureItemContext(): ItemContext {
+  let context: ItemContext | null = null;
+  function Probe() {
+    context = { sdk: useSdk(), navigate: useBbNavigate() };
+    return null;
+  }
+  renderSlot({ component: Probe }, {}, { pluginId: "pane-arrangement-menu" });
+  if (context === null) throw new Error("probe did not render");
+  return context;
+}
+
+async function runAction(id: string, threadId: string) {
+  const registration = app.threadActions.find(
     (candidate) => candidate.id === id,
   );
   if (registration === undefined) throw new Error(`missing action ${id}`);
-  return registration;
+  const item = registration.item({
+    ...captureItemContext(),
+    data: undefined,
+    thread: {
+      id: threadId,
+      projectId: "p",
+      parentThreadId: null,
+      archivedAt: null,
+      pinnedAt: null,
+      sectionId: null,
+      isUnread: false,
+      status: "idle",
+      environment: null,
+    },
+  });
+  if (item === null) throw new Error(`hidden action ${id}`);
+  await item.run({ requestRename: () => {} });
 }
 
 function layout(
@@ -52,7 +89,7 @@ afterEach(() => {
 describe("registrations", () => {
   it("adds Full Screen and the four moves to the thread menu", () => {
     expect(
-      app.experimentalThreadMenuActions.map((registration) => [
+      app.threadActions.map((registration) => [
         registration.id,
         registration.title,
       ]),
@@ -108,7 +145,7 @@ describe("menu host", () => {
       expect(items[0]!.hasAttribute(DECORATED_ATTRIBUTE)).toBe(true),
     );
 
-    await action("full-screen").run({ threadId: "t-1", projectId: "p" });
+    await runAction("full-screen", "t-1");
 
     expect(clickA).toHaveBeenCalledOnce();
     expect(clickB).not.toHaveBeenCalled();
@@ -132,7 +169,7 @@ describe("menu host", () => {
       expect(items[0]!.hasAttribute(DECORATED_ATTRIBUTE)).toBe(true),
     );
 
-    await action("close-pane").run({ threadId: "t-1", projectId: "p" });
+    await runAction("close-pane", "t-1");
 
     expect(closeB).toHaveBeenCalledOnce();
     expect(closeA).not.toHaveBeenCalled();
@@ -152,7 +189,7 @@ describe("menu host", () => {
       ]),
     );
 
-    await action("full-screen").run({ threadId: "t-2", projectId: "p" });
+    await runAction("full-screen", "t-2");
 
     expect(clickB).toHaveBeenCalledOnce();
     expect(clickA).not.toHaveBeenCalled();
@@ -164,9 +201,9 @@ describe("menu host", () => {
     a.button.addEventListener("click", clickA);
     mountHost(layout([{ paneId: "pa", threadId: "t-1", isFocused: true }]));
 
-    await action("full-screen").run({ threadId: "t-9", projectId: "p" });
-    await action("move-left").run({ threadId: "t-9", projectId: "p" });
-    await action("close-pane").run({ threadId: "t-9", projectId: "p" });
+    await runAction("full-screen", "t-9");
+    await runAction("move-left", "t-9");
+    await runAction("close-pane", "t-9");
 
     expect(clickA).not.toHaveBeenCalled();
   });

@@ -256,7 +256,9 @@ export interface PromptDraftController {
   ) => void;
   setAttachments: (attachments: PromptDraftAttachment[]) => void;
   addAttachment: (attachment: PromptDraftAttachment) => void;
-  removeAttachment: (path: string) => void;
+  updateAttachments: (
+    update: (attachments: PromptDraftAttachment[]) => PromptDraftAttachment[],
+  ) => void;
   clear: () => void;
   clearIfCurrentMatches: (expectedDraft: PromptDraftState) => boolean;
   restoreIfEmpty: (nextDraft: PromptDraftState) => void;
@@ -299,18 +301,11 @@ function createPromptDraftController(
         attachments: [...currentDraft.attachments, attachment],
       });
     },
-    removeAttachment: (path) => {
+    updateAttachments: (update) => {
       const currentDraft = readPromptDraft(storageKey);
-      const nextAttachments = currentDraft.attachments.filter(
-        (attachment) => attachment.path !== path,
-      );
-      if (nextAttachments.length === currentDraft.attachments.length) {
-        return;
-      }
-
       writePromptDraft(storageKey, {
         ...currentDraft,
-        attachments: nextAttachments,
+        attachments: update(currentDraft.attachments),
       });
     },
     clear: () => writePromptDraft(storageKey, EMPTY_PROMPT_DRAFT),

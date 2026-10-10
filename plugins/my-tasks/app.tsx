@@ -1,4 +1,7 @@
-import { definePluginApp } from "@get-bb/plugin-sdk/app";
+import {
+  definePluginApp,
+  experimental_THREAD_ACTION_GROUPS,
+} from "@get-bb/plugin-sdk/app";
 import { TasksAppShell } from "./shell/app-shell.js";
 import { TasksSidebarAccessory } from "./shell/sidebar-accessory.js";
 import { TasksNavigationPanel } from "./shell/navigation-panel.js";
@@ -53,12 +56,17 @@ export default definePluginApp((app) => {
     id: "sidebar-projects-tab",
     component: SidebarProjectsTab,
   });
-  app.slots.experimental_threadMenuAction({
+  app.slots.experimental_threadAction({
     id: "attach",
     title: "Attach to My Tasks…",
     icon: "ListTodo",
-    run: ({ threadId, projectId }) => {
-      openThreadLinks({ threadId, projectId });
-    },
+    group: experimental_THREAD_ACTION_GROUPS.organize,
+    item: ({ thread }) => ({
+      label: "Attach to My Tasks…",
+      icon: "ListTodo",
+      run: () => {
+        openThreadLinks({ threadId: thread.id, projectId: thread.projectId });
+      },
+    }),
   });
 });

@@ -38,6 +38,7 @@ const voiceInput = {
 function mockVoiceInput(state: VoiceState) {
   vi.mocked(useVoiceInput).mockReturnValue({
     state,
+    microphoneWarning: null,
     isSupported: true,
     unsupportedReason: null,
     stream: null,

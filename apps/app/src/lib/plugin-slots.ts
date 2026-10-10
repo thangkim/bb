@@ -16,9 +16,9 @@ import type {
   ExperimentalIconRegistration,
   PluginSettingsSectionRegistration,
   PluginSidebarFooterActionRegistration,
-  ExperimentalThreadMenuActionRegistration,
   PluginSourceCodeRendererRegistration,
   PluginThreadHeaderActionRegistration,
+  PluginThreadActionRegistration,
   ExperimentalPluginBrowserToolbarActionRegistration,
   PluginThreadListRegistration,
   PluginThreadPanelActionRegistration,
@@ -47,13 +47,13 @@ export interface PluginRegistrationSet {
   experimentalSidebarFooterItems?: readonly CollectedExperimentalSidebarFooterItem[];
   threadLists?: readonly PluginThreadListRegistration[];
   threadHeaderActions?: readonly PluginThreadHeaderActionRegistration[];
+  threadActions?: readonly PluginThreadActionRegistration<unknown>[];
   browserToolbarActions?: readonly ExperimentalPluginBrowserToolbarActionRegistration[];
   fileOpeners: readonly PluginFileOpenerRegistration[];
   sourceCodeRenderers?: readonly PluginSourceCodeRendererRegistration[];
   diffRenderers?: readonly PluginDiffRendererRegistration[];
   messageDirectives: readonly PluginMessageDirectiveRegistration[];
   messageActions?: readonly PluginMessageActionRegistration[];
-  experimentalThreadMenuActions?: readonly ExperimentalThreadMenuActionRegistration[];
   commandPaletteActions?: readonly CollectedPluginCommandRegistration[];
   providerIcons?: readonly CollectedPluginProviderIconRegistration[];
   icons?: readonly ExperimentalIconRegistration[];
@@ -89,6 +89,8 @@ export interface PluginThreadListSlot
   extends PluginThreadListRegistration, PluginSlotBase {}
 interface PluginThreadHeaderActionSlot
   extends PluginThreadHeaderActionRegistration, PluginSlotBase {}
+export interface PluginThreadActionSlot
+  extends PluginThreadActionRegistration<unknown>, PluginSlotBase {}
 export interface PluginBrowserToolbarActionSlot
   extends ExperimentalPluginBrowserToolbarActionRegistration, PluginSlotBase {}
 export interface PluginFileOpenerSlot
@@ -101,8 +103,6 @@ export interface PluginMessageDirectiveSlot
   extends PluginMessageDirectiveRegistration, PluginSlotBase {}
 export interface PluginMessageActionSlot
   extends PluginMessageActionRegistration, PluginSlotBase {}
-export type ExperimentalThreadMenuActionSlot =
-  ExperimentalThreadMenuActionRegistration & PluginSlotBase;
 export type PluginCommandPaletteActionSlot =
   CollectedPluginCommandRegistration & PluginSlotBase;
 interface PluginIconSlot extends ExperimentalIconRegistration, PluginSlotBase {}
@@ -127,13 +127,13 @@ export interface PluginSlotSnapshot {
   sidebarFooterItems: readonly PluginSidebarFooterItemSlot[];
   threadLists: readonly PluginThreadListSlot[];
   threadHeaderActions: readonly PluginThreadHeaderActionSlot[];
+  threadActions: readonly PluginThreadActionSlot[];
   browserToolbarActions: readonly PluginBrowserToolbarActionSlot[];
   fileOpeners: readonly PluginFileOpenerSlot[];
   sourceCodeRenderers: readonly PluginSourceCodeRendererSlot[];
   diffRenderers: readonly PluginDiffRendererSlot[];
   messageDirectives: readonly PluginMessageDirectiveSlot[];
   messageActions: readonly PluginMessageActionSlot[];
-  experimentalThreadMenuActions: readonly ExperimentalThreadMenuActionSlot[];
   commandPaletteActions: readonly PluginCommandPaletteActionSlot[];
   providerIcons: readonly PluginProviderIconSlot[];
   icons: readonly PluginIconSlot[];
@@ -154,13 +154,13 @@ export const EMPTY_PLUGIN_SLOT_SNAPSHOT: PluginSlotSnapshot = {
   sidebarFooterItems: [],
   threadLists: [],
   threadHeaderActions: [],
+  threadActions: [],
   browserToolbarActions: [],
   fileOpeners: [],
   sourceCodeRenderers: [],
   diffRenderers: [],
   messageDirectives: [],
   messageActions: [],
-  experimentalThreadMenuActions: [],
   commandPaletteActions: [],
   providerIcons: [],
   icons: [],
@@ -188,13 +188,13 @@ const SLOT_KINDS: readonly SlotKind[] = [
   "sidebarFooterItems",
   "threadLists",
   "threadHeaderActions",
+  "threadActions",
   "browserToolbarActions",
   "fileOpeners",
   "sourceCodeRenderers",
   "diffRenderers",
   "messageDirectives",
   "messageActions",
-  "experimentalThreadMenuActions",
   "commandPaletteActions",
   "providerIcons",
   "icons",
@@ -246,13 +246,13 @@ function flattenRegistrations(
     sidebarFooterItems: stamp<CollectedSidebarFooterItem>(sidebarFooterItems),
     threadLists: stamp(set.threadLists),
     threadHeaderActions: stamp(set.threadHeaderActions),
+    threadActions: stamp(set.threadActions),
     browserToolbarActions: stamp(set.browserToolbarActions),
     fileOpeners: stamp(set.fileOpeners),
     sourceCodeRenderers: stamp(set.sourceCodeRenderers),
     diffRenderers: stamp(set.diffRenderers),
     messageDirectives: stamp(set.messageDirectives),
     messageActions: stamp(set.messageActions),
-    experimentalThreadMenuActions: stamp(set.experimentalThreadMenuActions),
     commandPaletteActions: stamp(set.commandPaletteActions),
     providerIcons: stamp(set.providerIcons),
     icons: stamp(set.icons),

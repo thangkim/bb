@@ -608,12 +608,9 @@ describe("projects list", () => {
       }),
     );
     fireEvent.click(await within(row).findByRole("button", { name: /Worker/ }));
-    expect(slot.sidebarActionCalls).toContainEqual({
-      method: "open",
-      threadId: "thr_W1",
-      options: { split: true },
-    });
-    expect(slot.navigateCalls).toEqual([]);
+    expect(slot.navigateCalls).toEqual([
+      { method: "toThread", threadId: "thr_W1", options: { split: true } },
+    ]);
   });
 
   it("puts a task's priority and thread actions right under its name, above its threads", async () => {
@@ -701,8 +698,8 @@ describe("projects list", () => {
     ).toBe(false);
 
     fireEvent.click(threadButton);
-    expect(slot.sidebarActionCalls).toContainEqual({
-      method: "open",
+    expect(slot.navigateCalls).toContainEqual({
+      method: "toThread",
       threadId: "thr_P1",
       options: { split: true },
     });
@@ -738,8 +735,8 @@ describe("projects list", () => {
     expect(parent.parentElement?.contains(sideChat)).toBe(true);
     expect(other.parentElement?.contains(sideChat)).toBe(false);
     fireEvent.click(sideChat);
-    expect(slot.sidebarActionCalls).toContainEqual({
-      method: "open",
+    expect(slot.navigateCalls).toContainEqual({
+      method: "toThread",
       threadId: "thr_S1",
       options: { split: true },
     });
@@ -824,8 +821,8 @@ describe("projects list", () => {
     expect(parent?.parentElement?.contains(sideChat)).toBe(true);
     expect(other?.parentElement?.contains(sideChat)).toBe(false);
     fireEvent.click(sideChat);
-    expect(slot.sidebarActionCalls).toContainEqual({
-      method: "open",
+    expect(slot.navigateCalls).toContainEqual({
+      method: "toThread",
       threadId: "thr_S1",
       options: { split: true },
     });
@@ -986,9 +983,9 @@ describe("projects list", () => {
     await waitFor(() => expect(newThread.hasAttribute("disabled")).toBe(false));
     fireEvent.click(newThread);
     await waitFor(() =>
-      expect(slot.sidebarActionCalls).toEqual([
+      expect(slot.navigateCalls).toEqual([
         {
-          method: "openNewThread",
+          method: "toCompose",
           options: { projectId: "proj_launch", focusPrompt: true },
         },
       ]),
@@ -1029,9 +1026,9 @@ describe("projects list", () => {
     fireEvent.click(await slot.findByRole("option", { name: "bb monorepo" }));
     fireEvent.click(slot.getByRole("button", { name: "Link and start" }));
     await waitFor(() =>
-      expect(slot.sidebarActionCalls).toEqual([
+      expect(slot.navigateCalls).toEqual([
         {
-          method: "openNewThread",
+          method: "toCompose",
           options: { projectId: "proj_mono", focusPrompt: true },
         },
       ]),

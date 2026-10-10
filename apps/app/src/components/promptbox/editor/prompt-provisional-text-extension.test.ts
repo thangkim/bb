@@ -14,7 +14,6 @@ function createEditor(paragraphs: string[]): Editor {
   const editor = new Editor({
     element: document.createElement("div"),
     extensions: promptEditorExtensions({
-      richTextEditing: false,
       getPlaceholder: () => "",
     }),
     content: {

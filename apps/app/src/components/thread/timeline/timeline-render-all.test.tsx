@@ -44,6 +44,7 @@ function renderLoader(measurements: Map<string, number>) {
       getScrollElement={() => scrollElement}
       itemKeys={ITEM_KEYS}
       measurements={measurements}
+      pinnedToEnd={false}
       renderItem={(index, state) => (
         <div
           key={ITEM_KEYS[index]}

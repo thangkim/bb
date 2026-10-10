@@ -3,8 +3,9 @@ import {
   definePluginApp,
   experimental_usePluginId,
   useSidebarSplitLayout,
-  type ExperimentalThreadMenuActionRegistration,
   type PluginSidebarSplitLayout,
+  type PluginThreadAction,
+  type PluginThreadActionRegistration,
 } from "@get-bb/plugin-sdk/app";
 import {
   CLOSE_BUTTON_SELECTOR,
@@ -22,10 +23,9 @@ import {
 let latestLayout: PluginSidebarSplitLayout | null = null;
 let menuButton: HTMLButtonElement | null = null;
 
-const MOVE_ICONS: Record<
-  PaneSide,
-  NonNullable<ExperimentalThreadMenuActionRegistration["icon"]>
-> = {
+const PANE_ACTION_GROUP = "1_pane";
+
+const MOVE_ICONS: Record<PaneSide, PluginThreadAction["icon"]> = {
   left: "ArrowLeft",
   right: "ArrowRight",
   top: "ArrowUp",
@@ -81,40 +81,70 @@ export function PaneArrangementMenuHost() {
   return null;
 }
 
+function paneAction(
+  id: string,
+  title: string,
+  icon: PluginThreadAction["icon"],
+  run: (threadId: string) => void | Promise<void>,
+  order: number,
+): PluginThreadActionRegistration {
+  return {
+    id,
+    title,
+    icon,
+    group: PANE_ACTION_GROUP,
+    order,
+    item: ({ thread }) => ({
+      label: title,
+      icon,
+      run: () => run(thread.id),
+    }),
+  };
+}
+
+function paneActions(): PluginThreadActionRegistration[] {
+  return [
+    paneAction(
+      "full-screen",
+      FULL_SCREEN_TITLE,
+      "Maximize2",
+      (threadId) => {
+        const button = buttonForThread(threadId);
+        if (button !== null) toggleFullScreen(button);
+      },
+      0,
+    ),
+    ...MOVE_ACTIONS.map((action, index) =>
+      paneAction(
+        `move-${action.side}`,
+        action.title,
+        MOVE_ICONS[action.side],
+        async (threadId) => {
+          const button = buttonForThread(threadId);
+          if (button !== null) await moveViaArrangementMenu(button, action.side);
+        },
+        index + 1,
+      ),
+    ),
+    paneAction(
+      "close-pane",
+      CLOSE_PANE_TITLE,
+      "CloseThreadPane",
+      (threadId) => {
+        buttonForThread(threadId, CLOSE_BUTTON_SELECTOR)?.click();
+      },
+      MOVE_ACTIONS.length + 1,
+    ),
+  ];
+}
+
 export default definePluginApp((app) => {
   app.slots.experimental_appOverlay({
     id: "pane-arrangement-menu",
     component: PaneArrangementMenuHost,
   });
 
-  app.slots.experimental_threadMenuAction({
-    id: "full-screen",
-    title: FULL_SCREEN_TITLE,
-    icon: "Maximize2",
-    run: ({ threadId }) => {
-      const button = buttonForThread(threadId);
-      if (button !== null) toggleFullScreen(button);
-    },
-  });
-
-  for (const action of MOVE_ACTIONS) {
-    app.slots.experimental_threadMenuAction({
-      id: `move-${action.side}`,
-      title: action.title,
-      icon: MOVE_ICONS[action.side],
-      run: async ({ threadId }) => {
-        const button = buttonForThread(threadId);
-        if (button !== null) await moveViaArrangementMenu(button, action.side);
-      },
-    });
+  for (const registration of paneActions()) {
+    app.slots.experimental_threadAction(registration);
   }
-
-  app.slots.experimental_threadMenuAction({
-    id: "close-pane",
-    title: CLOSE_PANE_TITLE,
-    icon: "CloseThreadPane",
-    run: ({ threadId }) => {
-      buttonForThread(threadId, CLOSE_BUTTON_SELECTOR)?.click();
-    },
-  });
 });
