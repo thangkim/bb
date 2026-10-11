@@ -4,7 +4,6 @@ import { transcribeVoiceInput } from "@/lib/api";
 import type { PromptDraftState } from "@bb/client-core";
 import type { PluginComposerHost } from "@/components/plugin/plugin-composer-host";
 import type { PromptBoxHandle, PromptVoiceConfig } from "./PromptBoxInternal";
-import type { PromptVoiceSession } from "./plugin-voice-input";
 
 async function requestVoiceTranscription({
   file,
@@ -31,7 +30,6 @@ export function usePromptVoice(
     submit?: PluginComposerHost["submit"];
   },
 ): PromptVoiceConfig {
-  const pluginSessionRef = useRef<PromptVoiceSession | null>(null);
   const sendPendingRef = useRef(false);
   const stoppedRef = useRef(false);
   const mountedRef = useRef(true);
@@ -47,23 +45,14 @@ export function usePromptVoice(
       const send = sendPendingRef.current;
       sendPendingRef.current = false;
       stoppedRef.current = false;
-      const pluginSession = pluginSessionRef.current;
-      const insertWithPlugin = pluginSession
-        ? (transcript: string) => pluginSession.insert(transcript)
-        : undefined;
       if (mountedRef.current && promptBoxRef.current) {
-        if (send && insertWithPlugin) {
-          promptBoxRef.current.sendVoiceTranscript(text, insertWithPlugin);
-        } else if (send) {
+        if (send) {
           promptBoxRef.current.sendVoiceTranscript(text);
-        } else if (insertWithPlugin) {
-          insertWithPlugin(text);
         } else {
           promptBoxRef.current.insertTextAtCursor(text);
         }
         return;
       }
-      pluginSession?.end();
       if (!draft) return;
       const current = draft.getCurrent();
       const separator =
@@ -84,10 +73,7 @@ export function usePromptVoice(
 
   const transcribeAfterCompletionTransition = useCallback(
     async (args: Parameters<typeof requestVoiceTranscription>[0]) => {
-      const pluginSession = pluginSessionRef.current;
-      const text = pluginSession
-        ? await pluginSession.finish(args.file)
-        : await requestVoiceTranscription(args);
+      const text = await requestVoiceTranscription(args);
       await promptBoxRef.current?.playVoiceCompletionTransition();
       if (args.signal?.aborted) {
         throw createVoiceAbortError();
@@ -102,31 +88,6 @@ export function usePromptVoice(
     onTranscribe: transcribeAfterCompletionTransition,
     getPromptContext,
   });
-
-  const { state, readRecording } = voiceInput;
-  useEffect(() => {
-    if (state === "transcribing") return;
-    if (state === "recording") {
-      if (pluginSessionRef.current) return;
-      const promptContext = promptBoxRef.current?.getTextBeforeCursor();
-      pluginSessionRef.current =
-        promptBoxRef.current?.beginPluginVoiceInput({
-          readRecording,
-          transcribe: (file, signal) =>
-            requestVoiceTranscription({ file, promptContext, signal }),
-        }) ?? null;
-      return;
-    }
-    pluginSessionRef.current?.end();
-    pluginSessionRef.current = null;
-  }, [promptBoxRef, readRecording, state]);
-  useEffect(
-    () => () => {
-      pluginSessionRef.current?.end();
-      pluginSessionRef.current = null;
-    },
-    [],
-  );
 
   const stop = useCallback(() => {
     if (voiceInput.state !== "recording" || stoppedRef.current) return;

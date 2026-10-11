@@ -60,7 +60,6 @@ beforeEach(() => {
     start: vi.fn(async () => {}),
     stop: vi.fn(),
     cancel: vi.fn(),
-    readRecording: () => new File([], "recording.webm"),
   });
   Object.defineProperty(window, "matchMedia", {
     writable: true,

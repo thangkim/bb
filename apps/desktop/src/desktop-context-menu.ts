@@ -12,7 +12,6 @@ export interface DesktopContextMenuWebContents {
     eventName: "context-menu",
     listener: (event: Event, params: ContextMenuParams) => void,
   ): void;
-  copyImageAt(x: number, y: number): void;
   replaceMisspelling(text: string): void;
   session: Pick<
     Session,
@@ -29,7 +28,7 @@ interface BuildDesktopContextMenuTemplateArgs {
   params: ContextMenuParams;
   webContents: Pick<
     DesktopContextMenuWebContents,
-    "copyImageAt" | "replaceMisspelling" | "session"
+    "replaceMisspelling" | "session"
   >;
 }
 
@@ -125,20 +124,6 @@ export function buildDesktopContextMenuTemplate({
       { type: "separator" },
       { role: "selectAll", enabled: editFlags.canSelectAll },
     );
-    return trimTrailingSeparator(template);
-  }
-
-  if (params.mediaType === "image" && params.hasImageContents) {
-    template.push({
-      label: "Copy Image",
-      accelerator: "CmdOrCtrl+C",
-      click: () => {
-        webContents.copyImageAt(params.x, params.y);
-      },
-    });
-    if (params.editFlags.canSelectAll) {
-      template.push({ role: "selectAll", enabled: true });
-    }
     return trimTrailingSeparator(template);
   }
 

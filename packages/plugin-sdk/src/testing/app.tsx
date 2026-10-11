@@ -3,8 +3,8 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useLayoutEffect,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -28,9 +28,6 @@ import {
   type ComposerView,
   type ExperimentalAppOverlayRegistration,
   type ExperimentalQuestionFormHost,
-  type ExperimentalNewThreadHandler,
-  type ExperimentalNewThreadRequest,
-  type ExperimentalSplitPanes,
   type PluginAppDefinition,
   type PluginAppSetup,
   type ExperimentalClipboardContent,
@@ -254,23 +251,7 @@ export interface ComposerLog {
    * queued-message scope rejects, as the app does.
    */
   selections: ComposerSelection[];
-  /**
-   * Text of the live `experimental_beginProvisionalText` preview after
-   * whitespace collapsing, `""` while one is active but empty, or null when
-   * none is active. The harness has no caret: a commit appends to `text` with
-   * a separating space. Unmounting the slot or changing the composer scope
-   * cancels the preview, as the app does.
-   */
-  provisionalText: string | null;
-  /** Every provisional-text operation that took effect, in order. */
-  provisionalTextCalls: ComposerProvisionalTextCall[];
 }
-
-export type ComposerProvisionalTextCall =
-  | { type: "begin" }
-  | { type: "update"; text: string }
-  | { type: "commit"; text: string }
-  | { type: "cancel" };
 
 interface TestComposerStore {
   api: PluginComposerApi;
@@ -316,8 +297,6 @@ interface SlotEnv {
   sdkCalls: SdkCall[];
   providers: PluginProvidersState;
   codeTheme: PluginCodeThemeState;
-  splitPanes: ExperimentalSplitPanes;
-  newThreadHandlers: { current: ExperimentalNewThreadHandler | null }[];
   branchesState: BranchesState;
   checkoutState: CheckoutState;
 }
@@ -1361,28 +1340,6 @@ const testPluginSdkApp = {
   experimental_useCodeTheme(): PluginCodeThemeState {
     return useSlotEnv("experimental_useCodeTheme").codeTheme;
   },
-  experimental_useSplitPanes(): ExperimentalSplitPanes {
-    return useSlotEnv("experimental_useSplitPanes").splitPanes;
-  },
-  experimental_useNewThreadHandler(
-    handler: ExperimentalNewThreadHandler | null,
-  ): void {
-    const { newThreadHandlers } = useSlotEnv(
-      "experimental_useNewThreadHandler",
-    );
-    const entryRef = useRef({ current: handler });
-    useLayoutEffect(() => {
-      entryRef.current.current = handler;
-    }, [handler]);
-    useEffect(() => {
-      const entry = entryRef.current;
-      newThreadHandlers.push(entry);
-      return () => {
-        const index = newThreadHandlers.indexOf(entry);
-        if (index !== -1) newThreadHandlers.splice(index, 1);
-      };
-    }, [newThreadHandlers]);
-  },
   experimental_copyToClipboard(
     content: ExperimentalClipboardContent,
   ): Promise<boolean> {
@@ -1802,12 +1759,6 @@ export interface RenderSlotOptions<
    */
   codeTheme?: Partial<PluginCodeThemeState>;
   /**
-   * What `experimental_useSplitPanes()` reports. Omitted → unavailable, with
-   * an `openNewThread` that returns `"unavailable"`; pass a spy as
-   * `openNewThread` to observe calls and choose results.
-   */
-  experimental_splitPanes?: Partial<ExperimentalSplitPanes>;
-  /**
    * Host result for `experimental_copyToClipboard()` writes, which are
    * recorded in `inspection.experimental_clipboardWrites` either way. The
    * clipboard is not slot-scoped: writes from anywhere (components, command
@@ -1901,12 +1852,6 @@ export interface RenderedSlotBehaviorDrivers {
   setComposerText(text: string): Promise<void>;
   /** Replace the scope snapshots returned by composer hooks, wrapped in act. */
   setComposerScope(scope: PluginComposerScope): Promise<void>;
-  /**
-   * Offer a bb New thread request to mounted
-   * `experimental_useNewThreadHandler` handlers the way the host does, wrapped
-   * in act. True when a handler took it.
-   */
-  experimental_offerNewThread(request: ExperimentalNewThreadRequest): boolean;
 }
 
 /** Read-only call/write logs produced while the slot is mounted. */
@@ -2354,22 +2299,8 @@ export function renderSlot<
     focusCount: 0,
     submits: [],
     selections: [],
-    provisionalText: null,
-    provisionalTextCalls: [],
   };
   const composerOwnership = { active: true };
-  let provisionalSessionCount = 0;
-  let activeProvisionalSession: number | null = null;
-  const appendComposerText = (text: string) => {
-    const separator =
-      composerText.length === 0 || /\s$/u.test(composerText) ? "" : " ";
-    commitComposerText(`${composerText}${separator}${text}`);
-  };
-  const endProvisionalText = (call: ComposerProvisionalTextCall) => {
-    activeProvisionalSession = null;
-    composerLog.provisionalText = null;
-    composerLog.provisionalTextCalls.push(call);
-  };
   const composerIsAvailable = () =>
     composerOwnership.active || composerScope.kind !== "queued-message";
   const submissionListeners = new Set<() => void>();
@@ -2469,43 +2400,6 @@ export function renderSlot<
           submissionListeners.delete(listener);
         };
       },
-      beginProvisionalText() {
-        if (!composerOwnership.active) return null;
-        provisionalSessionCount += 1;
-        const session = provisionalSessionCount;
-        activeProvisionalSession = session;
-        composerLog.provisionalText = "";
-        composerLog.provisionalTextCalls.push({ type: "begin" });
-        let ended = false;
-        const isLive = () =>
-          composerOwnership.active && activeProvisionalSession === session;
-        const normalize = (text: string) => text.replace(/\s+/gu, " ").trim();
-        return {
-          update(text) {
-            if (ended || !isLive()) return;
-            const normalized = normalize(text);
-            composerLog.provisionalText = normalized;
-            composerLog.provisionalTextCalls.push({
-              type: "update",
-              text: normalized,
-            });
-          },
-          commit(text) {
-            if (ended || !composerOwnership.active) return;
-            ended = true;
-            const normalized = normalize(text);
-            if (activeProvisionalSession === session) {
-              endProvisionalText({ type: "commit", text: normalized });
-            }
-            if (normalized.length > 0) appendComposerText(normalized);
-          },
-          cancel() {
-            if (ended) return;
-            ended = true;
-            if (isLive()) endProvisionalText({ type: "cancel" });
-          },
-        };
-      },
     },
   ).handle;
   const forgetLoggedMention = ({
@@ -2592,12 +2486,6 @@ export function renderSlot<
     sdkCalls,
     providers,
     codeTheme,
-    splitPanes: {
-      isAvailable: options.experimental_splitPanes?.isAvailable ?? false,
-      openNewThread:
-        options.experimental_splitPanes?.openNewThread ?? (() => "unavailable"),
-    },
-    newThreadHandlers: [],
     branchesState: {
       branches: options.branchesState?.branches ?? [],
       remoteBranches: options.branchesState?.remoteBranches ?? [],
@@ -2617,8 +2505,6 @@ export function renderSlot<
 
   const releaseComposerOwnership = (): void => {
     if (!composerOwnership.active) return;
-    if (activeProvisionalSession !== null)
-      endProvisionalText({ type: "cancel" });
     composerOwnership.active = false;
     composerLog.textEffect = null;
     composerLog.inputLocked = false;
@@ -2664,31 +2550,9 @@ export function renderSlot<
     scope: PluginComposerScope,
   ): Promise<void> => {
     await act(async () => {
-      if (activeProvisionalSession !== null) {
-        endProvisionalText({ type: "cancel" });
-      }
       composerScope = scope;
       notifyComposerListeners();
     });
-  };
-  const experimental_offerNewThread = (
-    request: ExperimentalNewThreadRequest,
-  ): boolean => {
-    let handled = false;
-    act(() => {
-      for (const entry of [...env.newThreadHandlers]) {
-        if (entry.current === null) continue;
-        try {
-          if (entry.current(request)) {
-            handled = true;
-            return;
-          }
-        } catch {
-          continue;
-        }
-      }
-    });
-    return handled;
   };
   const unmountSlot = (): void => {
     if (!composerOwnership.active) return;
@@ -2704,7 +2568,6 @@ export function renderSlot<
     setRealtimeConnectionState,
     setComposerText,
     setComposerScope,
-    experimental_offerNewThread,
     navigateCalls,
     experimental_fixedTabOpenCalls,
     sidebarActionCalls,
@@ -2717,7 +2580,6 @@ export function renderSlot<
       setRealtimeConnectionState,
       setComposerText,
       setComposerScope,
-      experimental_offerNewThread,
     },
     inspection: {
       rpcCalls,

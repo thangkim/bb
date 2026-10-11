@@ -1,12 +1,6 @@
-import {
-  createContext,
-  useMemo,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
+import { createContext, type CSSProperties, type ReactNode } from "react";
 
 import { TimelineWindowedItems } from "./TimelineWindowedItems.js";
-import { useTimelineRenderAllRequested } from "./timeline-render-all.js";
 
 export const DEFAULT_WINDOWING_MIN_ITEM_COUNT = 20;
 const MAX_MEASUREMENTS = 2_000;
@@ -60,12 +54,5 @@ export interface TimelineWindowedItemsProps {
 }
 
 export function TimelineWindowedItemsLoader(props: TimelineWindowedItemsProps) {
-  const renderAll = useTimelineRenderAllRequested();
-  const alwaysMountedKeys = useMemo(
-    () => (renderAll ? new Set(props.itemKeys) : props.alwaysMountedKeys),
-    [props.alwaysMountedKeys, props.itemKeys, renderAll],
-  );
-  return (
-    <TimelineWindowedItems {...props} alwaysMountedKeys={alwaysMountedKeys} />
-  );
+  return <TimelineWindowedItems {...props} />;
 }

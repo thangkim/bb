@@ -98,8 +98,6 @@ class FakeDesktopWindowWebContents implements DesktopWindowWebContents {
     }
   }
 
-  copyImageAt(): void {}
-
   replaceMisspelling(text: string): void {
     this.replacedMisspellings.push(text);
   }

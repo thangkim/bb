@@ -2368,13 +2368,6 @@ function ThreadDetailViewInternal(
           projectId={thread.projectId}
         />
       }
-      pluginTitleActions={
-        <PluginThreadHeaderActions
-          threadId={thread.id}
-          projectId={thread.projectId}
-          placement="title"
-        />
-      }
       threadHeaderGitActions={threadHeaderGitActions}
       threadId={thread.id}
       threadTitle={threadTitle}

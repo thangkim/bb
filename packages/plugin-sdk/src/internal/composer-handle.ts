@@ -12,7 +12,6 @@ import type {
   ComposerMention,
   ComposerSelection,
   ComposerSubmitOptions,
-  ExperimentalComposerProvisionalText,
   JsonValue,
   PluginComposerApi,
   PluginComposerMention,
@@ -62,7 +61,6 @@ export interface ComposerHandleController {
   setTextEffect(effect: PluginComposerTextEffect | null): void;
   setInputLock(locked: boolean): void;
   onSubmitted(listener: () => void): () => void;
-  beginProvisionalText?(): ExperimentalComposerProvisionalText | null;
 }
 
 export interface ComposerHandleBinding {
@@ -466,8 +464,6 @@ export function createComposerHandleBinding(
       warnDeprecatedComposerMember("experimental_setSelection", "setSelection");
       return setSelection(selection);
     },
-    experimental_beginProvisionalText: () =>
-      controller.beginProvisionalText?.() ?? null,
   };
   Object.defineProperties(handle, {
     run: {

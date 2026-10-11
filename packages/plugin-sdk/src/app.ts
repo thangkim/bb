@@ -232,12 +232,6 @@ export const experimental_useProviders = runtimeFunction(
 export const experimental_useCodeTheme = runtimeFunction(
   "experimental_useCodeTheme",
 );
-export const experimental_useSplitPanes = runtimeFunction(
-  "experimental_useSplitPanes",
-);
-export const experimental_useNewThreadHandler = runtimeFunction(
-  "experimental_useNewThreadHandler",
-);
 // bb's clipboard writer, the one bb's own copy actions use (experimental —
 // see docs/api_to_audit.md).
 export const experimental_copyToClipboard = runtimeFunction(

@@ -26,7 +26,6 @@ import type {
   PluginProvidersState,
   PluginSettingsState,
   ExperimentalAppPanel,
-  ExperimentalComposerProvisionalText,
   ExperimentalFixedTabTargetState,
   ExperimentalPluginFixedTabReference,
   JsonValue,
@@ -40,14 +39,9 @@ import { usePluginThreadPanelOpenHandler } from "@/components/plugin/plugin-thre
 import {
   composerScopeIdentity,
   useOptionalPluginComposerView,
-  usePluginComposerEditorRef,
   usePluginComposerHost,
   type PluginComposerHost,
 } from "@/components/plugin/plugin-composer-host";
-import {
-  beginPromptProvisionalText,
-  createProvisionalTextHandle,
-} from "@/components/promptbox/editor/prompt-provisional-text-extension";
 import {
   getComposerEditorBridges,
   subscribeComposerEditorBridges,
@@ -691,10 +685,6 @@ export function useComposer(): PluginComposerApi {
   const composerHost = usePluginComposerHost();
   const tracksDraft = useRef(false);
   const tracksSelection = useRef(false);
-  const composerEditorRef = usePluginComposerEditorRef();
-  const provisionalTexts = useRef(
-    new Set<ExperimentalComposerProvisionalText>(),
-  );
   const { projectId, threadId } = useRouteState();
   const routeScope: PromptDraftScope = useMemo(
     () =>
@@ -750,9 +740,6 @@ export function useComposer(): PluginComposerApi {
   );
   const releaseVisualState = useCallback(() => {
     scopeOwnership.invalidate();
-    for (const provisionalText of [...provisionalTexts.current]) {
-      provisionalText.cancel();
-    }
     setComposerTextEffect(textEffectKey, pluginId, null, visualStateOwner);
     setComposerInputLock(textEffectKey, pluginId, false, visualStateOwner);
   }, [pluginId, scopeOwnership, textEffectKey, visualStateOwner]);
@@ -844,47 +831,14 @@ export function useComposer(): PluginComposerApi {
       scope,
     ],
   );
-  const beginProvisionalText = useCallback(() => {
-    const editor = composerEditorRef?.current;
-    if (!scopeOwnership.isActive() || !editor || editor.isDestroyed) {
-      return null;
-    }
-    registerVisualStateOwner();
-    const handles = provisionalTexts.current;
-    const handle = createProvisionalTextHandle(
-      beginPromptProvisionalText(editor),
-      {
-        onDetached: (text) => {
-          const current = source.getCurrent();
-          const separator =
-            current.text.length === 0 || /\s$/u.test(current.text) ? "" : " ";
-          source.setDraft({
-            ...current,
-            text: `${current.text}${separator}${text}`,
-          });
-        },
-        onEnd: () => handles.delete(handle),
-      },
-    );
-    handles.add(handle);
-    return handle;
-  }, [composerEditorRef, registerVisualStateOwner, scopeOwnership, source]);
   const controller = useMemo(
     () =>
       composerHandleController(pluginId, source, {
         setTextEffect,
         setInputLock,
         onSubmitted,
-        beginProvisionalText,
       }),
-    [
-      beginProvisionalText,
-      onSubmitted,
-      pluginId,
-      setInputLock,
-      setTextEffect,
-      source,
-    ],
+    [onSubmitted, pluginId, setInputLock, setTextEffect, source],
   );
   const [binding, setBinding] = useState(() =>
     createComposerHandleBinding(textEffectKey, controller),

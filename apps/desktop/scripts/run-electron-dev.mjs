@@ -1,7 +1,5 @@
-import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -11,7 +9,7 @@ import {
 import { forwardSignalsAndMirrorExit } from "./child-process-helpers.mjs";
 
 const require = createRequire(import.meta.url);
-const bundledElectronBinary = require("electron");
+const electronBinary = require("electron");
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDirectory, "..", "..", "..");
 
@@ -21,36 +19,6 @@ function resolveDesktopUserDataDir(env, dataDir) {
     return join(dataDir, "desktop");
   }
   return resolve(rawUserDataDir);
-}
-
-function readInfoPlist(appPath) {
-  const plistPath = join(appPath, "Contents", "Info.plist");
-  return existsSync(plistPath) ? readFileSync(plistPath, "utf8") : null;
-}
-
-function resolveElectronBinary(env) {
-  const rawAppPath = env.BB_DESKTOP_ELECTRON_APP?.trim();
-  if (rawAppPath === undefined || rawAppPath.length === 0) {
-    return bundledElectronBinary;
-  }
-  if (process.platform !== "darwin") {
-    throw new Error("BB_DESKTOP_ELECTRON_APP is only supported on macOS");
-  }
-  const targetAppPath = resolve(rawAppPath.replace(/^~(?=$|\/)/, homedir()));
-  const sourceAppPath = resolve(bundledElectronBinary, "..", "..", "..");
-  if (readInfoPlist(targetAppPath) !== readInfoPlist(sourceAppPath)) {
-    process.stdout.write(
-      `@bb/desktop: copying Electron to ${targetAppPath}\n`,
-    );
-    rmSync(targetAppPath, { recursive: true, force: true });
-    const copy = spawnSync("ditto", [sourceAppPath, targetAppPath], {
-      stdio: "inherit",
-    });
-    if (copy.status !== 0) {
-      throw new Error(`Failed to copy Electron to ${targetAppPath}`);
-    }
-  }
-  return join(targetAppPath, "Contents", "MacOS", "Electron");
 }
 
 const VITE_PROBE_TIMEOUT_MS = 800;
@@ -87,7 +55,6 @@ const devConfig = resolveCurrentDevInstanceConfig(repoRoot);
 const childEnv = createElectronAppEnv(process.env, devConfig);
 const dataDir = devConfig.dataDir;
 const desktopUserDataDir = resolveDesktopUserDataDir(childEnv, dataDir);
-const electronBinary = resolveElectronBinary(childEnv);
 
 const appUrl = `http://localhost:${devConfig.ports.appPort}`;
 const viteReachable = await isViteDevServerReachable(appUrl);
@@ -109,7 +76,6 @@ process.stdout.write(
     : `@bb/desktop: app (own bb-app runtime — no Vite dev server on ${appUrl})\n`,
 );
 process.stdout.write(`@bb/desktop: user-data ${desktopUserDataDir}\n`);
-process.stdout.write(`@bb/desktop: electron ${electronBinary}\n`);
 
 // Extra Chromium/Electron switches for dev automation (e.g.
 // BB_DESKTOP_ELECTRON_ARGS="--remote-debugging-port=9223" for CDP-driven QA).

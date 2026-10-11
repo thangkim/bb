@@ -9,9 +9,7 @@ import {
   useState,
   useSyncExternalStore,
   type ReactNode,
-  type RefObject,
 } from "react";
-import type { Editor } from "@tiptap/core";
 import type {
   ComposerSelection,
   ComposerSubmitOptions,
@@ -169,21 +167,12 @@ const PluginComposerDraftViewContext = createContext<
   ComposerView["draft"] | undefined
 >(undefined);
 
-const PluginComposerEditorContext =
-  createContext<RefObject<Editor | null> | null>(null);
-
-export function usePluginComposerEditorRef(): RefObject<Editor | null> | null {
-  return useContext(PluginComposerEditorContext);
-}
-
 export function PluginComposerViewProvider({
   children,
   value,
-  editorRef,
 }: {
   children: ReactNode;
   value: ComposerView;
-  editorRef?: RefObject<Editor | null>;
 }) {
   const { isRunning, isSubmitting } = value.run;
   const staticView = useMemo<PluginComposerStaticView>(
@@ -194,19 +183,12 @@ export function PluginComposerViewProvider({
     }),
     [isRunning, isSubmitting, value.layout, value.scope],
   );
-  const view = (
+  return (
     <PluginComposerStaticViewContext.Provider value={staticView}>
       <PluginComposerDraftViewContext.Provider value={value.draft}>
         {children}
       </PluginComposerDraftViewContext.Provider>
     </PluginComposerStaticViewContext.Provider>
-  );
-  return editorRef === undefined ? (
-    view
-  ) : (
-    <PluginComposerEditorContext.Provider value={editorRef}>
-      {view}
-    </PluginComposerEditorContext.Provider>
   );
 }
 

@@ -1172,87 +1172,6 @@ export interface PluginCodeThemeState {
 }
 
 /**
- * Where {@link ExperimentalSplitPanes.openNewThread} puts a new-thread
- * composer. `side` is relative to the focused pane. `projectId` omitted keeps
- * the focused thread's project and environment, or the focused composer's
- * current project. `focusPrompt` defaults to true. `atPaneCap` decides what
- * happens when the split already holds the maximum number of panes:
- * `"refuse"` (the default) changes nothing, `"replace"` shows the composer in
- * the focused pane instead. `reuseComposer: true` focuses a composer instead
- * of opening another when the focused pane already is one, or when one is
- * open for the same project and environment. With an explicit `projectId`,
- * the focused composer is only reused when it is on that project.
- */
-export interface ExperimentalSplitPaneNewThreadOptions {
-  side: "left" | "right" | "top" | "bottom";
-  projectId?: string;
-  /** Files the new thread under this sidebar section. */
-  sectionId?: string;
-  /** Reuses this environment; also part of the `reuseComposer` match. */
-  environmentId?: string;
-  focusPrompt?: boolean;
-  atPaneCap?: "replace" | "refuse";
-  reuseComposer?: boolean;
-}
-
-/**
- * What {@link ExperimentalSplitPanes.openNewThread} did. `"opened"`: a new
- * composer pane was split off. `"focused"`: with `reuseComposer`, an open
- * composer now has focus. `"replaced"`: the pane cap was reached and the
- * focused pane now shows a new composer. `"at-cap"`: the pane cap was reached
- * and nothing changed. `"unavailable"`: splits are unavailable here (see
- * {@link ExperimentalSplitPanes.isAvailable}) and nothing changed.
- */
-export type ExperimentalSplitPaneOpenResult =
-  | "opened"
-  | "focused"
-  | "replaced"
-  | "at-cap"
-  | "unavailable";
-
-/**
- * Host-owned split-pane actions (see
- * {@link PluginSdkApp.experimental_useSplitPanes}).
- */
-export interface ExperimentalSplitPanes {
-  /**
-   * False on compact viewports and on routes that cannot be shown in a pane
-   * (settings, for example). `openNewThread` then returns `"unavailable"`.
-   */
-  isAvailable: boolean;
-  /**
-   * Opens a new composer in a pane beside the focused one, focuses that pane,
-   * and navigates to it. Each composer pane keeps its own project,
-   * environment, section, and prompt draft.
-   */
-  openNewThread(
-    options: ExperimentalSplitPaneNewThreadOptions,
-  ): ExperimentalSplitPaneOpenResult;
-}
-
-/**
- * A new thread asked for through one of bb's own New thread affordances: the
- * sidebar's New thread item and project, section, and environment buttons,
- * the `thread.new` command, and New thread in environment. Omitted fields
- * keep the composer's current selection.
- */
-export interface ExperimentalNewThreadRequest {
-  projectId?: string;
-  sectionId?: string;
-  environmentId?: string;
-  focusPrompt: boolean;
-}
-
-/**
- * Handles an {@link ExperimentalNewThreadRequest}. Return true when the
- * plugin opened the composer itself; false lets bb open its new-thread screen
- * in the focused pane as usual.
- */
-export type ExperimentalNewThreadHandler = (
-  request: ExperimentalNewThreadRequest,
-) => boolean;
-
-/**
  * What {@link PluginSdkApp.experimental_copyToClipboard} writes: plain text,
  * plus an HTML representation for paste targets that accept rich text.
  * Without `html`, only plain text is written.
@@ -1462,13 +1381,6 @@ export interface PluginThreadHeaderActionRegistration {
    */
   title: string;
   component: ComponentType<PluginThreadHeaderActionProps>;
-  /**
-   * Where the host renders the component. `"actions"` (default) puts it at the
-   * left end of the action row. `"title"` puts it right after the thread
-   * title, before the thread actions menu; use it for a label that describes
-   * the thread, and keep it short — it shares the row with the title.
-   */
-  placement?: "actions" | "title";
 }
 
 export interface ExperimentalPluginBrowserToolbarActionRegistration {
@@ -2545,68 +2457,8 @@ export interface ComposerCustomization {
   /** Host-rendered rows in the menu next to the composer's send button. */
   sendMenu?: readonly ComposerSendMenuItem[];
   richText?: ComposerRichTextSpec;
-  /**
-   * Take part in bb's own voice input in these composers: bb keeps its
-   * microphone buttons, recording bar, Escape-to-cancel and completion
-   * transition, and hands the recording to this plugin instead of
-   * transcribing it itself. When several customizations match, the first
-   * one registered is used.
-   *
-   * Experimental: see docs/api_to_audit.md.
-   */
-  experimental_voiceInput?: ExperimentalComposerVoiceInput;
   /** Host-managed popups sharing the mention menu's above/below placement, with a responsive drawer on compact screens. Open by popup id, unique within this plugin. */
   experimental_popups?: readonly ExperimentalComposerPopupRegistration[];
-}
-
-/** A plugin's part in bb's native voice input. See `ComposerCustomization.experimental_voiceInput`. */
-export interface ExperimentalComposerVoiceInput {
-  /**
-   * Called when bb's voice input starts recording in a matching composer.
-   * A throw is logged and that recording falls back to bb's own
-   * transcription.
-   */
-  start(
-    session: ExperimentalComposerVoiceSession,
-  ): ExperimentalComposerVoiceRecording;
-}
-
-/** One native voice recording handed to `experimental_voiceInput.start`. */
-export interface ExperimentalComposerVoiceSession {
-  /** Everything recorded so far as one playable audio file; empty before the first 250 ms chunk. */
-  readRecording(): File;
-  /**
-   * Transcribe audio through bb's own voice transcription, with the
-   * composer text before the caret at recording start as the hint. Rejects
-   * with the server's error, or when `signal` aborts.
-   */
-  transcribe(audio: File, options: { signal: AbortSignal }): Promise<string>;
-  /**
-   * A preview at the caret, as from `useComposer().experimental_beginProvisionalText`,
-   * or null when the composer has no editor. Use `update` while recording;
-   * bb commits it with the text `finish` resolves with and cancels it when
-   * the session ends any other way.
-   */
-  readonly provisionalText: ExperimentalComposerProvisionalText | null;
-  /**
-   * Aborted when the session ends: after the final text is inserted, or when
-   * the recording is cancelled, is too short, captures no audio, fails, or
-   * its composer unmounts.
-   */
-  readonly signal: AbortSignal;
-}
-
-/** What a plugin returns from `experimental_voiceInput.start`. */
-export interface ExperimentalComposerVoiceRecording {
-  /**
-   * Transcribe the finished recording in place of bb. Resolve with the text
-   * to insert: bb inserts it at the preview's anchor (or the caret when the
-   * preview has ended) as one undo step after its completion transition.
-   * Reject, or resolve with blank text, to show bb's "Voice input failed"
-   * error with a "Download recording" action. Not called when the
-   * recording ends any other way.
-   */
-  finish(recording: File): Promise<string>;
 }
 
 /** Content for one composer's popup. The host owns placement, dismissal and focus restoration; the component owns its content and keyboard navigation. */
@@ -3048,46 +2900,6 @@ export interface PluginComposerApi {
   experimental_setSelection(
     selection: ComposerSelection,
   ): Promise<ComposerSelection>;
-  /**
-   * Start painting provisional text inside this composer's editor, such as a
-   * live transcript while the person is still speaking.
-   *
-   * The text is anchored at the caret, or after the last character when the
-   * person never placed the caret in this editor, and the anchor moves with
-   * edits made around it. It is muted, hidden from assistive technology, and
-   * paint-only: it never enters the draft, persistence, or undo history.
-   * Starting a new preview in the same editor ends the previous one.
-   *
-   * Returns null when no editor is mounted for the calling surface (a banner,
-   * a plus-menu callback outside the prompt box, a surface outside any
-   * composer) or the surface is no longer active. The preview is cancelled
-   * automatically when the calling slot unmounts or its composer scope
-   * changes.
-   *
-   * Experimental: see docs/api_to_audit.md.
-   */
-  experimental_beginProvisionalText(): ExperimentalComposerProvisionalText | null;
-}
-
-/** A live preview started by `experimental_beginProvisionalText`. */
-export interface ExperimentalComposerProvisionalText {
-  /**
-   * Replace the provisional text. Whitespace is collapsed and the text is
-   * padded with a space on either side that touches a word. An empty string
-   * hides it without ending the preview.
-   */
-  update(text: string): void;
-  /**
-   * Insert text at the anchor, replacing a selection that was active when
-   * the preview began, with the same whitespace padding, as one undo step,
-   * and end the preview. Leaves the caret after the inserted text and
-   * focuses the editor on fine-pointer devices. Blank text only ends the
-   * preview. If the editor was replaced since the preview began, the text
-   * is appended to the draft instead. No-op after the preview has ended.
-   */
-  commit(text: string): void;
-  /** Remove the provisional text and end the preview. Idempotent. */
-  cancel(): void;
 }
 
 /**
@@ -3957,24 +3769,6 @@ export interface PluginSdkApp {
    * docs/api_to_audit.md.
    */
   experimental_useCodeTheme(): PluginCodeThemeState;
-  /**
-   * Split-pane actions for the main area (see {@link ExperimentalSplitPanes}),
-   * such as opening a new-thread composer beside the focused pane.
-   * Experimental: see docs/api_to_audit.md.
-   */
-  experimental_useSplitPanes(): ExperimentalSplitPanes;
-  /**
-   * While the calling component is mounted, bb offers each of its own New
-   * thread requests to `handler` before opening the new-thread screen (see
-   * {@link ExperimentalNewThreadHandler}). Handlers run in mount order and the
-   * first one to return true wins; a handler that throws is skipped. Pass null
-   * to stop handling. Plugin-initiated navigation such as
-   * `useBbNavigate().toCompose` is never offered. Experimental: see
-   * docs/api_to_audit.md.
-   */
-  experimental_useNewThreadHandler(
-    handler: ExperimentalNewThreadHandler | null,
-  ): void;
   /**
    * Writes content to the system clipboard through bb's own clipboard writer,
    * the one bb's copy actions use. A plain function, callable from

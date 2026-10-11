@@ -80,10 +80,6 @@ Read the installed SDK declarations for the exact current signatures.
   `bb` CLI and the backend `bb.sdk` expose
 - `experimental_useProviders`
 - `experimental_useCodeTheme`
-- `experimental_useSplitPanes` — open a new-thread composer in a pane
-  beside the focused one
-- `experimental_useNewThreadHandler` — take bb's own New thread requests
-  (sidebar buttons, `thread.new`) before bb opens the composer
 - `experimental_copyToClipboard`
 
 ## Type exports
@@ -173,11 +169,6 @@ Read the installed SDK declarations for the exact current signatures.
 - `PluginCodeThemeTokenRule`
 - `PluginCodeThemeData`
 - `PluginCodeThemeState`
-- `ExperimentalSplitPanes`
-- `ExperimentalSplitPaneNewThreadOptions`
-- `ExperimentalSplitPaneOpenResult`
-- `ExperimentalNewThreadRequest`
-- `ExperimentalNewThreadHandler`
 - `ExperimentalClipboardContent`
 - `PluginSidebarThreadDraftState`
 - `PluginSidebarThreadRowStatus`
@@ -250,10 +241,6 @@ Read the installed SDK declarations for the exact current signatures.
 - `ComposerSendMenuItem`
 - `ComposerSubmitOptions`
 - `ComposerSelection`
-- `ExperimentalComposerProvisionalText`
-- `ExperimentalComposerVoiceInput`
-- `ExperimentalComposerVoiceSession`
-- `ExperimentalComposerVoiceRecording`
 - `ComposerRichTextSpec`
 - `ComposerDraft`
 - `ComposerDraftSnapshot`

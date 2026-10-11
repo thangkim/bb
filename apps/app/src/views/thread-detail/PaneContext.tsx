@@ -10,12 +10,10 @@ import {
 } from "react";
 import type { ThreadRoutePathArgs } from "@/lib/route-paths";
 import type { PluginComposerHost } from "@/components/plugin/plugin-composer-host";
-import type { ComposeSeed, SplitSide } from "@/lib/split-layout";
+import type { SplitSide } from "@/lib/split-layout";
 
 export interface PaneContextValue {
   paneId: string;
-  composeId?: string;
-  composeSeed?: ComposeSeed;
   isFocused: boolean;
   isSplitPane: boolean;
   secondaryPanelHost: PaneSecondaryPanelRegistration | null;

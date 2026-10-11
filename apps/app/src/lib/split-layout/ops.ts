@@ -64,12 +64,7 @@ export function isSamePaneContent(
   candidate: PaneContent,
   content: PaneContent,
 ): boolean {
-  if (content.kind === "new-thread") {
-    return (
-      candidate.kind === "new-thread" &&
-      candidate.composeId === content.composeId
-    );
-  }
+  if (content.kind === "new-thread") return candidate.kind === "new-thread";
   if (content.kind === "thread") {
     return (
       candidate.kind === "thread" &&

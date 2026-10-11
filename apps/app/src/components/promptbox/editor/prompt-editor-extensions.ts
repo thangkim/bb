@@ -12,7 +12,6 @@ import {
   type PromptDecorationExtensionOptions,
 } from "./prompt-decoration-extension";
 import { PromptMentionExtension } from "./prompt-mention-extension";
-import { PromptProvisionalTextExtension } from "./prompt-provisional-text-extension";
 
 interface PromptEditorExtensionsOptions extends PromptDecorationExtensionOptions {
   getPlaceholder: () => string;
@@ -37,7 +36,6 @@ export function promptEditorExtensions({
       placeholder: () => getPlaceholder(),
     }),
     PromptMentionExtension,
-    PromptProvisionalTextExtension,
     PromptDecorationExtension.configure({
       ...(getDecorationSources !== undefined ? { getDecorationSources } : {}),
       ...(getDraftObservers !== undefined ? { getDraftObservers } : {}),

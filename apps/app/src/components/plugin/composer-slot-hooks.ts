@@ -7,7 +7,6 @@ import {
   resolveComposerDraftObservers,
   resolveComposerEditorEffects,
   resolveComposerPlusMenuItems,
-  resolveComposerVoiceInput,
   resolveComposerSendMenuItems,
 } from "@/lib/plugin-slot-resolvers";
 import {
@@ -53,15 +52,10 @@ function resolveComposerEditor(
   return {
     effects: resolveComposerEditorEffects(registrations, kind),
     observers: resolveComposerDraftObservers(registrations, kind),
-    voiceInput: resolveComposerVoiceInput(registrations, kind),
   };
 }
 
-const emptyComposerEditor = () => ({
-  effects: [],
-  observers: [],
-  voiceInput: null,
-});
+const emptyComposerEditor = () => ({ effects: [], observers: [] });
 
 export function useResolvedComposerActions(scopeKind: ComposerScopeKind) {
   return useResolvedComposerSlot(scopeKind, resolveComposerActions, emptyList);

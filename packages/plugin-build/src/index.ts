@@ -28,4 +28,3 @@ export {
 } from "./plugin-manifest.js";
 
 export { copyPluginRuntime } from "./prepare-plugin-runtime.js";
-export { isPluginAppSourceLocationsStale } from "./source-locations-hook.js";

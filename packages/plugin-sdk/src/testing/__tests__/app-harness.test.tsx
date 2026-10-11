@@ -379,9 +379,6 @@ let capturedComposerVisualSetters: Pick<
 > | null = null;
 let capturedComposerSetSelection: PluginComposerApi["setSelection"] | null =
   null;
-let capturedBeginProvisionalText:
-  | PluginComposerApi["experimental_beginProvisionalText"]
-  | null = null;
 
 function InlineVis({
   attributes,
@@ -406,7 +403,6 @@ function ComposerProbe() {
     setInputLock: composer.setInputLock,
   };
   capturedComposerSetSelection = composer.setSelection;
-  capturedBeginProvisionalText = composer.experimental_beginProvisionalText;
   return (
     <div>
       <span data-testid="composer-scope">{composer.scope.kind}</span>
@@ -1931,45 +1927,6 @@ describe("renderSlot", () => {
     ).rejects.toThrow(/no pickers/);
     expect(queuedSlot.composer.selections).toEqual([]);
     queuedSlot.unmount();
-  });
-
-  it("records provisional text, appends commits, and cancels on scope change or unmount", async () => {
-    const slot = renderSlot(
-      app.composerCustomizations[0]!.actions![0]!,
-      {},
-      {
-        context: { projectId: "proj_1", threadId: "thr_1" },
-        composer: { text: "Hello" },
-      },
-    );
-    const first = capturedBeginProvisionalText!();
-    first?.update("  so   far ");
-    expect(slot.composer.provisionalText).toBe("so far");
-    first?.commit("final words");
-    first?.cancel();
-    expect(slot.composer.text).toBe("Hello final words");
-    expect(slot.composer.provisionalText).toBeNull();
-
-    const second = capturedBeginProvisionalText!();
-    second?.update("pending");
-    await slot.behavior.setComposerScope({ kind: "thread", threadId: "thr_2" });
-    expect(slot.composer.provisionalText).toBeNull();
-
-    const third = capturedBeginProvisionalText!();
-    slot.unmount();
-    third?.commit("late");
-    expect(capturedBeginProvisionalText!()).toBeNull();
-    expect(slot.composer.text).toBe("Hello final words");
-    expect(slot.composer.provisionalTextCalls).toEqual([
-      { type: "begin" },
-      { type: "update", text: "so far" },
-      { type: "commit", text: "final words" },
-      { type: "begin" },
-      { type: "update", text: "pending" },
-      { type: "cancel" },
-      { type: "begin" },
-      { type: "cancel" },
-    ]);
   });
 
   it("invalidates visual-state setters through both unmount controls", () => {

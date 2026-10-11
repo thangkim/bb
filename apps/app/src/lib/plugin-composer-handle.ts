@@ -50,7 +50,7 @@ export type ComposerSource = Pick<
 
 type ComposerLifecycle = Pick<
   ComposerHandleController,
-  "setTextEffect" | "setInputLock" | "onSubmitted" | "beginProvisionalText"
+  "setTextEffect" | "setInputLock" | "onSubmitted"
 >;
 
 const composerSelectionSchema = z.object({

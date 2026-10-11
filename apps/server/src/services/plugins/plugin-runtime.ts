@@ -32,7 +32,6 @@ import {
   buildPluginApp,
   buildPluginHost,
   isIgnoredPluginDevPath,
-  isPluginAppSourceLocationsStale,
 } from "@bb/plugin-build";
 import { PluginHostArtifactRegistry } from "./plugin-host-artifact-registry.js";
 import { getPluginBuildToolchain } from "./build-toolchain.js";
@@ -1240,19 +1239,12 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
     ) {
       const meta = await readPluginAppBundleMeta(row.rootDir);
       const sdkChanged = meta?.sdkVersion !== PLUGIN_SDK_VERSION;
-      const stampingChanged =
-        !sdkChanged &&
-        (await isPluginAppSourceLocationsStale(row.rootDir).catch(() => true));
       const sourceChanged =
-        !sdkChanged &&
-        !stampingChanged &&
-        (await isMutableAppBundleStale(row.rootDir));
-      if (sdkChanged || stampingChanged || sourceChanged) {
+        !sdkChanged && (await isMutableAppBundleStale(row.rootDir));
+      if (sdkChanged || sourceChanged) {
         const reason = sdkChanged
           ? `built with SDK ${meta?.sdkVersion ?? "unknown"}, running SDK is ${PLUGIN_SDK_VERSION}`
-          : stampingChanged
-            ? "source location stamping changed"
-            : "plugin source is newer than dist/app.js";
+          : "plugin source is newer than dist/app.js";
         logger.info(`plugin ${row.id}: rebuilding frontend bundle (${reason})`);
         try {
           await buildPluginApp(

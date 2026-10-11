@@ -12,7 +12,6 @@ Read `testing.md` for examples and fidelity limits.
 - `NavigateCall`
 - `ExperimentalFixedTabOpenCall`
 - `ComposerLog`
-- `ComposerProvisionalTextCall`
 - `SidebarActionCall` — deprecated, runtime-only for older plugins' tests of
   `experimental_useSidebarThreadActions`
 - `TestThreadActionsResolver` — what `renderSlot` `options.threadActions` returns for

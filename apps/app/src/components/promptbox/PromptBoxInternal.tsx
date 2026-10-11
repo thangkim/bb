@@ -145,11 +145,6 @@ import {
 import type { ComposerTextEffectSource } from "@/lib/composer-text-effects";
 import { promptEditorExtensions } from "./editor/prompt-editor-extensions";
 import {
-  usePluginVoiceInput,
-  type PromptVoiceSession,
-  type PromptVoiceSessionInput,
-} from "./plugin-voice-input";
-import {
   AttachmentHistory,
   attachmentHistoryTransaction,
 } from "./editor/attachment-history";
@@ -606,12 +601,9 @@ export interface PromptBoxHandle {
   focusEnd: () => void;
   captureHeightForLayoutChange: () => void;
   insertTextAtCursor: (text: string) => void;
-  sendVoiceTranscript: (text: string, insert?: (text: string) => void) => void;
+  sendVoiceTranscript: (text: string) => void;
   getTextBeforeCursor: () => string | undefined;
   playVoiceCompletionTransition: () => Promise<void>;
-  beginPluginVoiceInput: (
-    input: PromptVoiceSessionInput,
-  ) => PromptVoiceSession | null;
 }
 
 export type { PromptBoxAction } from "./PromptBoxActionsMenu";
@@ -3162,19 +3154,13 @@ export function PromptBoxInternal({
     return beforeCursor.length > 0 ? beforeCursor : undefined;
   }, []);
 
-  const beginPluginVoiceInput = usePluginVoiceInput(
-    editorRef,
-    resolvedComposerEditor.voiceInput,
-    insertTextAtCursor,
-  );
-
   const [voiceSubmitBaseline, setVoiceSubmitBaseline] = useState<string | null>(
     null,
   );
   const sendVoiceTranscript = useCallback(
-    (text: string, insert?: (text: string) => void) => {
+    (text: string) => {
       setVoiceSubmitBaseline(valueRef.current);
-      (insert ?? insertTextAtCursor)(text);
+      insertTextAtCursor(text);
     },
     [insertTextAtCursor],
   );
@@ -3188,10 +3174,8 @@ export function PromptBoxInternal({
       sendVoiceTranscript,
       getTextBeforeCursor,
       playVoiceCompletionTransition,
-      beginPluginVoiceInput,
     }),
     [
-      beginPluginVoiceInput,
       capturePromptBoxHeight,
       focusEnd,
       getTextBeforeCursor,
@@ -3953,10 +3937,7 @@ export function PromptBoxInternal({
             </>
           ) : null}
 
-          <PluginComposerViewProvider
-            value={composerView}
-            editorRef={editorRef}
-          >
+          <PluginComposerViewProvider value={composerView}>
             <div
               data-promptbox-action-row=""
               className={cn(

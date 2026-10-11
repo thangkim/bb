@@ -121,15 +121,6 @@ reasoningLevel?, serviceTier?, permissionMode? })` sets the pickers as if
     their current values. It rejects in a
     queued-message editor. `onSubmitted(listener)` observes successful local
     submissions.
-  - `experimental_beginProvisionalText()` returns `{ update(text),
-commit(text), cancel() }` for muted, paint-only text at the caret (after
-    the last character when the person never placed the caret), such as a
-    live transcript: it never enters the draft or undo history and its anchor
-    moves with edits. `commit` inserts the final text there with whitespace
-    padding as one undo step; the preview is cancelled when the slot unmounts
-    or its scope changes. It returns null outside the prompt box's action row
-    (banners, `useComposers()` handles, message actions). Harness:
-    `composer.provisionalText` and `composer.provisionalTextCalls`.
   - Lifetime: a handle writes to its own composer's draft. Thread and
     new-thread drafts persist, so writes after the composer leaves the screen
     still land there. Once a queued-message or sent-message editor closes,
@@ -163,37 +154,6 @@ commit(text), cancel() }` for muted, paint-only text at the caret (after
   approximate the palette by reading bb's CSS variables: `--canvas` / `--ink`
   carry the app chrome, not the syntax colors, and a custom palette that
   declares its own code theme would not follow.
-- `experimental_useSplitPanes()` → `{ isAvailable, openNewThread(options) }`
-  — host-owned split-pane actions for the main area. `isAvailable` is false
-  on compact viewports and on routes that cannot be shown in a pane.
-  `openNewThread({ side, projectId?, sectionId?, environmentId?, focusPrompt?, atPaneCap?, reuseComposer? })`
-  opens a new composer in a pane on `side` (`"left" | "right" | "top" |
-"bottom"`) of the focused pane, focuses it, and navigates there. Every
-  composer pane keeps its own project, environment, section, and prompt
-  draft. Omitting `projectId` keeps the focused thread's project and
-  environment, or the focused composer's project. The prompt is focused unless
-  `focusPrompt: false`. At the pane cap, `atPaneCap: "refuse"` (the default)
-  changes nothing and `"replace"` shows the composer in the focused pane.
-  `reuseComposer: true` focuses the focused composer, or an open one for the
-  same project and environment, instead of opening another; with an explicit
-  `projectId` the focused composer is only kept when it is on that project.
-  It returns what happened:
-  `"opened" | "focused" | "replaced" | "at-cap" | "unavailable"`; fall back
-  to `useBbNavigate().toCompose()` on `"unavailable"`. Call the hook in a
-  component (an `experimental_appOverlay` controller for keyboard commands)
-  and invoke `openNewThread` from an event or command.
-- `experimental_useNewThreadHandler(handler | null)` — while the calling
-  component is mounted, bb offers its own New thread requests to `handler`
-  before opening the new-thread screen: the sidebar's New thread item and
-  project, section, and environment buttons, the `thread.new` command, and New
-  thread in environment. The handler receives
-  `{ projectId?, sectionId?, environmentId?, focusPrompt }` and returns true
-  when it opened the composer itself, false to let bb proceed. Handlers run in
-  mount order and the first true wins; a throwing handler is skipped.
-  `useBbNavigate().toCompose()` is never offered, so it is a safe fallback.
-  Pair it with `experimental_useSplitPanes`, returning
-  `openNewThread({ ...request, side: "right" }) !== "unavailable"`. In tests,
-  `renderSlot(...).behavior.experimental_offerNewThread(request)` drives it.
 - `experimental_copyToClipboard({ text, html? })` → `Promise<boolean>` — writes
   the system clipboard through the same writer bb's own copy actions use. A
   plain function, not a hook: call it from components, content scripts, and
@@ -212,7 +172,7 @@ composer.insert("Please summarize this.", { at: "end", block: true });
 Composer customizations:
 
 - Register with `app.composer.customize({ id, scopes?, actions?, experimental_popups?, plusMenu?,
-sendMenu?, banners?, richText?, experimental_voiceInput? })`. Omitted `scopes` means all thread,
+sendMenu?, banners?, richText? })`. Omitted `scopes` means all thread,
   queued-message, and new-thread composers.
 - `actions` and `banners` are plugin React components. `useComposer()` inside
   them is bound to the composer that mounted the component. Actions render
@@ -231,16 +191,6 @@ sendMenu?, banners?, richText?, experimental_voiceInput? })`. Omitted `scopes` m
   name from plugin CSS. Decorations are paint-only and never mutate the draft.
 - A `messageAction`'s `run` receives `context.composer`: the composer of the
   message's thread, or null.
-- `experimental_voiceInput.start(session)` runs when bb's own microphone starts
-  recording in a matching composer (first matching registration wins). bb
-  keeps its buttons, recording bar, Escape-to-cancel and completion
-  transition. `session` has `readRecording()` (all audio so far as a `File`),
-  `transcribe(file, { signal })` (bb's transcription route), `provisionalText`
-  (a caret preview, or null) and `signal` (aborted when the session ends).
-  Return `{ finish(recording) }`: bb calls it on stop instead of transcribing
-  and inserts the resolved text at the preview anchor as one undo step; a
-  rejection shows bb's "Voice input failed" toast with "Download recording".
-  A throwing `start` falls back to native transcription.
 - Use a vendored BB prompt icon-button recipe for native-matching action chrome
   and provide an accessible label. Each component/callback is isolated so one
   failing customization does not degrade the native composer. Complete

@@ -69,8 +69,6 @@ import {
   useThreadActionRegistrationInfos,
 } from "./thread-actions/thread-action-registry";
 import { useCodeTheme } from "./plugin-code-theme";
-import { useNewThreadHandler } from "./plugin-new-thread-handlers";
-import { useSplitPanes } from "./plugin-split-panes";
 import { copyToClipboard } from "./clipboard";
 
 function useArchiveEnvironmentThreads(): (
@@ -131,8 +129,6 @@ export const pluginSdkAppImplementation = {
   useSdk,
   experimental_useProviders: useProviders,
   experimental_useCodeTheme: useCodeTheme,
-  experimental_useSplitPanes: useSplitPanes,
-  experimental_useNewThreadHandler: useNewThreadHandler,
   experimental_copyToClipboard: copyToClipboard,
 } satisfies PluginSdkApp;
 

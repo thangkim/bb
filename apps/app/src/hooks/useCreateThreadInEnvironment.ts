@@ -1,6 +1,5 @@
 import { useCallback } from "react";
 import { useRouteNavigate } from "@/components/ui/app-route-anchor";
-import { offerNewThreadRequest } from "@/lib/plugin-new-thread-handlers";
 import { getRootComposeRoutePath } from "@/lib/route-paths";
 import { useSetRootComposeProjectId } from "@/lib/root-compose-selection";
 
@@ -20,17 +19,6 @@ export function useCreateThreadInEnvironment({
   const navigate = useRouteNavigate();
   const setRootComposeProjectId = useSetRootComposeProjectId();
   return useCallback(() => {
-    if (
-      !pinned &&
-      offerNewThreadRequest({
-        projectId,
-        environmentId,
-        ...(sectionId !== null ? { sectionId } : {}),
-        focusPrompt: true,
-      })
-    ) {
-      return;
-    }
     setRootComposeProjectId(projectId);
     navigate(getRootComposeRoutePath(), {
       state: {

@@ -18,6 +18,7 @@ import {
   SidebarMenu,
   useCloseMobileSidebar,
   useSidebar,
+  useIsSidebarFramed,
 } from "@/components/ui/sidebar.js";
 import { ThreadActionSurfaceVisibility } from "@/lib/thread-actions/thread-action-registry";
 import { PluginThreadList } from "./PluginThreadList";
@@ -31,7 +32,6 @@ import { SidebarPluginAttentionGlyph } from "./SidebarPluginAttentionGlyph";
 import { SidebarUpdatesBadge } from "./SidebarUpdatesBadge";
 import { SidebarResizeHandle, SidebarTopReserveRow } from "./SidebarChrome";
 import { SIDEBAR_FOOTER_ACTION_CLASS } from "@bb/shared-ui/sidebar-row-classes";
-import { offerNewThreadRequest } from "@/lib/plugin-new-thread-handlers";
 import { getRootComposeRoutePath, getThreadRoutePath } from "@/lib/route-paths";
 import { openUrlInExternalBrowser } from "@/lib/url-open-routing";
 import {
@@ -57,6 +57,8 @@ import {
   type NavRailCustomizeState,
 } from "./AppNavRail";
 
+import { NAV_RAIL_WIDTH_CLASS } from "./navRailWidth";
+
 const BUG_REPORT_NEW_ISSUE_URL = "https://github.com/get-bb/bb/issues/new";
 
 interface AppSidebarProps {
@@ -65,6 +67,7 @@ interface AppSidebarProps {
   isBodyHidden: boolean;
   renderRail: (customize: NavRailCustomizeState) => ReactNode;
   alternateBody: ReactNode;
+  railFooter: ReactNode;
 }
 
 export function AppSidebar({
@@ -73,7 +76,9 @@ export function AppSidebar({
   isBodyHidden,
   renderRail,
   alternateBody,
+  railFooter,
 }: AppSidebarProps) {
+  const isFramed = useIsSidebarFramed();
   const threadListReplacement = useThreadListReplacement();
   const { threadId: activeThreadId } = useRouteState();
   const navigate = useNavigate();
@@ -98,7 +103,6 @@ export function AppSidebar({
 
   const handleNewChat = useCallback(() => {
     closeOnMobile();
-    if (offerNewThreadRequest({ focusPrompt: true })) return;
     void navigate(getRootComposeRoutePath(), {
       state: { focusPrompt: true },
     });
@@ -217,7 +221,13 @@ export function AppSidebar({
           />
         </ThreadActionSurfaceVisibility>
       </SidebarContent>
-      <SidebarFooter className="relative">
+      <div
+        className={cn(
+          "relative flex flex-col gap-2",
+          (isFooterCustomizing || pluginSidebarFooter.activeItem !== null) &&
+            "px-2 pt-2",
+        )}
+      >
         <OverflowFade placement="above" tone="sidebar" size="sm" />
         {isFooterCustomizing ? (
           <div className="max-h-[50svh] overflow-y-auto">
@@ -234,46 +244,7 @@ export function AppSidebar({
             onDismiss={pluginSidebarFooter.dismiss}
           />
         )}
-        <SidebarMenu
-          className={cn(
-            "flex-row items-center gap-1",
-            isFooterCustomizing && "hidden",
-          )}
-        >
-          <PluginSidebarFooterItems
-            onCustomize={() => {
-              pluginSidebarFooter.dismiss();
-              setNavigationCustomizing(false);
-              setFooterCustomizing(true);
-            }}
-            activeDisclosureKey={pluginSidebarFooter.activeKey}
-            onDisclosureCommand={pluginSidebarFooter.handleCommand}
-            onNavigate={closeOnMobile}
-            builtInActions={[
-              {
-                id: "mobile",
-                href: "/settings/mobile",
-                onActivate: () => {
-                  closeOnMobile();
-                  void navigate("/settings/mobile");
-                },
-              },
-              {
-                id: "report-bug",
-                onActivate: () => {
-                  closeOnMobile();
-                  openUrlInExternalBrowser(BUG_REPORT_NEW_ISSUE_URL);
-                },
-              },
-            ]}
-          />
-          <SidebarPluginAttentionGlyph
-            className={SIDEBAR_FOOTER_ACTION_CLASS}
-            onNavigate={closeOnMobile}
-          />
-          <SidebarUpdatesBadge onNavigate={closeOnMobile} />
-        </SidebarMenu>
-      </SidebarFooter>
+      </div>
       <SidebarResizeHandle
         testId="app-sidebar-resize-handle"
         isResizing={isResizing}
@@ -296,7 +267,14 @@ export function AppSidebar({
               isOpen: isNavigationCustomizing,
               onOpenChange: setNavigationCustomizing,
             })}
-            <SidebarCollapsibleBody data-testid="nav-rail-sidebar-body">
+            <SidebarCollapsibleBody
+              data-testid="nav-rail-sidebar-body"
+              className={
+                isFramed
+                  ? "rounded-bl-none border-b-0 [clip-path:inset(0_-6px_0_0_round_0.75rem_0_0_0)]"
+                  : undefined
+              }
+            >
               <div
                 data-testid="app-sidebar-body"
                 hidden={isBodyHidden}
@@ -305,6 +283,74 @@ export function AppSidebar({
                 {body}
               </div>
               {alternateBody}
+            </SidebarCollapsibleBody>
+          </div>
+          <div
+            data-testid="sidebar-footer-row"
+            className="flex shrink-0 items-stretch"
+          >
+            <div
+              className={cn(
+                "flex shrink-0 items-center justify-center py-2",
+                NAV_RAIL_WIDTH_CLASS,
+                isFramed && "border-b border-transparent",
+                !isFramed &&
+                  "bg-surface-recessed -mb-[env(safe-area-inset-bottom)] pb-[calc(0.5rem_+_env(safe-area-inset-bottom))]",
+              )}
+            >
+              {railFooter}
+            </div>
+            <SidebarCollapsibleBody
+              contentInFlow
+              className={cn(
+                isFramed &&
+                  "rounded-tl-none border-t-0 [clip-path:inset(0_-6px_0_0_round_0_0_0_0.75rem)]",
+              )}
+            >
+              <SidebarFooter
+                hidden={isBodyHidden}
+                className="w-full justify-center"
+              >
+                <SidebarMenu
+                  className={cn(
+                    "flex-row items-center gap-1",
+                    isFooterCustomizing && "hidden",
+                  )}
+                >
+                  <PluginSidebarFooterItems
+                    onCustomize={() => {
+                      pluginSidebarFooter.dismiss();
+                      setNavigationCustomizing(false);
+                      setFooterCustomizing(true);
+                    }}
+                    activeDisclosureKey={pluginSidebarFooter.activeKey}
+                    onDisclosureCommand={pluginSidebarFooter.handleCommand}
+                    onNavigate={closeOnMobile}
+                    builtInActions={[
+                      {
+                        id: "mobile",
+                        href: "/settings/mobile",
+                        onActivate: () => {
+                          closeOnMobile();
+                          void navigate("/settings/mobile");
+                        },
+                      },
+                      {
+                        id: "report-bug",
+                        onActivate: () => {
+                          closeOnMobile();
+                          openUrlInExternalBrowser(BUG_REPORT_NEW_ISSUE_URL);
+                        },
+                      },
+                    ]}
+                  />
+                  <SidebarPluginAttentionGlyph
+                    className={SIDEBAR_FOOTER_ACTION_CLASS}
+                    onNavigate={closeOnMobile}
+                  />
+                  <SidebarUpdatesBadge onNavigate={closeOnMobile} />
+                </SidebarMenu>
+              </SidebarFooter>
             </SidebarCollapsibleBody>
           </div>
         </Sidebar>

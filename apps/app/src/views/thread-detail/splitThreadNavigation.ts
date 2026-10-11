@@ -123,11 +123,7 @@ export function reconcileLayoutForContent(
   if (layout === null) {
     return createSinglePaneContentLayout(content);
   }
-  const focused = findPane(layout.root, layout.focusedPaneId);
-  const existing =
-    content.kind === "new-thread" && focused?.content.kind === "new-thread"
-      ? focused
-      : findPaneByContent(layout.root, content);
+  const existing = findPaneByContent(layout.root, content);
   if (existing !== null) {
     const withRouteState =
       existing.content.kind === "plugin-panel" &&
