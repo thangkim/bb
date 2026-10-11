@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import type { Project, Task } from "../shared/contract.js";
 import { sortItems } from "../shared/sort.js";
 import { listAllTasks, useTasksQuery } from "./data.js";
@@ -6,15 +6,7 @@ import type { ResolvedTasksRoute, TaskViewMode, TasksRoute } from "./routes.js";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { useTasksRefresh } from "./refresh.js";
-
-const REFRESH_TASKS_LABEL = "Refresh tasks";
+import { TopbarSlotOutlet } from "./topbar-slot.js";
 
 interface PagerPosition {
   index: number;
@@ -120,46 +112,11 @@ function ViewToggle({
   );
 }
 
-function RefreshTasksButton() {
-  const { refresh, isRefreshing } = useTasksRefresh();
-
-  const handleRefresh = useCallback(() => {
-    if (isRefreshing) return;
-    refresh();
-  }, [isRefreshing, refresh]);
-
-  return (
-    <TooltipProvider delayDuration={300}>
-      <Tooltip disableHoverableContent>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-7 shrink-0 text-muted-foreground hover:text-foreground active:bg-state-active active:text-foreground max-md:pointer-coarse:size-9"
-            aria-label={REFRESH_TASKS_LABEL}
-            aria-busy={isRefreshing}
-            disabled={isRefreshing}
-            onClick={handleRefresh}
-          >
-            <Icon
-              name="RotateCcw"
-              className={cn("size-3.5", isRefreshing && "animate-spin")}
-            />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">{REFRESH_TASKS_LABEL}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-}
-
 interface TasksTopbarProps {
   route: ResolvedTasksRoute;
   projects: Project[] | undefined;
   onNavigate: (route: TasksRoute) => void;
   onNew: () => void;
-  onBack: () => void;
   className?: string;
 }
 
@@ -168,7 +125,6 @@ export function TasksTopbar({
   projects,
   onNavigate,
   onNew,
-  onBack,
   className,
 }: TasksTopbarProps) {
   const project = useMemo(() => {
@@ -188,7 +144,7 @@ export function TasksTopbar({
       className="shrink-0 cursor-pointer whitespace-nowrap text-muted-foreground hover:text-foreground"
       onClick={() => onNavigate({ kind: "all" })}
     >
-      All projects
+      All
     </button>
   );
   const crumbSeparator = (
@@ -203,11 +159,20 @@ export function TasksTopbar({
     switch (route.kind) {
       case "all":
         return (
-          <span className="whitespace-nowrap font-semibold">All projects</span>
+          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center">
+            <span
+              aria-current="page"
+              className="whitespace-nowrap font-semibold"
+            >
+              All
+            </span>
+          </nav>
         );
       case "active":
         return (
-          <span className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5">
+            {allProjectsCrumb}
+            {crumbSeparator}
             <span className="whitespace-nowrap font-semibold">Active</span>
             <span className="hidden text-xs font-normal text-muted-foreground @md:inline">
               agents working now
@@ -216,7 +181,9 @@ export function TasksTopbar({
         );
       case "manage":
         return (
-          <span className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5">
+            {allProjectsCrumb}
+            {crumbSeparator}
             <span className="whitespace-nowrap font-semibold">Manage</span>
             <span className="hidden text-xs font-normal text-muted-foreground @md:inline">
               labels, presets, folders
@@ -231,32 +198,14 @@ export function TasksTopbar({
           >
             {allProjectsCrumb}
             {crumbSeparator}
-            <span className="flex min-w-0 items-center gap-2">
-              {project ? (
-                <span
-                  aria-hidden
-                  className="size-3 shrink-0 rounded-sm"
-                  style={{ backgroundColor: project.color }}
-                />
-              ) : null}
-              <span aria-current="page" className="truncate font-semibold">
-                {project?.name ?? "Project"}
-              </span>
+            <span aria-current="page" className="truncate font-semibold">
+              {project?.name ?? "Project"}
             </span>
           </nav>
         );
       case "task":
         return (
           <span className="flex min-w-0 items-center gap-1.5">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-6 shrink-0 max-md:pointer-coarse:size-9"
-              aria-label="Back (Esc)"
-              onClick={onBack}
-            >
-              <Icon name="ChevronLeft" className="size-4" />
-            </Button>
             <nav
               aria-label="Breadcrumb"
               className="flex min-w-0 items-center gap-1.5"
@@ -267,16 +216,11 @@ export function TasksTopbar({
                 <>
                   <button
                     type="button"
-                    className="flex min-w-0 cursor-pointer items-center gap-2 text-muted-foreground hover:text-foreground"
+                    className="flex min-w-0 cursor-pointer items-center text-muted-foreground hover:text-foreground"
                     onClick={() =>
                       onNavigate({ kind: "project", projectId: project.id })
                     }
                   >
-                    <span
-                      aria-hidden
-                      className="size-3 shrink-0 rounded-sm"
-                      style={{ backgroundColor: project.color }}
-                    />
                     <span className="truncate font-medium">{project.name}</span>
                   </button>
                   {crumbSeparator}
@@ -284,7 +228,7 @@ export function TasksTopbar({
               ) : null}
               <span
                 aria-current="page"
-                className="shrink-0 font-medium text-muted-foreground"
+                className="shrink-0 text-xs font-medium text-muted-foreground"
               >
                 {route.taskKey}
               </span>
@@ -317,20 +261,20 @@ export function TasksTopbar({
           />
         </span>
       ) : null}
-      <RefreshTasksButton />
-      {route.kind !== "task" && route.kind !== "manage" ? (
-        <Button
-          size="sm"
-          className="h-7 gap-1.5 max-md:pointer-coarse:h-9"
-          aria-label={route.kind === "project" ? "New task" : "New project"}
-          onClick={onNew}
-        >
-          <Icon name="Plus" className="size-3.5" />
-          <span className="hidden @lg:inline">
-            {route.kind === "project" ? "New task" : "New project"}
-          </span>
-        </Button>
-      ) : null}
+      <div className="flex shrink-0 items-center gap-2">
+        <TopbarSlotOutlet />
+        {route.kind !== "task" && route.kind !== "manage" ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 shrink-0 text-muted-foreground hover:text-foreground max-md:pointer-coarse:size-9"
+            aria-label={route.kind === "project" ? "New task" : "New project"}
+            onClick={onNew}
+          >
+            <Icon name="Plus" className="size-4" />
+          </Button>
+        ) : null}
+      </div>
     </header>
   );
 }

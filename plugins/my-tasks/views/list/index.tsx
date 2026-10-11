@@ -8,6 +8,7 @@ import {
 } from "../../shell/collapse-state.js";
 import { NewProjectDialog } from "../manage/new-project-dialog.js";
 import { DetailToasts, useDetailToasts } from "../detail/toast.js";
+import { InTopbar } from "../../shell/topbar-slot.js";
 import { EmptyState } from "../../components/empty-state.js";
 import { Button } from "@/components/ui/button";
 import { DelayedLoading } from "@/components/ui/delayed-loading";
@@ -23,7 +24,7 @@ import {
 import {
   EMPTY_FILTERS,
   hasActiveFilters,
-  ListFilterBar,
+  ListFilterMenu,
   type ListFilterState,
 } from "./filter-bar.js";
 import {
@@ -259,12 +260,14 @@ export function ListView({ activeOnly = false }: ListViewProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <ListFilterBar
-        filters={filters}
-        onChange={setFilters}
-        sort={sort}
-        onSortChange={setSort}
-      />
+      <InTopbar>
+        <ListFilterMenu
+          filters={filters}
+          onChange={setFilters}
+          sort={sort}
+          onSortChange={setSort}
+        />
+      </InTopbar>
       <div
         ref={scrollRef}
         className="min-h-0 flex-1 overflow-y-auto @container"

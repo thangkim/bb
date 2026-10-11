@@ -123,9 +123,7 @@ export function ProjectRow({
         }}
         className={cn(
           "group/project relative w-full text-left",
-          activeThreadProject || expanded
-            ? "bg-surface-selected"
-            : "hover:bg-state-hover",
+          activeThreadProject ? "bg-surface-selected" : "hover:bg-state-hover",
           !isLastInSection && "border-b border-border-hairline",
           taskDragOver &&
             "bg-surface-selected outline-2 -outline-offset-2 outline-dashed outline-input",

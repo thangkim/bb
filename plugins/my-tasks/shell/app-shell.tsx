@@ -25,6 +25,7 @@ import { EmptyState } from "../components/empty-state.js";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { TasksRefreshProvider } from "./refresh.js";
+import { TopbarSlotProvider } from "./topbar-slot.js";
 import { ActiveThreadProvider } from "../components/active-thread.js";
 
 const BOARD_MIN_WIDTH = 448;
@@ -168,7 +169,6 @@ function TasksAppShellContent({ subPath }: PluginNavPanelProps) {
           projects={projects.data}
           onNavigate={navigation.go}
           onNew={openNew}
-          onBack={backFromTask}
         />
         <div className="min-h-0 flex-1 overflow-auto">
           {noProjects && route.kind !== "task" && route.kind !== "manage" ? (
@@ -206,7 +206,9 @@ function TasksAppShellContent({ subPath }: PluginNavPanelProps) {
 export function TasksAppShell(props: PluginNavPanelProps) {
   return (
     <TasksRefreshProvider>
-      <TasksAppShellContent {...props} />
+      <TopbarSlotProvider>
+        <TasksAppShellContent {...props} />
+      </TopbarSlotProvider>
     </TasksRefreshProvider>
   );
 }

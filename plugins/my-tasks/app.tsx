@@ -15,7 +15,7 @@ import { ComposeAnchor } from "./views/tasks/composer-beside.js";
 export default definePluginApp((app) => {
   app.slots.navPanel({
     id: "tasks",
-    title: "My Tasks",
+    title: "Tomato",
     icon: "ListTodo",
     path: "tasks",
     component: TasksAppShell,

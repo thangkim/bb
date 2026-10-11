@@ -17,7 +17,7 @@
     "bbPluginSdk": ">=0.4.102"
   },
   "bb": {
-    "name": "My Tasks",
+    "name": "Tomato",
     "description": "Personal task tracker: projects, tasks, and the agent threads working on them.",
     "branding": {
       "icon": "ListTodo"

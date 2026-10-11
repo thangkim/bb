@@ -146,6 +146,17 @@ interface Fixture {
   focusedThreadId?: string;
 }
 
+async function openFilterSubmenu(
+  slot: ReturnType<typeof renderList>,
+  name: string,
+) {
+  const trigger = await slot.findByRole("button", { name: "Filter and sort" });
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+  fireEvent.click(trigger);
+  const item = slot.queryByRole("menuitem", { name });
+  if (item !== null) fireEvent.keyDown(item, { key: "ArrowRight" });
+}
+
 function renderList(fixture: Fixture = {}) {
   const projects = fixture.projects ?? [LAUNCH, POLISH, PLANNED];
   const archived = new Set(fixture.archivedThreadIds ?? []);
@@ -1238,7 +1249,7 @@ describe("projects list", () => {
   it("filters by status and remembers the filter", async () => {
     const slot = renderList();
     await projectRow(slot, PLANNED.id);
-    fireEvent.click(slot.getByRole("button", { name: /Status/ }));
+    await openFilterSubmenu(slot, "Status");
     fireEvent.click(
       await slot.findByRole("menuitemcheckbox", { name: /In progress/ }),
     );

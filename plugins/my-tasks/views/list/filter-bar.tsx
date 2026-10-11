@@ -6,14 +6,21 @@ import {
   type ProjectStatus,
 } from "../../shared/contract.js";
 import { TASK_SORTS, type TaskSort } from "../../shared/pagination.js";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport";
 import { Icon, type IconName } from "@/components/ui/icon";
-import { cn } from "@/lib/utils";
 import { PriorityIcon, StatusIcon } from "./icons.js";
 import { PRIORITY_LABELS, SORT_LABELS, STATUS_LABELS } from "./lib.js";
 
@@ -22,84 +29,45 @@ function toggled<T>(values: readonly T[], value: T, checked: boolean): T[] {
   return values.filter((existing) => existing !== value);
 }
 
-function chipTriggerClass(active: boolean): string {
-  return cn(
-    "flex h-6 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs max-md:pointer-coarse:h-8",
-    active
-      ? "border-border bg-secondary text-foreground"
-      : "border-dashed border-border text-muted-foreground hover:border-input hover:text-foreground",
-  );
-}
+const keepOpen = (event: Event) => event.preventDefault();
 
-function FilterChip({
+function FilterSubmenu({
   icon,
   label,
-  selectedNames,
+  count,
   children,
 }: {
   icon: IconName;
   label: string;
-  selectedNames: readonly string[];
+  count: number;
   children: ReactNode;
 }) {
-  const active = selectedNames.length > 0;
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button type="button" className={chipTriggerClass(active)}>
-          <Icon name={icon} className="size-3" />
+  if (useIsCompactViewport()) {
+    return (
+      <>
+        <DropdownMenuLabel className="flex items-center gap-2">
+          <Icon name={icon} className="size-3.5" />
           {label}
-          {active ? (
-            <span className="font-medium tabular-nums">
-              {selectedNames.length}
-            </span>
-          ) : null}
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-44">
+        </DropdownMenuLabel>
         {children}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function SortChip({
-  sort,
-  onChange,
-}: {
-  sort: TaskSort;
-  onChange: (sort: TaskSort) => void;
-}) {
-  const active = sort !== "manual";
+      </>
+    );
+  }
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button type="button" className={chipTriggerClass(active)}>
-          <Icon name="Sort" className="size-3" />
-          Sort
-          {active ? (
-            <span className="font-medium">{SORT_LABELS[sort]}</span>
-          ) : null}
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        className="min-w-44"
-        mobileTitle="Sort projects"
-      >
-        {TASK_SORTS.map((option) => (
-          <DropdownMenuCheckboxItem
-            key={option}
-            checked={sort === option}
-            onCheckedChange={(checked) => {
-              if (checked === true) onChange(option);
-            }}
-          >
-            {SORT_LABELS[option]}
-          </DropdownMenuCheckboxItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <Icon name={icon} className="size-3.5" />
+        <span>{label}</span>
+        {count > 0 ? (
+          <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+            {count}
+          </span>
+        ) : null}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="min-w-44">
+        {children}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 
@@ -117,7 +85,7 @@ export function hasActiveFilters(filters: ListFilterState): boolean {
   return filters.statuses.length > 0 || filters.priorities.length > 0;
 }
 
-export function ListFilterBar({
+export function ListFilterMenu({
   filters,
   onChange,
   sort,
@@ -128,16 +96,36 @@ export function ListFilterBar({
   sort: TaskSort;
   onSortChange: (sort: TaskSort) => void;
 }) {
-  const keepOpen = (event: Event) => event.preventDefault();
+  const filtering = hasActiveFilters(filters);
+  const active = filtering || sort !== "manual";
   return (
-    <div className="flex shrink-0 items-center gap-1.5 border-b border-border-hairline px-3.5 py-1.5">
-      <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
-        <FilterChip
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="relative size-6 shrink-0 text-muted-foreground hover:text-foreground data-[state=open]:bg-state-active data-[state=open]:text-foreground max-md:pointer-coarse:size-9"
+          aria-label="Filter and sort"
+        >
+          <Icon name="Filter" className="size-4" />
+          {active ? (
+            <span
+              aria-hidden
+              className="absolute right-1 top-1 size-1.5 rounded-full bg-primary"
+            />
+          ) : null}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="min-w-48"
+        mobileTitle="Filter projects"
+      >
+        <FilterSubmenu
           icon="Circle"
           label="Status"
-          selectedNames={filters.statuses.map(
-            (status) => STATUS_LABELS[status],
-          )}
+          count={filters.statuses.length}
         >
           {PROJECT_STATUSES.map((status) => (
             <DropdownMenuCheckboxItem
@@ -157,13 +145,11 @@ export function ListFilterBar({
               </span>
             </DropdownMenuCheckboxItem>
           ))}
-        </FilterChip>
-        <FilterChip
+        </FilterSubmenu>
+        <FilterSubmenu
           icon="ArrowUpDown"
           label="Priority"
-          selectedNames={filters.priorities.map(
-            (priority) => PRIORITY_LABELS[priority],
-          )}
+          count={filters.priorities.length}
         >
           {PRIORITIES.map((priority) => (
             <DropdownMenuCheckboxItem
@@ -187,19 +173,34 @@ export function ListFilterBar({
               </span>
             </DropdownMenuCheckboxItem>
           ))}
-        </FilterChip>
-        {hasActiveFilters(filters) ? (
-          <button
-            type="button"
-            onClick={() => onChange(EMPTY_FILTERS)}
-            className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-dashed border-border px-2.5 text-xs text-muted-foreground hover:border-input hover:text-foreground max-md:pointer-coarse:h-8"
-          >
-            <Icon name="X" className="size-3" />
-            Clear
-          </button>
+        </FilterSubmenu>
+        <FilterSubmenu
+          icon="Sort"
+          label="Sort"
+          count={sort !== "manual" ? 1 : 0}
+        >
+          {TASK_SORTS.map((option) => (
+            <DropdownMenuCheckboxItem
+              key={option}
+              checked={sort === option}
+              onCheckedChange={(checked) => {
+                if (checked === true) onSortChange(option);
+              }}
+            >
+              {SORT_LABELS[option]}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </FilterSubmenu>
+        {filtering ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => onChange(EMPTY_FILTERS)}>
+              <Icon name="X" className="size-3.5" />
+              <span>Clear filters</span>
+            </DropdownMenuItem>
+          </>
         ) : null}
-      </div>
-      <SortChip sort={sort} onChange={onSortChange} />
-    </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

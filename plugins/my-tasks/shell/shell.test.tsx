@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { makeProject, makeTask, rpcInput } from "../test-fixtures.js";
@@ -307,7 +313,7 @@ describe("tasks app shell", () => {
     await slot.findByText("Loaded after existing outage");
   });
 
-  it("resyncs the project list after reconnect and supports manual refresh", async () => {
+  it("resyncs the project list after reconnect", async () => {
     let name = "Stale list name";
     const slot = renderSlot(
       app.navPanels[0]!,
@@ -321,171 +327,6 @@ describe("tasks app shell", () => {
     expect(slot.queryByText("Recovered list name")).toBeNull();
     await slot.behavior.setRealtimeConnectionState("connected");
     await slot.findByText("Recovered list name");
-
-    name = "Manually refreshed list name";
-    fireEvent.click(slot.getByRole("button", { name: "Refresh tasks" }));
-    await slot.findByText("Manually refreshed list name");
-  });
-
-  it("shares manual refresh across the page and right-panel queries", async () => {
-    let pageProjectCalls = 0;
-    let panelFolderCalls = 0;
-    let holdFolders = false;
-    let releaseFolders: (() => void) | undefined;
-    const page = renderSlot(
-      app.navPanels[0]!,
-      { subPath: "all" },
-      {
-        rpc: seededRpc({
-          listProjects: () => {
-            pageProjectCalls += 1;
-            return { projects: [project] };
-          },
-        }),
-      },
-    );
-    const panel = renderSlot(
-      navigationRegistration,
-      { subPath: "all" },
-      {
-        rpc: seededRpc({
-          listFolders: async () => {
-            panelFolderCalls += 1;
-            if (holdFolders) {
-              await new Promise<void>((resolve) => {
-                releaseFolders = resolve;
-              });
-            }
-            return { folders: [folder] };
-          },
-        }),
-      },
-    );
-    await page.findByRole("button", { name: "Refresh tasks" });
-    await panel.findByText("Tasks Plugin");
-    const initialPageCalls = pageProjectCalls;
-    const initialPanelCalls = panelFolderCalls;
-
-    holdFolders = true;
-    const refresh = page.getByRole("button", {
-      name: "Refresh tasks",
-    }) as HTMLButtonElement;
-    fireEvent.click(refresh);
-
-    await waitFor(() =>
-      expect(pageProjectCalls).toBeGreaterThan(initialPageCalls),
-    );
-    await waitFor(() =>
-      expect(panelFolderCalls).toBeGreaterThan(initialPanelCalls),
-    );
-    expect(refresh.disabled).toBe(true);
-    const callsWhilePanelPending = pageProjectCalls;
-    fireEvent.click(refresh);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(pageProjectCalls).toBe(callsWhilePanelPending);
-
-    releaseFolders?.();
-    await waitFor(() => expect(refresh.disabled).toBe(false));
-  });
-
-  it("exposes a subtle icon-only refresh control left of New project", async () => {
-    const slot = renderSlot(
-      app.navPanels[0]!,
-      { subPath: "all" },
-      { rpc: seededRpc() },
-    );
-    await slot.findByText("Tasks Plugin");
-
-    const refresh = slot.getByRole("button", { name: "Refresh tasks" });
-    const newProject = slot.getByRole("button", { name: "New project" });
-
-    expect(refresh.textContent?.trim() ?? "").not.toMatch(/Refresh/i);
-    expect(refresh.className).toMatch(/size-7/);
-    expect(
-      refresh.compareDocumentPosition(newProject) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-  });
-
-  it("single-flights manual refresh against deferred RPCs", async () => {
-    let calls = 0;
-    let name = "Flight name A";
-    let hold = false;
-    const pendingResolvers: Array<() => void> = [];
-    const slot = renderSlot(
-      app.navPanels[0]!,
-      { subPath: "all" },
-      {
-        rpc: seededRpc({
-          listProjects: () => {
-            calls += 1;
-            const response = { projects: [{ ...project, name }] };
-            if (!hold) return response;
-            return new Promise((resolve) => {
-              pendingResolvers.push(() => resolve(response));
-            });
-          },
-        }),
-      },
-    );
-    await slot.findByText("Flight name A");
-    const baseline = calls;
-    const refresh = slot.getByRole("button", {
-      name: "Refresh tasks",
-    }) as HTMLButtonElement;
-
-    hold = true;
-    name = "Flight name B";
-    fireEvent.click(refresh);
-    await waitFor(() => expect(calls).toBeGreaterThan(baseline));
-    expect(refresh.disabled).toBe(true);
-    expect(refresh.getAttribute("aria-busy")).toBe("true");
-
-    const callsWhilePending = calls;
-    fireEvent.click(refresh);
-    fireEvent.click(refresh);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(calls).toBe(callsWhilePending);
-
-    for (const resolve of pendingResolvers.splice(0)) resolve();
-    await slot.findByText("Flight name B");
-    await waitFor(() => expect(refresh.disabled).toBe(false));
-  });
-
-  it("retains stale list data when a manual refresh fails, then recovers", async () => {
-    let shouldFail = false;
-    let name = "Stable name";
-    const slot = renderSlot(
-      app.navPanels[0]!,
-      { subPath: "all" },
-      {
-        rpc: seededRpc({
-          listProjects: () => {
-            if (shouldFail) throw new Error("refresh failed");
-            return { projects: [{ ...project, name }] };
-          },
-        }),
-      },
-    );
-    await slot.findByText("Stable name");
-
-    shouldFail = true;
-    fireEvent.click(slot.getByRole("button", { name: "Refresh tasks" }));
-    await waitFor(() => {
-      expect(
-        (
-          slot.getByRole("button", {
-            name: "Refresh tasks",
-          }) as HTMLButtonElement
-        ).disabled,
-      ).toBe(false);
-    });
-    expect(slot.getByText("Stable name")).toBeDefined();
-
-    shouldFail = false;
-    name = "Recovered after failure";
-    fireEvent.click(slot.getByRole("button", { name: "Refresh tasks" }));
-    await slot.findByText("Recovered after failure");
   });
 
   it("resyncs an open task detail after reconnect", async () => {
@@ -839,9 +680,7 @@ describe("tasks app shell", () => {
     await slot.findByText("TSK-2");
     expect(slot.getAllByText("33%").length).toBeGreaterThan(0);
 
-    fireEvent.click(
-      slot.getByRole("checkbox", { name: "Mark TSK-2 done" }),
-    );
+    fireEvent.click(slot.getByRole("checkbox", { name: "Mark TSK-2 done" }));
     await waitFor(() =>
       expect(updates).toContainEqual(
         expect.objectContaining({ taskId: tasks[1]!.id, status: "done" }),
@@ -901,9 +740,8 @@ describe("tasks app shell", () => {
       );
       await slot.findByText("brief.pdf");
 
-      const picker = slot.container.querySelector<HTMLInputElement>(
-        'input[type="file"]',
-      )!;
+      const picker =
+        slot.container.querySelector<HTMLInputElement>('input[type="file"]')!;
       fireEvent.change(picker, {
         target: {
           files: [new File(["doc"], "notes.txt", { type: "text/plain" })],
@@ -939,9 +777,7 @@ describe("tasks app shell", () => {
       name: "Breadcrumb",
     });
     await within(projectCrumbs).findByText("Tasks Plugin");
-    fireEvent.click(
-      within(projectCrumbs).getByRole("button", { name: "All projects" }),
-    );
+    fireEvent.click(within(projectCrumbs).getByRole("button", { name: "All" }));
     expect(projectSlot.navigateCalls).toContainEqual({
       method: "toPluginPanel",
       path: "tasks",
@@ -1060,7 +896,7 @@ describe("tasks app shell", () => {
       { subPath: "all" },
       { rpc: seededRpc() },
     );
-    await slot.findByText("All projects");
+    await slot.findByRole("navigation", { name: "Breadcrumb" });
     fireEvent.keyDown(window, { key: "c" });
     await slot.findByRole("dialog");
     fireEvent.keyDown(window, { key: "c" });
