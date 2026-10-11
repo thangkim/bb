@@ -109,4 +109,19 @@ describe("describeVoiceError", () => {
       ),
     ).toBe("Blocked");
   });
+
+  it("explains microphone failures in bb's words", () => {
+    expect(
+      describeVoiceError(new DOMException("denied", "NotAllowedError")),
+    ).toBe("Microphone permission denied");
+    expect(describeVoiceError(new DOMException("gone", "NotFoundError"))).toBe(
+      "No microphone was found",
+    );
+    expect(
+      describeVoiceError(new DOMException("gone", "NotFoundError"), true),
+    ).toBe("Selected microphone was not found");
+    expect(
+      describeVoiceError(new DOMException("busy", "NotReadableError")),
+    ).toBe("Microphone is unavailable or already in use");
+  });
 });

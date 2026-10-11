@@ -182,9 +182,11 @@ start collapsed with their threads hidden; expanding a row lists the project's
 own threads under its priority and due date, with its tasks below. Turn on
 **Show threads on collapsed projects** in Settings → Plugins → My Tasks, or run
 `bb plugin config my-tasks set showCollapsedProjectThreads true`, to list
-project threads on collapsed rows too. A project's **New thread** opens an
-empty composer for the project's linked bb project beside the list (or in place
-when splits are unavailable) and starts nothing; the first thread you send from
+project threads on collapsed rows too. A project's **New thread** opens bb's
+New thread composer in a pane to the right of the list, switched to the
+project's linked bb project, and starts nothing. bb has a single composer pane,
+so when one is already open it is focused and switched instead; on compact
+screens the New thread screen opens in place. The first thread you send from
 bb in that project within 10 minutes is attached to the project. To start a
 thread with the project's details already in the prompt, use
 `bb my-tasks project dispatch`.
@@ -202,7 +204,7 @@ dialog that suggests open tasks from projects linked to the thread's bb
 project, searches all tasks and projects, and lists what the thread is already
 attached to; select an attached item to detach it.
 
-An attached thread's header shows what it belongs to, left of the header
+An attached thread's header shows what it belongs to among its header
 actions: the task key and title when the thread is attached to a task (with
 `+N` when there are more), otherwise the project name. Clicking a task opens it
 in the thread's **Task** side panel; clicking a project opens its project page.
@@ -210,12 +212,12 @@ On phone-width viewports it collapses to an icon. `bb my-tasks links` prints
 the same links from the CLI.
 
 Splitting a thread that is attached to tasks or projects carries those links
-over: when you open a new split pane from the active thread (a split shortcut or
-bb's New thread beside it) and send its first message, the new thread is
-attached to the same tasks and projects. It only applies to a thread created
-in that pane, in the same bb project, while the source pane stays open; an
-existing thread opened in a split, and threads already claimed by a My Tasks
-**New thread**, are left alone.
+over: when you open a new split pane from the active thread (for example with
+Pane Splits' Alt+D or by Cmd/Ctrl-clicking bb's New thread) and send its first
+message, the new thread is attached to the same tasks and projects. It only
+applies to a thread created in that pane, in the same bb project, while the
+source pane stays open; an existing thread opened in a split, and threads
+already claimed by a My Tasks **New thread**, are left alone.
 
 If work begins outside the Delegate action, the agent can associate its current
 thread with `bb my-tasks attach KEY`. The inverse is `bb my-tasks detach KEY

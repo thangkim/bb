@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import {
   loadPluginApp,
   mountPluginContentScripts,
+  renderSlot,
   type MountedPluginContentScripts,
 } from "@get-bb/plugin-sdk/testing/app";
 import { convertImageBlobToPng } from "./image-copy";
@@ -19,6 +21,7 @@ class FakeClipboardItem {
 const app = await loadPluginApp(() => import("./app"));
 let mounted: MountedPluginContentScripts | null = null;
 let clipboardWrite: ReturnType<typeof vi.fn>;
+let clipboardWriteText: ReturnType<typeof vi.fn>;
 const restorers: Array<() => void> = [];
 
 function defineTemporaryProperty(
@@ -55,11 +58,16 @@ beforeEach(() => {
   clipboardWrite = vi.fn(async (items: FakeClipboardItem[]) => {
     await items[0]!.items["image/png"];
   });
-  defineTemporaryProperty(navigator, "clipboard", { write: clipboardWrite });
+  clipboardWriteText = vi.fn(async () => {});
+  defineTemporaryProperty(navigator, "clipboard", {
+    write: clipboardWrite,
+    writeText: clipboardWriteText,
+  });
   vi.stubGlobal("ClipboardItem", FakeClipboardItem);
 });
 
 afterEach(async () => {
+  cleanup();
   await mounted?.lifecycle.dispose();
   mounted = null;
   document.body.replaceChildren();
@@ -332,5 +340,226 @@ describe("image lightbox copy", () => {
     expect(press({ metaKey: true }).defaultPrevented).toBe(false);
     expect(clipboardWrite).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+function renderMenuOverlay() {
+  const overlay = app.appOverlays[0];
+  if (overlay === undefined) throw new Error("overlay not registered");
+  return renderSlot(overlay, {});
+}
+
+function appendLoadedImage(
+  parent: HTMLElement = document.body,
+  src = "/api/v1/images/cat.png",
+): HTMLImageElement {
+  const image = document.createElement("img");
+  image.src = src;
+  image.alt = "cat";
+  Object.defineProperty(image, "complete", { configurable: true, value: true });
+  Object.defineProperty(image, "naturalWidth", {
+    configurable: true,
+    value: 640,
+  });
+  parent.append(image);
+  return image;
+}
+
+function openMenuOn(target: Element, init: MouseEventInit = {}): boolean {
+  return fireEvent.contextMenu(target, { clientX: 40, clientY: 60, ...init });
+}
+
+function menuLabels(): string[] {
+  return screen
+    .queryAllByRole("menuitem")
+    .map((item) => item.textContent ?? "");
+}
+
+describe("image context menu", () => {
+  it("replaces the native menu on an image and copies it as PNG", async () => {
+    const png = new Blob(["png"], { type: "image/png" });
+    const fetchMock = stubFetch({ ok: true, status: 200, blob: png });
+    renderMenuOverlay();
+    const image = appendLoadedImage();
+
+    expect(openMenuOn(image)).toBe(false);
+    expect(screen.getByRole("menu", { name: "Image" })).toBeTruthy();
+    expect(menuLabels()).toEqual(["Copy Image"]);
+    expect(document.activeElement?.textContent).toBe("Copy Image");
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy Image" }));
+
+    expect(clipboardWrite).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("/api/v1/images/cat.png", window.location.href).href,
+    );
+    const [items] = clipboardWrite.mock.calls[0] as [FakeClipboardItem[]];
+    await expect(items[0]!.items["image/png"]).resolves.toBe(png);
+    expect(screen.queryByRole("menu")).toBe(null);
+    await flush();
+    expect(toast.success).toHaveBeenCalledWith("Image copied");
+  });
+
+  it("reports a failed copy from the menu", async () => {
+    stubFetch({ ok: false, status: 404, blob: new Blob([]) });
+    renderMenuOverlay();
+    openMenuOn(appendLoadedImage());
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy Image" }));
+    await flush();
+
+    expect(toast.error).toHaveBeenCalledWith("Failed to copy image");
+  });
+
+  it("keeps Copy Link for a linked image", async () => {
+    renderMenuOverlay();
+    const link = document.createElement("a");
+    link.href = "https://example.com/full.png";
+    document.body.append(link);
+    openMenuOn(appendLoadedImage(link));
+
+    expect(menuLabels()).toEqual(["Copy Image", "Copy Link"]);
+    expect(screen.getAllByRole("separator")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy Link" }));
+    await flush();
+
+    expect(clipboardWriteText).toHaveBeenCalledWith(
+      "https://example.com/full.png",
+    );
+    expect(clipboardWrite).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menu")).toBe(null);
+  });
+
+  it("keeps Copy for the text selected when the menu opened", async () => {
+    renderMenuOverlay();
+    const caption = document.createElement("p");
+    caption.textContent = "A sleepy cat";
+    document.body.append(caption);
+    const image = appendLoadedImage();
+    const range = document.createRange();
+    range.selectNodeContents(caption);
+    window.getSelection()!.addRange(range);
+
+    openMenuOn(image);
+    window.getSelection()!.removeAllRanges();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy" }));
+    await flush();
+
+    expect(clipboardWriteText).toHaveBeenCalledWith("A sleepy cat");
+  });
+
+  it("reports a failed text copy", async () => {
+    clipboardWriteText.mockRejectedValueOnce(new Error("denied"));
+    renderMenuOverlay();
+    const link = document.createElement("a");
+    link.href = "https://example.com/full.png";
+    document.body.append(link);
+    openMenuOn(appendLoadedImage(link));
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy Link" }));
+    await flush();
+
+    expect(toast.error).toHaveBeenCalledWith("Failed to copy link");
+  });
+
+  it.each([
+    ["Shift+right-click", { shiftKey: true }],
+    ["a menu bb already handled", { claimed: true }],
+  ])("leaves the native menu for %s", (_name, options) => {
+    renderMenuOverlay();
+    const image = appendLoadedImage();
+    const { claimed, ...init } = { claimed: false, ...options };
+    if (claimed) {
+      image.addEventListener("contextmenu", (event) => event.preventDefault());
+    }
+
+    openMenuOn(image, init);
+
+    expect(screen.queryByRole("menu")).toBe(null);
+  });
+
+  it("leaves the native menu for an image that has not loaded", () => {
+    renderMenuOverlay();
+    const image = appendLoadedImage();
+    Object.defineProperty(image, "naturalWidth", { value: 0 });
+
+    expect(openMenuOn(image)).toBe(true);
+    expect(screen.queryByRole("menu")).toBe(null);
+  });
+
+  it("closes on a right-click elsewhere so the native menu shows", () => {
+    renderMenuOverlay();
+    const paragraph = document.createElement("p");
+    document.body.append(paragraph);
+    openMenuOn(appendLoadedImage());
+
+    expect(openMenuOn(paragraph)).toBe(true);
+    expect(screen.queryByRole("menu")).toBe(null);
+  });
+
+  it("moves through items with the arrow keys", () => {
+    renderMenuOverlay();
+    const link = document.createElement("a");
+    link.href = "https://example.com/full.png";
+    document.body.append(link);
+    openMenuOn(appendLoadedImage(link));
+    const menu = screen.getByRole("menu");
+
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement?.textContent).toBe("Copy Link");
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement?.textContent).toBe("Copy Image");
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
+    expect(document.activeElement?.textContent).toBe("Copy Link");
+  });
+
+  it("closes on Escape without reaching other Escape handlers and restores focus", () => {
+    renderMenuOverlay();
+    const button = document.createElement("button");
+    document.body.append(button);
+    button.focus();
+    const image = appendLoadedImage();
+    const onEscape = vi.fn();
+    window.addEventListener("keydown", onEscape);
+    restorers.push(() => window.removeEventListener("keydown", onEscape));
+    openMenuOn(image);
+
+    const escape = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(document.activeElement ?? document.body, escape);
+
+    expect(escape.defaultPrevented).toBe(true);
+    expect(onEscape).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menu")).toBe(null);
+    expect(document.activeElement).toBe(button);
+  });
+
+  it("dismisses on an outside click without clicking through", () => {
+    renderMenuOverlay();
+    const behind = document.createElement("button");
+    const onClick = vi.fn();
+    behind.addEventListener("click", onClick);
+    document.body.append(behind);
+    openMenuOn(appendLoadedImage());
+
+    fireEvent.pointerDown(behind, { button: 0 });
+    fireEvent.click(behind);
+
+    expect(screen.queryByRole("menu")).toBe(null);
+    expect(onClick).not.toHaveBeenCalled();
+    fireEvent.click(behind);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes when the page scrolls", () => {
+    renderMenuOverlay();
+    openMenuOn(appendLoadedImage());
+
+    fireEvent.scroll(document.body);
+
+    expect(screen.queryByRole("menu")).toBe(null);
   });
 });

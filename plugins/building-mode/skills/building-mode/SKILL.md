@@ -1,6 +1,6 @@
 ---
 name: building-mode
-description: Annotate bb's own interface with source-mapped context, preview or read the resolved bb UI feedback behind a mention pill, or update saved annotation comments through the plugin RPC.
+description: Annotate bb's own interface with element context, preview or read the resolved bb UI feedback behind a mention pill, or update saved annotation comments through the plugin RPC.
 ---
 
 Install the plugin from a bb checkout with `bb plugin install ./plugins/building-mode`, then enable Building Mode in Settings → Plugins.
@@ -24,25 +24,18 @@ The copy command is available whenever there is at least one pin. Both commands 
 
 ## Source locations
 
-Stamped builds tag every lowercase JSX element with `data-bb-src="<repo-relative path>:<line>:<column>"`, record where each top-level component (including `memo` and `forwardRef` components) is defined, and keep component names through minification. The stamping code lives in this plugin: `vite-source-locations.ts` for bb's app, which the app Vite config loads when the plugin directory is present, and `esbuild-source-locations.ts` for plugin UI bundles, which `@bb/plugin-build` loads when `VITE_BB_SOURCE_LOCATIONS=1` and the plugin being built sits inside a checkout that contains this plugin.
+Official bb builds do not record source locations, so annotations normally carry no **Source** or **Source trail** line; agents locate the element from its selector, classes, text, and React component names instead. The plugin still reads stamps when a build supplies them: a `data-bb-src="<path>:<line>:<column>"` attribute on elements and a `__bbSource` string on component functions. It records the nearest stamped location for up to six distinct files, innermost first, and the hover label then shows the innermost file name.
 
-- bb's app: the Vite dev server (`pnpm dev`) always stamps. `vite build` stamps only with `VITE_BB_SOURCE_LOCATIONS=1`.
-- Plugin UIs (thread-list, sidebar, and every other plugin slot, plus path-installed plugins inside the checkout): stamped only with `VITE_BB_SOURCE_LOCATIONS=1`, under `pnpm dev`, `pnpm start:worktree`, and `pnpm desktop:worktree`. When the flag changes, the server rebuilds dev and path-installed plugin bundles on their next load, and Turbo keys bundled-plugin builds on the flag. Plugins outside the checkout are never stamped.
-- Put `VITE_BB_SOURCE_LOCATIONS=1` in the git-ignored `.env.development.local` at the repository root. `pnpm dev`, `pnpm start:worktree`, and `pnpm desktop:worktree` load it through `dotenv -c development`. `pnpm start`, `pnpm desktop`, and release builds carry no stamps unless the variable is set, and their resolved context says so.
-- Turbo does not track edits to the stamping files themselves; after changing them, rebuild with `--force`.
-
-Annotations record the nearest stamped location for up to six distinct files, innermost first. The hover label shows the innermost file, so a label without a file name means the element carries no stamps. Paths are relative to the repository root, so they apply in any worktree of the same checkout. Elements rendered through a dynamic tag such as `<Comp>` or a component report the stamp of the nearest stamped ancestor.
-
-React component names come from DOM fibers. In development React, they follow the owner chain: the components whose JSX created the element, rather than every wrapper around it. Production React has no owner chain, so the list falls back to the parent chain. Library wrappers such as Radix `Primitive.*` and `Slot`, `forwardRef(…)` and `memo(…)` wrappers, routes, `*Provider`/`*Context` components, and minified names are skipped. Components with a recorded definition read `Name (path:line:column)`. Components without one, such as nested or library components, have no source, because React 19 stack frames report positions in transformed code.
+React component names come from DOM fibers. In development React, they follow the owner chain: the components whose JSX created the element, rather than every wrapper around it. Production React has no owner chain, so the list falls back to the parent chain. Library wrappers such as Radix `Primitive.*` and `Slot`, `forwardRef(…)` and `memo(…)` wrappers, routes, `*Provider`/`*Context` components, and minified names are skipped, so a minified production build can leave the list empty. Component sources appear only from a `__bbSource` stamp or React's `_debugSource`; positions from React 19 stack frames point into transformed code and are dropped.
 
 ## Resolved context
 
 Each mention resolves to compact Markdown feedback: a `## bb UI feedback: <route>` header and the viewport, then one numbered entry. The entry's heading lists up to four components, outermost first, then the element kind and label. Below it:
 
 - **Location:** a short readable selector built from ids, `data-testid`, `aria-label`, and the first plain class of up to five elements.
-- **Source:** the element's own stamp when it has one; otherwise the innermost component with a recorded definition, plus the next one in another file; otherwise the nearest stamped ancestor. Unstamped builds say that no source was recorded.
+- **Source**, only when a stamp exists: the element's own stamp; otherwise the innermost component with a recorded definition, plus the next one in another file; otherwise the nearest stamped ancestor. Unstamped elements have no Source line.
 - **Rendered by plugin**, the ID of the plugin whose UI slot contains the element, when there is one.
-- **Source trail** and **React**, when present.
+- **Source trail** and **React**, only when they have entries.
 - **Classes**, other **Attributes**, **Position**, and **Context**: up to 300 characters of visible text from the nearest ancestor that adds text around the element.
 - **Feedback:** the comment.
 

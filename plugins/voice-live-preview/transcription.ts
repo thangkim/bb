@@ -75,7 +75,37 @@ function sanitizeErrorMessage(raw: string): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
-export function describeVoiceError(error: unknown): string {
+function describeMicrophoneError(
+  name: string,
+  hasPreferredMicrophone: boolean,
+): string | null {
+  switch (name) {
+    case "NotAllowedError":
+    case "SecurityError":
+      return "Microphone permission denied";
+    case "NotFoundError":
+    case "DevicesNotFoundError":
+      return hasPreferredMicrophone
+        ? "Selected microphone was not found"
+        : "No microphone was found";
+    case "NotReadableError":
+    case "TrackStartError":
+      return "Microphone is unavailable or already in use";
+    case "OverconstrainedError":
+      return "Selected microphone was not found";
+    default:
+      return null;
+  }
+}
+
+export function describeVoiceError(
+  error: unknown,
+  hasPreferredMicrophone = false,
+): string {
+  if (error instanceof DOMException) {
+    const message = describeMicrophoneError(error.name, hasPreferredMicrophone);
+    if (message !== null) return message;
+  }
   if (error instanceof Error) {
     const message = sanitizeErrorMessage(error.message);
     if (message !== null) return message;

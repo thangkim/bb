@@ -1,5 +1,4 @@
 export const THREAD_FIND_BAR_ATTRIBUTE = "data-thread-find";
-export const TIMELINE_RENDER_ALL_ATTRIBUTE = "data-bb-timeline-render-all";
 export const THREAD_FIND_SEARCH_ROOT_SELECTOR =
   '[data-timeline-row-list="top-level"]';
 export const THREAD_FIND_IGNORED_SELECTOR =
@@ -16,6 +15,11 @@ const OPEN_MODAL_SELECTOR = [
   '[role="dialog"][data-state="open"]:not([inert]):not([inert] *)',
 ].join(", ");
 const SCROLL_FOOTER_SELECTOR = "[data-scroll-footer]";
+const TIMELINE_ITEMS_SELECTOR = ":scope > [data-timeline-items]";
+const TIMELINE_ROW_ID_ATTRIBUTE = "data-timeline-row-id";
+const ROW_MOUNT_MAX_STEPS = 400;
+const ROW_MOUNT_STALL_TIMEOUT_MS = 4_000;
+const ROW_MOUNT_MIN_STEP_PX = 48;
 
 function isSearchableThreadWindow(element: HTMLElement): boolean {
   return (
@@ -130,18 +134,6 @@ function visibleViewport(scroller: HTMLElement): VerticalViewport {
   return { top: rect.top, bottom };
 }
 
-export function firstMatchBelowViewportTop(
-  ranges: readonly Range[],
-  scroller: HTMLElement | null,
-): number {
-  if (scroller === null) return 0;
-  const top = scroller.getBoundingClientRect().top;
-  const index = ranges.findIndex(
-    (range) => range.getBoundingClientRect().top >= top,
-  );
-  return index === -1 ? 0 : index;
-}
-
 function scrollBy(scroller: HTMLElement, delta: number): void {
   scroller.dispatchEvent(new WheelEvent("wheel", { deltaY: Math.sign(delta) }));
   const previous = scroller.scrollTop;
@@ -166,4 +158,180 @@ export function revealRange(range: Range, boundary: HTMLElement): void {
       rect.top + rect.height / 2 - (viewport.top + viewport.bottom) / 2;
     scrollBy(scroller, delta);
   }
+}
+
+function timelineItemsContainer(list: Element): Element {
+  return list.querySelector(TIMELINE_ITEMS_SELECTOR) ?? list;
+}
+
+export function rowIdOf(row: Element): string | null {
+  return row.getAttribute(TIMELINE_ROW_ID_ATTRIBUTE);
+}
+
+export function listTopLevelRows(list: Element): HTMLElement[] {
+  return Array.from(timelineItemsContainer(list).children).filter(
+    (child): child is HTMLElement =>
+      child instanceof HTMLElement &&
+      child.hasAttribute(TIMELINE_ROW_ID_ATTRIBUTE),
+  );
+}
+
+export function topLevelRowOf(node: Node, list: Element): HTMLElement | null {
+  const container = timelineItemsContainer(list);
+  for (
+    let element = node instanceof Element ? node : node.parentElement;
+    element !== null && element !== container;
+    element = element.parentElement
+  ) {
+    if (
+      element.parentElement === container &&
+      element instanceof HTMLElement &&
+      element.hasAttribute(TIMELINE_ROW_ID_ATTRIBUTE)
+    ) {
+      return element;
+    }
+  }
+  return null;
+}
+
+export function findTopLevelRow(
+  list: Element,
+  rowId: string,
+): HTMLElement | null {
+  return listTopLevelRows(list).find((row) => rowIdOf(row) === rowId) ?? null;
+}
+
+export function lastRowPositionAboveViewBottom(
+  rows: readonly HTMLElement[],
+  positions: readonly number[],
+  scroller: HTMLElement | null,
+): number {
+  if (scroller === null) return positions.at(-1) ?? -1;
+  const { bottom } = visibleViewport(scroller);
+  let last = -1;
+  rows.forEach((row, index) => {
+    const position = positions[index];
+    if (position === undefined) return;
+    if (row.getBoundingClientRect().top < bottom)
+      last = Math.max(last, position);
+  });
+  return last;
+}
+
+export function isRangeBelowViewTop(
+  range: Range,
+  scroller: HTMLElement | null,
+): boolean {
+  if (scroller === null) return true;
+  return (
+    range.getBoundingClientRect().top >= scroller.getBoundingClientRect().top
+  );
+}
+
+export interface RowMountRequest {
+  list: Element;
+  scroller: HTMLElement;
+  rowId: string;
+  targetPosition: number;
+  rowCount: number;
+  positionOf: (rowId: string) => number | null;
+  signal: AbortSignal;
+}
+
+interface PositionWindow {
+  first: number;
+  last: number;
+}
+
+function knownPositions(
+  rows: readonly HTMLElement[],
+  positionOf: (rowId: string) => number | null,
+): number[] {
+  return rows.flatMap((row) => {
+    const id = rowIdOf(row);
+    const position = id === null ? null : positionOf(id);
+    return position === null ? [] : [position];
+  });
+}
+
+function mountedPositionWindow(
+  list: Element,
+  scroller: HTMLElement,
+  positionOf: (rowId: string) => number | null,
+): PositionWindow | null {
+  const rows = listTopLevelRows(list);
+  const viewport = visibleViewport(scroller);
+  const visible = rows.filter((row) => {
+    const rect = row.getBoundingClientRect();
+    return rect.bottom > viewport.top && rect.top < viewport.bottom;
+  });
+  const positions = knownPositions(visible, positionOf);
+  const candidates =
+    positions.length > 0 ? positions : knownPositions(rows, positionOf);
+  if (candidates.length === 0) return null;
+  return { first: Math.min(...candidates), last: Math.max(...candidates) };
+}
+
+function averageRowHeight(list: Element, rowCount: number): number {
+  const height = timelineItemsContainer(list).getBoundingClientRect().height;
+  return height / Math.max(1, rowCount);
+}
+
+function nextAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+export async function scrollUntilRowMounted({
+  list,
+  scroller,
+  rowId,
+  targetPosition,
+  rowCount,
+  positionOf,
+  signal,
+}: RowMountRequest): Promise<HTMLElement | null> {
+  let previousDirection = 0;
+  let lastDistance = 0;
+  let stepLimit = Number.POSITIVE_INFINITY;
+  let stalledSince: number | null = null;
+  for (let step = 0; step < ROW_MOUNT_MAX_STEPS; step += 1) {
+    if (signal.aborted || !list.isConnected) return null;
+    const mounted = findTopLevelRow(list, rowId);
+    if (mounted !== null) return mounted;
+    const mountedWindow = mountedPositionWindow(list, scroller, positionOf);
+    const direction =
+      mountedWindow === null || targetPosition < mountedWindow.first ? -1 : 1;
+    const rowsAway =
+      mountedWindow === null
+        ? 0
+        : direction < 0
+          ? mountedWindow.first - targetPosition
+          : targetPosition - mountedWindow.last;
+    if (previousDirection !== 0 && direction !== previousDirection) {
+      stepLimit = Math.max(ROW_MOUNT_MIN_STEP_PX, lastDistance / 2);
+    }
+    const distance = Math.min(
+      stepLimit,
+      Math.max(
+        scroller.clientHeight / 2,
+        ROW_MOUNT_MIN_STEP_PX,
+        rowsAway * averageRowHeight(list, rowCount),
+      ),
+    );
+    previousDirection = direction;
+    lastDistance = distance;
+    const before = scroller.scrollTop;
+    scrollBy(scroller, direction * distance);
+    if (scroller.scrollTop === before) {
+      stalledSince ??= performance.now();
+      if (performance.now() - stalledSince > ROW_MOUNT_STALL_TIMEOUT_MS) {
+        return null;
+      }
+    } else {
+      stalledSince = null;
+    }
+    await nextAnimationFrame();
+    await nextAnimationFrame();
+  }
+  return null;
 }

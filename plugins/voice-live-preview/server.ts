@@ -1,16 +1,10 @@
-import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
+import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
+import { voiceLivePreviewRpcContract } from "./contract.js";
 
 export const DEFAULT_LOCAL_VOICE_SERVICES = "local-whisper/local-whisper";
 
 const SERVICE_REFERENCE = /^[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/u;
-
-export const voiceLivePreviewRpcContract = defineRpcContract({
-  draftCadence: {
-    input: z.null(),
-    output: z.object({ local: z.boolean() }).strict(),
-  },
-});
 
 export type VoiceSelection =
   | { mode: "automatic" }

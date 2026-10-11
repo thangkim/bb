@@ -10,6 +10,7 @@ import { ThreadLinksOverlay } from "./thread-links/dialog.js";
 import { openThreadLinks } from "./thread-links/store.js";
 import { SplitAttachController } from "./split-attach/controller.js";
 import { ThreadLinkedWork } from "./thread-header/linked-work.js";
+import { ComposeAnchor } from "./views/tasks/composer-beside.js";
 
 export default definePluginApp((app) => {
   app.slots.navPanel({
@@ -40,7 +41,6 @@ export default definePluginApp((app) => {
     id: "linked-work",
     title: "My Tasks work",
     component: ThreadLinkedWork,
-    placement: "title",
   });
   app.slots.messageDirective({ id: "my-task", component: TaskDirectiveCard });
   app.slots.experimental_appOverlay({
@@ -50,6 +50,10 @@ export default definePluginApp((app) => {
   app.slots.experimental_appOverlay({
     id: "split-attach",
     component: SplitAttachController,
+  });
+  app.slots.experimental_appOverlay({
+    id: "compose-anchor",
+    component: ComposeAnchor,
   });
   app.slots.experimental_threadAction({
     id: "attach",

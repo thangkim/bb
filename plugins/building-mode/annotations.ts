@@ -213,11 +213,9 @@ function contextSection(record: AnnotationRecord): string[] {
     `**Location:** ${element.selector}`,
   ];
   const source = primarySource(record);
-  lines.push(
-    source === null
-      ? "**Source:** not recorded; this bb build has no source stamps. Search for the classes, text, or component names below."
-      : `**Source:** ${source}`,
-  );
+  if (source !== null) {
+    lines.push(`**Source:** ${source}`);
+  }
   if (element.pluginId !== null) {
     lines.push(`**Rendered by plugin:** \`${element.pluginId}\``);
   }

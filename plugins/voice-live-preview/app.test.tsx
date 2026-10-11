@@ -1,75 +1,82 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadPluginApp } from "@get-bb/plugin-sdk/testing/app";
-import type {
-  ExperimentalComposerProvisionalText,
-  ExperimentalComposerVoiceSession,
-} from "@get-bb/plugin-sdk/app";
+import { act, fireEvent, screen } from "@testing-library/react";
+import {
+  loadPluginApp,
+  mountPluginContentScripts,
+  renderSlot,
+} from "@get-bb/plugin-sdk/testing/app";
+import type { PluginComposerApi } from "@get-bb/plugin-sdk/app";
 import { createDictateCommand } from "./app.js";
 import {
-  CLOUD_DRAFT_POLICY,
-  LOCAL_DRAFT_POLICY,
-  type DraftPolicy,
-} from "./draft-scheduler.js";
-import { startLiveVoiceSession } from "./live-session.js";
-import { toggleNativeDictation, trackFocusedComposer } from "./native-mic.js";
+  findComposerForm,
+  insertTranscript,
+  MIC_KEY_ATTRIBUTE,
+  readCaretContext,
+} from "./composer-insert.js";
+import type { voiceLivePreviewRpcContract } from "./contract.js";
+import { HIDE_NATIVE_MIC_CSS, NATIVE_MIC_SELECTOR } from "./native-mic.js";
+import type { VoiceRecording } from "./voice-session.js";
+import {
+  configureVoiceSessions,
+  provideVoiceClients,
+  voiceSessionFor,
+} from "./voice-store.js";
 
 const app = await loadPluginApp(() => import("./app"));
+const customization = app.composerCustomizations[0]!;
+const micAction = customization.actions![0]!;
+const previewBanner = customization.banners![0]!;
 
-type Transcribe = ExperimentalComposerVoiceSession["transcribe"];
-
-function recordingOf(text: string): File {
-  return new File([text], "recording.webm", { type: "audio/webm" });
+let threadCounter = 0;
+function nextThreadId(): string {
+  threadCounter += 1;
+  return `thread-${threadCounter}`;
 }
 
-function fakeSession(
-  transcribe: Transcribe,
-  options: { policy?: Promise<DraftPolicy> } = {},
-) {
-  const controller = new AbortController();
-  const previews: string[] = [];
-  const provisionalText: ExperimentalComposerProvisionalText = {
-    update: (text) => previews.push(text),
-    commit: vi.fn(),
+function fakeRecorder() {
+  const recording: VoiceRecording = {
+    startedAtMs: Date.now(),
+    snapshot: () => new File(["so far"], "recording.webm"),
+    stop: vi.fn(async () => new File(["everything"], "recording.webm")),
     cancel: vi.fn(),
   };
-  const session: ExperimentalComposerVoiceSession = {
-    readRecording: () => recordingOf("so far"),
-    transcribe: vi.fn(transcribe),
-    provisionalText,
-    signal: controller.signal,
-  };
-  const warning = vi.fn();
-  const recording = startLiveVoiceSession(
-    session,
-    { warning },
-    options.policy ?? Promise.resolve(CLOUD_DRAFT_POLICY),
-  );
-  return { controller, previews, session, recording, warning };
+  const startRecording = vi.fn(async () => ({
+    ...recording,
+    startedAtMs: Date.now(),
+  }));
+  configureVoiceSessions({ startRecording });
+  return { recording, startRecording };
 }
 
 beforeEach(() => {
   vi.useFakeTimers();
+  vi.stubGlobal("MediaRecorder", class {});
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: vi.fn() },
+  });
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  document.head.replaceChildren();
   document.body.replaceChildren();
 });
 
 describe("registration", () => {
-  it("joins bb's native voice input in every composer", () => {
+  it("adds its own mic button and a live-draft banner to every composer", () => {
     expect(app.composerCustomizations).toHaveLength(1);
-    const customization = app.composerCustomizations[0]!;
     expect(customization.id).toBe("voice-live-preview");
     expect(customization.scopes).toBeUndefined();
-    expect(typeof customization.experimental_voiceInput?.start).toBe(
-      "function",
-    );
-    expect(customization.actions).toBeUndefined();
+    expect(customization.actions?.map((action) => action.id)).toEqual(["mic"]);
+    expect(customization.banners).toMatchObject([
+      { id: "live-draft", chrome: "card" },
+    ]);
     expect(app.contentScripts.map((script) => script.id)).toEqual([
-      "composer-focus",
+      "voice-input",
     ]);
   });
 
@@ -83,199 +90,253 @@ describe("registration", () => {
   });
 });
 
-describe("live voice session", () => {
-  it("previews drafts and returns the final transcript", async () => {
-    const replies = ["Words so far", "Final words"];
-    const { recording, previews, session } = fakeSession(
-      async () => replies.shift() ?? "",
-    );
+function nativeActionRow(withPluginMic: boolean) {
+  const row = document.createElement("div");
+  row.setAttribute("data-promptbox-action-row", "");
+  const nativeMic = document.createElement("span");
+  const nativeButton = document.createElement("button");
+  nativeButton.setAttribute(
+    "aria-label",
+    "Microphone warning: open voice preferences",
+  );
+  nativeButton.setAttribute(
+    "aria-description",
+    "Right-click or press Shift+F10 for voice preferences",
+  );
+  nativeMic.append(nativeButton);
+  const other = document.createElement("span");
+  other.append(document.createElement("button"));
+  row.append(nativeMic, other);
+  if (withPluginMic) {
+    const pluginMic = document.createElement("span");
+    pluginMic.setAttribute(MIC_KEY_ATTRIBUTE, "composer");
+    row.append(pluginMic);
+  }
+  document.body.append(row);
+  return { nativeMic, other };
+}
 
-    await vi.advanceTimersByTimeAsync(2_999);
-    expect(session.transcribe).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
-    expect(previews).toEqual(["Words so far"]);
-
-    const final = recordingOf("everything");
-    await expect(recording.finish(final)).resolves.toBe("Final words");
-    expect(vi.mocked(session.transcribe).mock.calls.at(-1)?.[0]).toBe(final);
-  });
-
-  it("drafts every second when the voice service runs locally", async () => {
-    const { recording, previews, session } = fakeSession(
-      async () => `draft ${previews.length + 1}`,
-      { policy: Promise.resolve(LOCAL_DRAFT_POLICY) },
-    );
-
-    await vi.advanceTimersByTimeAsync(1_000);
-    expect(previews).toEqual(["draft 1"]);
-    await vi.advanceTimersByTimeAsync(2_000);
-    expect(previews).toEqual(["draft 1", "draft 2", "draft 3"]);
-    expect(session.transcribe).toHaveBeenCalledTimes(3);
-
-    await recording.finish(recordingOf("everything"));
-  });
-
-  it("transcribes the final recording without drafts when it stops before the schedule is known", async () => {
-    const { recording, previews, session } = fakeSession(
-      async () => "Final words",
-      { policy: new Promise<DraftPolicy>(() => {}) },
-    );
-
-    await vi.advanceTimersByTimeAsync(10_000);
-    await expect(recording.finish(recordingOf("everything"))).resolves.toBe(
-      "Final words",
-    );
-    expect(previews).toEqual([]);
-    expect(session.transcribe).toHaveBeenCalledOnce();
-  });
-
-  it("waits for an in-flight draft before the final request", async () => {
-    let finishDraft: ((text: string) => void) | undefined;
-    let draftSignal: AbortSignal | undefined;
-    const transcribe = vi
-      .fn<Transcribe>()
-      .mockImplementationOnce(
-        (_audio, { signal }) =>
-          new Promise((resolve) => {
-            draftSignal = signal;
-            finishDraft = resolve;
-          }),
-      )
-      .mockResolvedValue("Final");
-    const { recording, session } = fakeSession(transcribe);
-    await vi.advanceTimersByTimeAsync(3_000);
-
-    const final = recording.finish(recordingOf("all"));
-    await vi.advanceTimersByTimeAsync(0);
-    expect(session.transcribe).toHaveBeenCalledTimes(1);
-    expect(draftSignal?.aborted).toBe(false);
-
-    finishDraft?.("Draft");
-    await expect(final).resolves.toBe("Final");
-    expect(session.transcribe).toHaveBeenCalledTimes(2);
-  });
-
-  it("retries a failed final once, then falls back to the last draft with a warning", async () => {
-    const transcribe = vi
-      .fn<Transcribe>()
-      .mockResolvedValueOnce("Words heard so far")
-      .mockRejectedValue(new Error("HTTP 403: Cloudflare challenge"));
-    const { recording, warning, session } = fakeSession(transcribe);
-    await vi.advanceTimersByTimeAsync(3_000);
-
-    const final = recording.finish(recordingOf("all"));
-    await vi.advanceTimersByTimeAsync(699);
-    expect(session.transcribe).toHaveBeenCalledTimes(2);
-    await vi.advanceTimersByTimeAsync(1);
-
-    await expect(final).resolves.toBe("Words heard so far");
-    expect(session.transcribe).toHaveBeenCalledTimes(3);
-    const [title, options] = warning.mock.calls[0] ?? [];
-    expect(title).toBe("Voice input used the live preview");
-    expect(options).toMatchObject({
-      description: "Cloudflare challenge",
-      action: { label: "Download recording" },
+describe("native mic", () => {
+  it("hides bb's mic only in composers that show the plugin's mic", async () => {
+    const scripts = await mountPluginContentScripts(app, {
+      pluginId: "voice-live-preview",
     });
-  });
-
-  it("rejects with the error when the final fails twice and no draft exists", async () => {
-    const error = new Error("offline");
-    const { recording, warning } = fakeSession(async () => {
-      throw error;
-    });
-
-    const final = recording.finish(recordingOf("short"));
-    const assertion = expect(final).rejects.toBe(error);
-    await vi.advanceTimersByTimeAsync(700);
-    await assertion;
-    expect(warning).not.toHaveBeenCalled();
-  });
-
-  it("aborts an in-flight draft and stops drafting when the session ends", async () => {
-    let draftSignal: AbortSignal | undefined;
-    const { controller, session } = fakeSession(
-      (_audio, { signal }) =>
-        new Promise<string>(() => {
-          draftSignal = signal;
-        }),
+    const style = document.head.querySelector(
+      'style[data-bb-plugin="voice-live-preview"]',
     );
-    await vi.advanceTimersByTimeAsync(3_000);
+    expect(style?.textContent).toBe(HIDE_NATIVE_MIC_CSS);
+    expect(HIDE_NATIVE_MIC_CSS).toMatch(/^:where\(/u);
+    expect(HIDE_NATIVE_MIC_CSS).not.toContain("@scope");
 
-    controller.abort();
-    await vi.advanceTimersByTimeAsync(60_000);
+    const expanded = nativeActionRow(true);
+    const compact = nativeActionRow(false);
+    const hidden = [...document.querySelectorAll(NATIVE_MIC_SELECTOR)];
+    expect(hidden).toEqual([expanded.nativeMic]);
+    expect(hidden).not.toContain(compact.nativeMic);
+    expect(hidden).not.toContain(expanded.other);
 
-    expect(draftSignal?.aborted).toBe(true);
-    expect(session.transcribe).toHaveBeenCalledOnce();
+    await scripts.lifecycle.dispose();
+    expect(document.head.querySelector("style")).toBeNull();
   });
 });
 
-function composer(options: { voiceActive?: boolean } = {}) {
+describe("mic button", () => {
+  it("records, previews drafts in the banner, and inserts the final transcript", async () => {
+    const { startRecording } = fakeRecorder();
+    const transcribeVoice = vi
+      .fn()
+      .mockResolvedValueOnce({ text: "Words so far" })
+      .mockResolvedValue({ text: "Final words" });
+    const scope = { kind: "thread" as const, threadId: nextThreadId() };
+    const mic = renderSlot<object, typeof voiceLivePreviewRpcContract>(
+      micAction,
+      {},
+      {
+        sdk: { system: { transcribeVoice } },
+        rpc: { draftCadence: () => ({ local: false }) },
+        composer: { text: "Hello", scope },
+      },
+    );
+    const banner = renderSlot(
+      previewBanner,
+      {},
+      {
+        sdk: { system: { transcribeVoice } },
+        rpc: { draftCadence: () => ({ local: false }) },
+        composer: { text: "Hello", scope },
+      },
+    );
+    expect(banner.container.textContent).toBe("");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Start dictation" }));
+    });
+    expect(startRecording).toHaveBeenCalledOnce();
+    expect(screen.getByRole("status").textContent).toBe("Listening…");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
+    expect(transcribeVoice).toHaveBeenCalledWith(
+      expect.objectContaining({ prompt: "Hello" }),
+    );
+    expect(
+      banner.container.querySelector("[data-voice-live-preview-draft]")
+        ?.textContent,
+    ).toBe("Words so far");
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Stop dictation and insert transcript",
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mic.inspection.composer.text).toBe("Hello Final words");
+    expect(banner.container.textContent).toBe("");
+    expect(
+      screen.getByRole("button", { name: "Start dictation" }),
+    ).toBeTruthy();
+  });
+
+  it("cancels dictation on Escape without inserting anything", async () => {
+    const { recording } = fakeRecorder();
+    const transcribeVoice = vi.fn(async () => ({ text: "never" }));
+    const scope = { kind: "thread" as const, threadId: nextThreadId() };
+    const scripts = await mountPluginContentScripts(app, {
+      pluginId: "voice-live-preview",
+    });
+    const mic = renderSlot<object, typeof voiceLivePreviewRpcContract>(
+      micAction,
+      {},
+      {
+        sdk: { system: { transcribeVoice } },
+        rpc: { draftCadence: () => ({ local: true }) },
+        composer: { scope },
+      },
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Start dictation" }));
+    });
+
+    const escape = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      window.dispatchEvent(escape);
+    });
+    expect(escape.defaultPrevented).toBe(true);
+    expect(recording.cancel).toHaveBeenCalled();
+    expect(mic.inspection.composer.text).toBe("");
+    expect(
+      screen.getByRole("button", { name: "Start dictation" }),
+    ).toBeTruthy();
+
+    const idleEscape = new KeyboardEvent("keydown", {
+      key: "Escape",
+      cancelable: true,
+    });
+    window.dispatchEvent(idleEscape);
+    expect(idleEscape.defaultPrevented).toBe(false);
+    await scripts.lifecycle.dispose();
+  });
+});
+
+describe("dictate command", () => {
+  it("toggles the plugin's recorder in the composer that runs it", async () => {
+    const { startRecording } = fakeRecorder();
+    provideVoiceClients({
+      transcribe: async () => "Spoken",
+      draftPolicy: () => new Promise(() => {}),
+    });
+    const inserted: string[] = [];
+    const composer = {
+      key: `command-${nextThreadId()}`,
+      text: "",
+      insert: (parts: unknown) => {
+        if (typeof parts === "string") inserted.push(parts);
+      },
+    } as unknown as PluginComposerApi;
+    const command = createDictateCommand(true);
+
+    await command.run({ composer });
+    expect(startRecording).toHaveBeenCalledOnce();
+    expect(voiceSessionFor(composer.key).getState().phase).toBe("recording");
+
+    await vi.advanceTimersByTimeAsync(1_500);
+    await command.run({ composer });
+    expect(inserted).toEqual(["Spoken"]);
+    expect(voiceSessionFor(composer.key).getState().phase).toBe("idle");
+  });
+});
+
+function composerDom(key: string, html: string) {
   const form = document.createElement("form");
-  form.dataset.promptbox = "";
-  if (options.voiceActive) form.dataset.promptboxVoiceActive = "";
-  const input = document.createElement("div");
-  input.tabIndex = 0;
-  const start = document.createElement("button");
-  start.type = "button";
-  start.setAttribute("aria-label", "Start voice input");
-  const stop = document.createElement("button");
-  stop.type = "button";
-  stop.setAttribute("aria-label", "Stop and transcribe recording");
-  const onStart = vi.fn();
-  const onStop = vi.fn();
-  start.addEventListener("click", onStart);
-  stop.addEventListener("click", onStop);
-  form.append(input, start, stop);
+  form.setAttribute("data-promptbox", "");
+  const editor = document.createElement("div");
+  editor.setAttribute("contenteditable", "true");
+  editor.innerHTML = html;
+  const mic = document.createElement("span");
+  mic.setAttribute(MIC_KEY_ATTRIBUTE, key);
+  form.append(editor, mic);
   document.body.append(form);
-  return { form, input, start, stop, onStart, onStop };
+  return { form, editor };
 }
 
-describe("dictate shortcut", () => {
-  it("starts the native mic of the focused composer and stops it while recording", () => {
-    const first = composer();
-    const second = composer();
-    second.input.focus();
+function placeCaret(node: Node, offset: number) {
+  const range = document.createRange();
+  range.setStart(node, offset);
+  range.collapse(true);
+  const selection = document.getSelection()!;
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
 
-    expect(toggleNativeDictation(document)).toBe(true);
-    expect(second.onStart).toHaveBeenCalledOnce();
-    expect(first.onStart).not.toHaveBeenCalled();
+describe("transcript insertion", () => {
+  it("reads the text around the caret within its paragraph", () => {
+    const { form, editor } = composerDom(
+      "a",
+      "<p>First line</p><p>Hello world</p>",
+    );
+    placeCaret(editor.querySelectorAll("p")[1]!.firstChild!, 5);
 
-    second.form.dataset.promptboxVoiceActive = "";
-    toggleNativeDictation(document);
-    expect(second.onStop).toHaveBeenCalledOnce();
+    expect(findComposerForm(document, "a")).toBe(form);
+    expect(findComposerForm(document, "b")).toBeNull();
+    expect(readCaretContext(form)).toEqual({
+      before: "Hello",
+      after: " world",
+    });
   });
 
-  it("falls back to the last focused composer when focus moved elsewhere", () => {
-    const dispose = trackFocusedComposer(document);
-    const first = composer();
-    composer();
-    const outside = document.createElement("button");
-    document.body.append(outside);
-    first.input.focus();
-    outside.focus();
+  it("separates the transcript from adjacent words like bb's own dictation", () => {
+    const { form, editor } = composerDom("a", "<p>Hello world</p>");
+    const insert = vi.fn();
+    const paragraph = editor.querySelector("p")!.firstChild!;
 
-    const command = createDictateCommand(true);
-    const context = { threadId: null, projectId: null, openPanel: () => false };
-    expect(command.isAvailable?.(context)).toBe(true);
-    command.run(context);
-    expect(first.onStart).toHaveBeenCalledOnce();
+    placeCaret(paragraph, 5);
+    insertTranscript({ text: "Hello world", insert }, form, "there");
+    placeCaret(paragraph, 6);
+    insertTranscript({ text: "Hello world", insert }, form, "big");
+    placeCaret(paragraph, 0);
+    insertTranscript({ text: "Hello world", insert }, form, "Oh");
 
-    dispose();
-    expect(command.isAvailable?.(context)).toBe(false);
+    expect(insert.mock.calls).toEqual([[" there"], ["big "], ["Oh "]]);
   });
 
-  it("skips hidden or disabled mic buttons", () => {
-    const target = composer();
-    target.start.disabled = true;
-    target.input.focus();
-    expect(toggleNativeDictation(document)).toBe(false);
+  it("assumes the end of the draft when the caret is elsewhere, and appends when the composer is off screen", () => {
+    const { form } = composerDom("a", "<p>Hello</p>");
+    document.getSelection()?.removeAllRanges();
+    const insert = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error("Composer is not on screen");
+      })
+      .mockImplementation(() => {});
 
-    target.start.disabled = false;
-    const hidden = document.createElement("div");
-    hidden.setAttribute("inert", "");
-    target.form.prepend(hidden);
-    hidden.append(target.start);
-    expect(toggleNativeDictation(document)).toBe(false);
-    expect(target.onStart).not.toHaveBeenCalled();
+    insertTranscript({ text: "Hello", insert }, form, "again");
+    expect(insert.mock.calls).toEqual([[" again"], [" again", { at: "end" }]]);
   });
 });

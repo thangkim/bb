@@ -1,15 +1,12 @@
 import { useEffect, useState } from "react";
-import {
-  experimental_useSplitPanes,
-  useBbNavigate,
-  useRpc,
-} from "@get-bb/plugin-sdk/app";
+import { useBbNavigate, useRpc } from "@get-bb/plugin-sdk/app";
 import { HugeiconsIcon } from "@hugeicons/react";
 import BubbleChatAddIcon from "@hugeicons/core-free-icons/BubbleChatAddIcon";
 import Link01Icon from "@hugeicons/core-free-icons/Link01Icon";
 import type { DelegationRpcContract } from "../../delegate/contract.js";
 import { errorMessage } from "../../shared/errors.js";
 import { useTasksRpc } from "../../shell/data.js";
+import { openComposerBeside } from "./composer-beside.js";
 import { LinkBeforeStartContent } from "./link-before-start.js";
 import {
   Command,
@@ -85,7 +82,6 @@ export function NewThreadButton({
   compact?: boolean;
 }) {
   const rpc = useRpc<DelegationRpcContract>();
-  const splitPanes = experimental_useSplitPanes();
   const navigate = useBbNavigate();
   const [opening, setOpening] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
@@ -99,17 +95,7 @@ export function NewThreadButton({
           : await rpc.call("projectThreadsCompose", {
               projectId: target.projectId,
             });
-      const placed = splitPanes.isAvailable
-        ? splitPanes.openNewThread({
-            side: "right",
-            projectId: bbProjectId,
-            focusPrompt: true,
-            reuseComposer: true,
-          })
-        : "unavailable";
-      if (placed === "unavailable" || placed === "at-cap") {
-        navigate.toCompose({ projectId: bbProjectId, focusPrompt: true });
-      }
+      openComposerBeside(navigate, bbProjectId);
     } catch (error) {
       onError(errorMessage(error));
     } finally {

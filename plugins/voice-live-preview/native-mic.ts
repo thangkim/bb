@@ -1,44 +1,18 @@
-export const COMPOSER_SELECTOR = "form[data-promptbox]";
-const START_SELECTOR = 'button[aria-label="Start voice input"]';
-const STOP_SELECTOR = 'button[aria-label="Stop and transcribe recording"]';
+import { MIC_KEY_ATTRIBUTE } from "./composer-insert.js";
 
-let lastFocusedComposer: Element | null = null;
+export const NATIVE_MIC_DESCRIPTION =
+  "Right-click or press Shift+F10 for voice preferences";
+export const NATIVE_MIC_LABEL = "Start voice input";
 
-export function trackFocusedComposer(doc: Document): () => void {
-  const onFocusIn = (event: FocusEvent) => {
-    if (!(event.target instanceof Element)) return;
-    const composer = event.target.closest(COMPOSER_SELECTOR);
-    if (composer !== null) lastFocusedComposer = composer;
-  };
-  doc.addEventListener("focusin", onFocusIn, true);
-  return () => {
-    doc.removeEventListener("focusin", onFocusIn, true);
-    lastFocusedComposer = null;
-  };
-}
+export const NATIVE_MIC_SELECTOR = `[data-promptbox-action-row]:has([${MIC_KEY_ATTRIBUTE}]) span:has(> :is(button[aria-description="${NATIVE_MIC_DESCRIPTION}"], button[aria-label="${NATIVE_MIC_LABEL}"]))`;
 
-export function resolveDictateComposer(doc: Document): Element | null {
-  const focused = doc.activeElement?.closest(COMPOSER_SELECTOR) ?? null;
-  if (focused !== null) return focused;
-  if (lastFocusedComposer?.isConnected) return lastFocusedComposer;
-  const composers = doc.querySelectorAll(COMPOSER_SELECTOR);
-  return composers.length === 1 ? (composers[0] ?? null) : null;
-}
+export const HIDE_NATIVE_MIC_CSS = `:where(${NATIVE_MIC_SELECTOR}) { display: none; }`;
 
-export function findDictateButton(composer: Element): HTMLButtonElement | null {
-  const selector = composer.hasAttribute("data-promptbox-voice-active")
-    ? STOP_SELECTOR
-    : START_SELECTOR;
-  for (const button of composer.querySelectorAll<HTMLButtonElement>(selector)) {
-    if (!button.disabled && button.closest("[inert]") === null) return button;
-  }
-  return null;
-}
-
-export function toggleNativeDictation(doc: Document): boolean {
-  const composer = resolveDictateComposer(doc);
-  const button = composer === null ? null : findDictateButton(composer);
-  if (button === null) return false;
-  button.click();
-  return true;
+export function hideNativeMic(doc: Document, pluginId: string): () => void {
+  const style = doc.createElement("style");
+  style.setAttribute("data-bb-plugin", pluginId);
+  style.setAttribute("data-voice-live-preview-style", "");
+  style.textContent = HIDE_NATIVE_MIC_CSS;
+  doc.head.append(style);
+  return () => style.remove();
 }

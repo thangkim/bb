@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Annotate bb's own interface and add each annotation to the prompt as source-mapped agent context.",
+  "description": "Annotate bb's own interface and add each annotation to the prompt as agent context.",
   "engines": {
     "bb": ">=0.0"
   },
   "bb": {
     "name": "Building Mode",
-    "description": "Annotate bb's own interface (Shift+Option+B), comment on elements, and add them to the prompt with their source locations.",
+    "description": "Annotate bb's own interface (Shift+Option+B), comment on elements, and add them to the prompt with their selectors, React components, and surrounding text.",
     "branding": {
       "icon": "Target"
     },

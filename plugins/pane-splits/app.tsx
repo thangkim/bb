@@ -1,25 +1,22 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import {
   definePluginApp,
-  experimental_useNewThreadHandler,
-  experimental_useSplitPanes,
   useBbContext,
   useBbNavigate,
   useSdk,
   useSidebarSplitLayout,
   type BbNavigate,
-  type ExperimentalNewThreadRequest,
-  type ExperimentalSplitPaneNewThreadOptions,
-  type ExperimentalSplitPaneOpenResult,
-  type ExperimentalSplitPanes,
+  type PluginBrowserBbSdk,
   type PluginSidebarSplitLayout,
 } from "@get-bb/plugin-sdk/app";
 import {
   nextReopenTarget,
   recordClosedPanes,
   type ClosedPaneRecord,
+  type Side,
 } from "./closed-panes";
+import { ComposeAnchor, openComposerBeside } from "./composer-beside";
 import {
   advanceSplitTracker,
   copySplitTabs,
@@ -27,25 +24,26 @@ import {
   type SplitTrackerState,
 } from "./split-tabs";
 
+export const MAX_PANES = 8;
 export const PANE_CAP_MESSAGE = "Can't split — 8 panes is the maximum.";
 export const NOTHING_TO_REOPEN_MESSAGE = "No closed thread to reopen.";
 
-export const SPLIT_COMMANDS = [
-  { id: "split-left", side: "left", key: "a", direction: "left" },
-  { id: "split-right", side: "right", key: "d", direction: "right" },
-  { id: "split-up", side: "top", key: "w", direction: "up" },
-  { id: "split-down", side: "bottom", key: "s", direction: "down" },
-] as const satisfies readonly {
-  id: string;
-  side: ExperimentalSplitPaneNewThreadOptions["side"];
-  key: string;
-  direction: string;
-}[];
+type ThreadOpenSplit = NonNullable<
+  Parameters<PluginBrowserBbSdk["threads"]["open"]>[0]["split"]
+>;
+
+export const REOPEN_SPLIT = {
+  left: "left",
+  right: "right",
+  top: "top",
+  bottom: "down",
+} as const satisfies Record<Side, ThreadOpenSplit>;
 
 interface Controller {
-  splitPanes: ExperimentalSplitPanes;
+  sdk: PluginBrowserBbSdk;
   navigate: BbNavigate;
   layout: PluginSidebarSplitLayout | null;
+  projectId: string | null;
   threadId: string | null;
 }
 
@@ -54,28 +52,22 @@ let observedLayout: PluginSidebarSplitLayout | null = null;
 let closedHistory: readonly ClosedPaneRecord[] = [];
 
 export function PaneSplitsController() {
-  const splitPanes = experimental_useSplitPanes();
+  const sdk = useSdk();
   const navigate = useBbNavigate();
   const layout = useSidebarSplitLayout();
-  const { threadId } = useBbContext();
+  const { projectId, threadId } = useBbContext();
   useEffect(() => {
     closedHistory = recordClosedPanes(closedHistory, observedLayout, layout);
     observedLayout = layout;
   }, [layout]);
   useEffect(() => {
-    const current: Controller = { splitPanes, navigate, layout, threadId };
+    const current: Controller = { sdk, navigate, layout, projectId, threadId };
     controller = current;
     return () => {
       if (controller === current) controller = null;
     };
-  }, [layout, navigate, splitPanes, threadId]);
-  const handleNewThread = useCallback(
-    (request: ExperimentalNewThreadRequest) =>
-      openNewThreadBeside(splitPanes, request) !== "unavailable",
-    [splitPanes],
-  );
-  experimental_useNewThreadHandler(handleNewThread);
-  return null;
+  }, [layout, navigate, projectId, sdk, threadId]);
+  return <ComposeAnchor />;
 }
 
 export function SplitTabsController() {
@@ -108,57 +100,44 @@ export function SplitTabsController() {
   return null;
 }
 
-function splitNewThread(
-  side: ExperimentalSplitPaneNewThreadOptions["side"],
-): void {
-  if (controller?.splitPanes.openNewThread({ side }) === "at-cap") {
-    toast(PANE_CAP_MESSAGE);
-  }
-}
-
-function openNewThreadBeside(
-  splitPanes: ExperimentalSplitPanes,
-  request: Partial<ExperimentalNewThreadRequest> = {},
-): ExperimentalSplitPaneOpenResult {
-  return splitPanes.openNewThread({
-    ...request,
-    side: "right",
-    atPaneCap: "replace",
-    reuseComposer: true,
-  });
-}
-
-function runNewThreadBeside(): void {
+function newThreadOnRight(): void {
   if (controller === null) return;
-  if (openNewThreadBeside(controller.splitPanes) === "unavailable") {
-    controller.navigate.toCompose({ focusPrompt: true });
-  }
+  openComposerBeside(controller.navigate, controller.projectId);
 }
 
-function reopenClosedThread(): void {
+async function reopenClosedThread(): Promise<void> {
   if (controller === null) return;
+  const { sdk, layout, threadId } = controller;
   const openThreadIds = new Set(
-    controller.layout?.panes.flatMap((pane) =>
+    layout?.panes.flatMap((pane) =>
       pane.threadId === null ? [] : [pane.threadId],
     ) ?? [],
   );
-  if (controller.threadId !== null) openThreadIds.add(controller.threadId);
+  if (threadId !== null) openThreadIds.add(threadId);
   const { target, history } = nextReopenTarget(closedHistory, openThreadIds);
   if (target === null) {
     closedHistory = history;
     toast(NOTHING_TO_REOPEN_MESSAGE);
     return;
   }
-  const result = controller.splitPanes.openNewThread({
-    side: target.side,
-    focusPrompt: false,
-  });
-  if (result === "at-cap") {
+  if ((layout?.panes.length ?? 0) >= MAX_PANES) {
     toast(PANE_CAP_MESSAGE);
     return;
   }
   closedHistory = history;
-  controller.navigate.toThread(target.threadId);
+  try {
+    await sdk.threads.open({
+      threadId: target.threadId,
+      split: REOPEN_SPLIT[target.side],
+      file: null,
+    });
+  } catch (error) {
+    toast(
+      `Couldn't reopen the thread: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
 }
 
 export default definePluginApp((app) => {
@@ -171,21 +150,12 @@ export default definePluginApp((app) => {
     component: SplitTabsController,
   });
 
-  for (const command of SPLIT_COMMANDS) {
-    app.commands.register({
-      id: command.id,
-      title: `Panes: split new thread ${command.direction}`,
-      defaultShortcut: { key: command.key, alt: true },
-      isAvailable: () => controller?.splitPanes.isAvailable === true,
-      run: () => splitNewThread(command.side),
-    });
-  }
-
   app.commands.register({
-    id: "new-thread-beside",
-    title: "Panes: new thread beside the focused pane",
+    id: "split-right",
+    title: "Panes: new thread on the right",
+    defaultShortcut: { key: "d", alt: true },
     isAvailable: () => controller !== null,
-    run: runNewThreadBeside,
+    run: newThreadOnRight,
   });
 
   app.commands.register({

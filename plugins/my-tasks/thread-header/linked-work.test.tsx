@@ -63,13 +63,6 @@ function renderHeader(
 }
 
 describe("thread header linked work", () => {
-  it("renders after the thread title", () => {
-    const slot = app.threadHeaderActions.find(
-      (entry) => entry.id === "linked-work",
-    );
-    expect(slot?.placement).toBe("title");
-  });
-
   it("shows the attached task over the project and opens the picker to change it", async () => {
     const openThreadPanel = vi.fn(() => true);
     const slot = renderHeader(

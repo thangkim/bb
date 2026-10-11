@@ -4,8 +4,6 @@ import { cleanup } from "@testing-library/react";
 import { toast } from "sonner";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type {
-  ExperimentalSplitPaneNewThreadOptions,
-  ExperimentalSplitPaneOpenResult,
   PluginAppBuilder,
   PluginSidebarSplitLayout,
   PluginCommandContext,
@@ -43,60 +41,92 @@ function command(id: string): PluginCommandRegistration {
   return registration;
 }
 
+type Pane = PluginSidebarSplitLayout["panes"][number];
+
+function pane(
+  paneId: string,
+  threadId: string | null,
+  x: number,
+  width: number,
+  isFocused = false,
+): Pane {
+  return {
+    paneId,
+    threadId,
+    rect: { x, y: 0, width, height: 1 },
+    isFocused,
+  };
+}
+
 function mountController(
-  isAvailable: boolean,
-  result: ExperimentalSplitPaneOpenResult = "opened",
   host: {
     sidebarSplitLayout?: PluginSidebarSplitLayout;
     threadId?: string;
+    projectId?: string;
+    open?: () => Promise<{ delivered: number }>;
   } = {},
 ) {
-  const openNewThread = vi.fn(
-    (_options: ExperimentalSplitPaneNewThreadOptions) => result,
-  );
   const overlay = app.appOverlays[0]!;
-  const view = renderSlot(
+  return renderSlot(
     overlay,
     {},
     {
-      experimental_splitPanes: { isAvailable, openNewThread },
       ...(host.sidebarSplitLayout === undefined
         ? {}
         : { sidebarSplitLayout: host.sidebarSplitLayout }),
-      context: { threadId: host.threadId ?? null },
+      context: {
+        threadId: host.threadId ?? null,
+        projectId: host.projectId ?? null,
+      },
+      sdk: {
+        threads: {
+          open: host.open ?? (async () => ({ delivered: 1 })),
+        },
+      },
     },
   );
-  return { openNewThread, view };
 }
 
 function closeRightPaneOf(left: string, right: string): void {
-  mountController(true, "opened", {
+  mountController({
     sidebarSplitLayout: {
-      panes: [
-        {
-          paneId: "p1",
-          threadId: left,
-          rect: { x: 0, y: 0, width: 0.5, height: 1 },
-          isFocused: true,
-        },
-        {
-          paneId: "p2",
-          threadId: right,
-          rect: { x: 0.5, y: 0, width: 0.5, height: 1 },
-          isFocused: false,
-        },
-      ],
+      panes: [pane("p1", left, 0, 0.5, true), pane("p2", right, 0.5, 0.5)],
     },
     threadId: left,
   });
   cleanup();
 }
 
+interface HostClick {
+  href: string | null;
+  metaKey: boolean;
+  button: number;
+}
+
+const hostClicks: HostClick[] = [];
+let hostOpensSplits = true;
+
+function hostRouteAnchorDelegate(event: MouseEvent): void {
+  if (!(event.target instanceof HTMLAnchorElement)) return;
+  hostClicks.push({
+    href: event.target.getAttribute("href"),
+    metaKey: event.metaKey,
+    button: event.button,
+  });
+  if (hostOpensSplits) event.preventDefault();
+}
+
 beforeEach(() => {
   vi.mocked(toast).mockClear();
+  hostClicks.length = 0;
+  hostOpensSplits = true;
+  document.addEventListener("click", hostRouteAnchorDelegate);
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  document.removeEventListener("click", hostRouteAnchorDelegate);
+  cleanup();
+});
 
 describe("registration", () => {
   it("mounts the controller and split-tabs overlays", () => {
@@ -106,7 +136,7 @@ describe("registration", () => {
     ]);
   });
 
-  it("registers the split commands on Alt+A/D/W/S and new-thread-beside unbound", () => {
+  it("registers only the right split on Alt+D and reopen on Mod+Alt+T", () => {
     expect(
       [...commands.values()].map(({ id, title, defaultShortcut }) => ({
         id,
@@ -115,29 +145,9 @@ describe("registration", () => {
       })),
     ).toEqual([
       {
-        id: "split-left",
-        title: "Panes: split new thread left",
-        defaultShortcut: { key: "a", alt: true },
-      },
-      {
         id: "split-right",
-        title: "Panes: split new thread right",
+        title: "Panes: new thread on the right",
         defaultShortcut: { key: "d", alt: true },
-      },
-      {
-        id: "split-up",
-        title: "Panes: split new thread up",
-        defaultShortcut: { key: "w", alt: true },
-      },
-      {
-        id: "split-down",
-        title: "Panes: split new thread down",
-        defaultShortcut: { key: "s", alt: true },
-      },
-      {
-        id: "new-thread-beside",
-        title: "Panes: new thread beside the focused pane",
-        defaultShortcut: undefined,
       },
       {
         id: "reopen-closed",
@@ -148,162 +158,162 @@ describe("registration", () => {
   });
 });
 
-describe("split commands", () => {
-  it("are unavailable before the controller mounts", () => {
-    expect(command("split-left").isAvailable?.(context)).toBe(false);
-    expect(command("new-thread-beside").isAvailable?.(context)).toBe(false);
-  });
-
-  it("are unavailable when splits are", () => {
-    mountController(false);
+describe("split-right", () => {
+  it("is unavailable before the controller mounts", () => {
     expect(command("split-right").isAvailable?.(context)).toBe(false);
-    expect(command("new-thread-beside").isAvailable?.(context)).toBe(true);
   });
 
-  it.each([
-    ["split-left", "left"],
-    ["split-right", "right"],
-    ["split-up", "top"],
-    ["split-down", "bottom"],
-  ] as const)("%s opens a composer on the %s side", (id, side) => {
-    const { openNewThread } = mountController(true);
-
-    expect(command(id).isAvailable?.(context)).toBe(true);
-    command(id).run(context);
-
-    expect(openNewThread).toHaveBeenCalledWith({ side });
-    expect(toast).not.toHaveBeenCalled();
-  });
-
-  it("toasts at the pane cap", () => {
-    mountController(true, "at-cap");
-
-    command("split-down").run(context);
-
-    expect(toast).toHaveBeenCalledWith(PANE_CAP_MESSAGE);
-    expect(PANE_CAP_MESSAGE).toBe("Can't split — 8 panes is the maximum.");
-  });
-
-  it("stops acting once the controller unmounts", () => {
-    const { openNewThread, view } = mountController(true);
-    view.unmount();
-
-    expect(command("split-left").isAvailable?.(context)).toBe(false);
-    command("split-left").run(context);
-    expect(openNewThread).not.toHaveBeenCalled();
-  });
-});
-
-describe("new-thread-beside", () => {
-  it("reuses a matching composer, else opens one to the right and replaces the focused pane at the cap", () => {
-    const { openNewThread, view } = mountController(true, "replaced");
-
-    command("new-thread-beside").run(context);
-
-    expect(openNewThread).toHaveBeenCalledWith({
-      side: "right",
-      atPaneCap: "replace",
-      reuseComposer: true,
+  it("asks bb to open its composer beside the focused pane, then selects the focused project and focuses the prompt", () => {
+    const view = mountController({
+      threadId: "thr_focused",
+      projectId: "proj_focused",
     });
-    expect(view.inspection.navigateCalls).toEqual([]);
-    expect(toast).not.toHaveBeenCalled();
+
+    expect(command("split-right").isAvailable?.(context)).toBe(true);
+    command("split-right").run(context);
+
+    expect(hostClicks).toEqual([{ href: "/", metaKey: true, button: 0 }]);
+    expect(view.inspection.navigateCalls).toEqual([
+      {
+        method: "toCompose",
+        options: { projectId: "proj_focused", focusPrompt: true },
+      },
+    ]);
   });
 
-  it("falls back to the compose screen when splits are unavailable", () => {
-    const { view } = mountController(false, "unavailable");
+  it("leaves the composer's project alone when the focused pane has none", () => {
+    const view = mountController();
 
-    command("new-thread-beside").run(context);
+    command("split-right").run(context);
 
     expect(view.inspection.navigateCalls).toEqual([
       { method: "toCompose", options: { focusPrompt: true } },
     ]);
   });
-});
 
-describe("bb's own New thread requests", () => {
-  const request = {
-    projectId: "proj_a",
-    sectionId: "sec_a",
-    environmentId: "env_a",
-    focusPrompt: true,
-  };
+  it("still opens the composer when bb ignores the split request", () => {
+    hostOpensSplits = false;
+    const view = mountController({ projectId: "proj_focused" });
 
-  it("open beside the focused pane the way new-thread-beside does", () => {
-    const { openNewThread, view } = mountController(true, "opened");
+    command("split-right").run(context);
 
-    expect(view.behavior.experimental_offerNewThread(request)).toBe(true);
-
-    expect(openNewThread).toHaveBeenCalledWith({
-      ...request,
-      side: "right",
-      atPaneCap: "replace",
-      reuseComposer: true,
-    });
-    expect(view.inspection.navigateCalls).toEqual([]);
+    expect(hostClicks).toHaveLength(1);
+    expect(view.inspection.navigateCalls).toEqual([
+      {
+        method: "toCompose",
+        options: { projectId: "proj_focused", focusPrompt: true },
+      },
+    ]);
   });
 
-  it("are left to bb where splits are unavailable", () => {
-    const { view } = mountController(false, "unavailable");
+  it("stops acting once the controller unmounts", () => {
+    const view = mountController();
+    view.unmount();
 
-    expect(view.behavior.experimental_offerNewThread(request)).toBe(false);
-
+    expect(command("split-right").isAvailable?.(context)).toBe(false);
+    command("split-right").run(context);
+    expect(hostClicks).toEqual([]);
     expect(view.inspection.navigateCalls).toEqual([]);
   });
 });
 
 describe("reopen-closed", () => {
-  it("splits the closed thread back on the side it was closed from, once", () => {
+  it("reopens the closed thread on the side it was closed from, once", async () => {
     closeRightPaneOf("left-thread", "right-thread");
-    const { openNewThread, view } = mountController(true, "opened", {
-      threadId: "left-thread",
-    });
+    const view = mountController({ threadId: "left-thread" });
 
-    command("reopen-closed").run(context);
+    await command("reopen-closed").run(context);
 
-    expect(openNewThread).toHaveBeenCalledWith({
-      side: "right",
-      focusPrompt: false,
-    });
-    expect(view.inspection.navigateCalls).toEqual([
-      { method: "toThread", threadId: "right-thread" },
+    expect(view.inspection.sdkCalls).toEqual([
+      {
+        method: "threads.open",
+        args: [{ threadId: "right-thread", split: "right", file: null }],
+      },
     ]);
+    expect(view.inspection.navigateCalls).toEqual([]);
 
-    command("reopen-closed").run(context);
+    await command("reopen-closed").run(context);
 
-    expect(openNewThread).toHaveBeenCalledTimes(1);
+    expect(view.inspection.sdkCalls).toHaveLength(1);
     expect(toast).toHaveBeenCalledWith(NOTHING_TO_REOPEN_MESSAGE);
   });
 
-  it("keeps the closed thread for later when the split is at the pane cap", () => {
-    closeRightPaneOf("left-thread", "right-thread");
-    const atCap = mountController(true, "at-cap", { threadId: "left-thread" });
-
-    command("reopen-closed").run(context);
-
-    expect(toast).toHaveBeenCalledWith(PANE_CAP_MESSAGE);
-    expect(atCap.view.inspection.navigateCalls).toEqual([]);
-    cleanup();
-
-    const { view } = mountController(true, "opened", {
-      threadId: "left-thread",
+  it("maps a pane closed below the focused one to bb's down split", async () => {
+    mountController({
+      sidebarSplitLayout: {
+        panes: [
+          {
+            paneId: "p1",
+            threadId: "top-thread",
+            rect: { x: 0, y: 0, width: 1, height: 0.5 },
+            isFocused: true,
+          },
+          {
+            paneId: "p2",
+            threadId: "bottom-thread",
+            rect: { x: 0, y: 0.5, width: 1, height: 0.5 },
+            isFocused: false,
+          },
+        ],
+      },
+      threadId: "top-thread",
     });
-    command("reopen-closed").run(context);
+    cleanup();
+    const view = mountController({ threadId: "top-thread" });
 
-    expect(view.inspection.navigateCalls).toEqual([
-      { method: "toThread", threadId: "right-thread" },
+    await command("reopen-closed").run(context);
+
+    expect(view.inspection.sdkCalls).toEqual([
+      {
+        method: "threads.open",
+        args: [{ threadId: "bottom-thread", split: "down", file: null }],
+      },
     ]);
   });
 
-  it("navigates to the closed thread when splits are unavailable", () => {
+  it("keeps the closed thread for later when the layout is at the pane cap", async () => {
     closeRightPaneOf("left-thread", "right-thread");
-    const { view } = mountController(false, "unavailable", {
-      threadId: "left-thread",
+    mountController({ threadId: "left-thread" });
+    cleanup();
+    const full = mountController({
+      sidebarSplitLayout: {
+        panes: Array.from({ length: 8 }, (_, index) =>
+          pane(`full-${index}`, `open-${index}`, index / 8, 1 / 8, index === 0),
+        ),
+      },
+      threadId: "open-0",
     });
 
-    command("reopen-closed").run(context);
+    await command("reopen-closed").run(context);
 
-    expect(view.inspection.navigateCalls).toEqual([
-      { method: "toThread", threadId: "right-thread" },
+    expect(toast).toHaveBeenCalledWith(PANE_CAP_MESSAGE);
+    expect(full.inspection.sdkCalls).toEqual([]);
+    cleanup();
+
+    const view = mountController({ threadId: "left-thread" });
+    await command("reopen-closed").run(context);
+
+    expect(view.inspection.sdkCalls).toEqual([
+      {
+        method: "threads.open",
+        args: [{ threadId: "right-thread", split: "right", file: null }],
+      },
     ]);
+  });
+
+  it("reports a failed open", async () => {
+    closeRightPaneOf("left-thread", "right-thread");
+    mountController({
+      threadId: "left-thread",
+      open: async () => {
+        throw new Error("Thread not found");
+      },
+    });
+
+    await command("reopen-closed").run(context);
+
+    expect(toast).toHaveBeenCalledWith(
+      "Couldn't reopen the thread: Thread not found",
+    );
   });
 });

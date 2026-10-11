@@ -1,9 +1,6 @@
-import type {
-  ExperimentalSplitPaneNewThreadOptions,
-  PluginSidebarSplitLayout,
-} from "@get-bb/plugin-sdk/app";
+import type { PluginSidebarSplitLayout } from "@get-bb/plugin-sdk/app";
 
-type Side = ExperimentalSplitPaneNewThreadOptions["side"];
+export type Side = "left" | "right" | "top" | "bottom";
 type Pane = PluginSidebarSplitLayout["panes"][number];
 type Rect = Pane["rect"];
 

@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Dictate into the composer with a live transcript at the cursor.",
+  "description": "Dictate into the composer with its own mic and a live transcript above the composer.",
   "engines": {
     "bb": ">=0.0"
   },
   "bb": {
     "name": "Voice live preview",
-    "description": "Dictate into the composer with a live transcript at the cursor.",
+    "description": "Dictate into the composer with its own mic and a live transcript above the composer.",
     "branding": {
       "icon": "Mic"
     },

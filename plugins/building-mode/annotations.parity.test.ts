@@ -11,6 +11,7 @@ import {
 } from "./fixtures/legacy-annotations.js";
 
 const PLUGIN_LINE = /^\*\*Rendered by plugin:\*\* `[^`]+`$/u;
+const LEGACY_UNRECORDED_SOURCE_LINE = /^\*\*Source:\*\* not recorded;/u;
 
 const base: AnnotationRecord = {
   id: "mfx12abc",
@@ -104,10 +105,12 @@ const variants: Array<[string, AnnotationRecord]> = [
 
 describe("context parity with the previous agent-annotations app surface", () => {
   it.each(variants)(
-    "resolves %s to the previous context plus the plugin id",
+    "resolves %s to the previous context plus the plugin id, without an unrecorded source line",
     (_name, record) => {
       const current = formatAnnotationContext(record).split("\n");
-      const previous = legacyFormat(legacyRecord(record)).split("\n");
+      const previous = legacyFormat(legacyRecord(record))
+        .split("\n")
+        .filter((line) => !LEGACY_UNRECORDED_SOURCE_LINE.test(line));
 
       expect(current.filter((line) => !PLUGIN_LINE.test(line))).toEqual(
         previous,

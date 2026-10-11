@@ -124,7 +124,7 @@ export async function copyImageToClipboard(imageUrl: string): Promise<boolean> {
   }
 }
 
-async function copyImageWithToast(imageUrl: string): Promise<void> {
+export async function copyImageWithToast(imageUrl: string): Promise<void> {
   if (await copyImageToClipboard(imageUrl)) {
     toast.success("Image copied");
     return;

@@ -1,15 +1,24 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { TIMELINE_RENDER_ALL_ATTRIBUTE } from "./thread-find-dom";
 import {
   THREAD_FIND_ACTIVE_HIGHLIGHT,
   THREAD_FIND_MATCH_HIGHLIGHT,
 } from "./thread-find-matches";
 import { findInThreadCommand } from "./app";
 import { openThreadFindForFocus } from "./thread-find-store";
+import {
+  mountVirtualTimeline,
+  type VirtualTimeline,
+} from "./virtual-timeline.test-helpers";
 
 class HighlightStub {
   readonly ranges: Range[];
@@ -45,11 +54,27 @@ async function flushFrames() {
   });
 }
 
-async function renderOverlay() {
+type RenderOverlayOptions = Parameters<typeof renderSlot>[2];
+
+async function renderOverlay(options?: RenderOverlayOptions) {
   const app = await loadPluginApp(() => import("./app"));
   const overlay = app.appOverlays[0];
   if (overlay === undefined) throw new Error("overlay not registered");
-  return renderSlot(overlay, {});
+  return renderSlot(overlay, {}, options);
+}
+
+function conversationRow(id: string, text: string) {
+  return { id, kind: "conversation", role: "assistant", text };
+}
+
+function timelinePage(
+  rows: ReturnType<typeof conversationRow>[],
+  olderCursor: { anchorSeq: number; anchorId: string } | null = null,
+) {
+  return {
+    rows,
+    timelinePage: { hasOlderRows: olderCursor !== null, olderCursor },
+  };
 }
 
 function highlightTexts(name: string): string[] {
@@ -67,7 +92,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   document.body.replaceChildren();
-  document.documentElement.removeAttribute(TIMELINE_RENDER_ALL_ATTRIBUTE);
   if (originalRangeRect === undefined) {
     Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
   } else {
@@ -96,9 +120,6 @@ describe("thread find overlay", () => {
     expect(event.defaultPrevented).toBe(true);
     const input = screen.getByRole("textbox", { name: "Find in thread" });
     expect(document.activeElement).toBe(input);
-    expect(
-      document.documentElement.hasAttribute(TIMELINE_RENDER_ALL_ATTRIBUTE),
-    ).toBe(true);
 
     fireEvent.change(input, { target: { value: "server" } });
     await flushFrames();
@@ -118,9 +139,6 @@ describe("thread find overlay", () => {
 
     expect(screen.queryByRole("search")).toBeNull();
     expect(document.activeElement).toBe(composer);
-    expect(
-      document.documentElement.hasAttribute(TIMELINE_RENDER_ALL_ATTRIBUTE),
-    ).toBe(false);
     expect(highlights.size).toBe(0);
   });
 
@@ -174,21 +192,21 @@ describe("thread find overlay", () => {
     expect(screen.queryByRole("search")).toBeNull();
   });
 
-  it("stops forcing every row to render when the overlay unmounts", async () => {
+  it("clears its highlights when the overlay unmounts", async () => {
     mountThread();
     const slot = await renderOverlay();
     act(() => {
       openThreadFindForFocus(document);
     });
-    expect(
-      document.documentElement.hasAttribute(TIMELINE_RENDER_ALL_ATTRIBUTE),
-    ).toBe(true);
+    await flushFrames();
+    fireEvent.change(screen.getByRole("textbox", { name: "Find in thread" }), {
+      target: { value: "server" },
+    });
+    await flushFrames();
+    expect(highlights.size).toBeGreaterThan(0);
 
     slot.lifecycle.unmount();
 
-    expect(
-      document.documentElement.hasAttribute(TIMELINE_RENDER_ALL_ATTRIBUTE),
-    ).toBe(false);
     expect(highlights.size).toBe(0);
   });
 
@@ -208,6 +226,135 @@ describe("thread find overlay", () => {
     await flushFrames();
 
     expect(screen.queryByRole("search")).toBeNull();
+  });
+});
+
+describe("thread find across windowed rows", () => {
+  let timeline: VirtualTimeline | null = null;
+
+  afterEach(() => {
+    timeline?.restore();
+    timeline = null;
+  });
+
+  function mountWindowedThread() {
+    const rows = [
+      { id: "m0", html: "<p>first needle</p>" },
+      ...Array.from({ length: 8 }, (_, index) => ({
+        id: `m${index + 1}`,
+        html: "<p>filler</p>",
+      })),
+      { id: "m9", html: "<p>last needle</p>" },
+    ];
+    timeline = mountVirtualTimeline({ rows });
+    return timeline;
+  }
+
+  async function openAndSearch(query: string) {
+    act(() => {
+      openThreadFindForFocus(document);
+    });
+    await flushFrames();
+    fireEvent.change(screen.getByRole("textbox", { name: "Find in thread" }), {
+      target: { value: query },
+    });
+    await flushFrames();
+  }
+
+  it("counts matches in rows that are not mounted and scrolls them into view", async () => {
+    const { mountedIds, scroller } = mountWindowedThread();
+    const timelineCalls: unknown[] = [];
+    await renderOverlay({
+      context: { threadId: "thread-1" },
+      sdk: {
+        threads: {
+          timeline: async (args) => {
+            timelineCalls.push(args);
+            if (args.beforeAnchorId === undefined) {
+              return timelinePage(
+                Array.from({ length: 8 }, (_, index) =>
+                  conversationRow(
+                    `m${index + 2}`,
+                    index === 7 ? "last **needle**" : "filler",
+                  ),
+                ),
+                { anchorSeq: 2, anchorId: "m2" },
+              ) as never;
+            }
+            return timelinePage([
+              conversationRow("m0", "first needle"),
+              conversationRow("m1", "filler"),
+            ]) as never;
+          },
+        },
+      },
+    });
+    expect(mountedIds()).not.toContain("m0");
+
+    await openAndSearch("needle");
+
+    await waitFor(() => expect(screen.getByText("2/2")).toBeTruthy());
+    expect(timelineCalls).toEqual([
+      expect.objectContaining({ threadId: "thread-1", segmentLimit: "100" }),
+      expect.objectContaining({
+        beforeAnchorSeq: "2",
+        beforeAnchorId: "m2",
+      }),
+    ]);
+    expect(highlightTexts(THREAD_FIND_ACTIVE_HIGHLIGHT)).toEqual(["needle"]);
+
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Find in thread" }), {
+      key: "Enter",
+    });
+
+    await waitFor(() => expect(mountedIds()).toContain("m0"));
+    await waitFor(() =>
+      expect(
+        highlights.get(THREAD_FIND_ACTIVE_HIGHLIGHT)?.ranges[0]?.startContainer
+          .textContent,
+      ).toBe("first needle"),
+    );
+    expect(screen.getByText("1/2")).toBeTruthy();
+    expect(scroller.scrollTop).toBe(0);
+  });
+
+  it("searches only mounted rows when the thread data is unavailable", async () => {
+    mountWindowedThread();
+    await renderOverlay({
+      context: { threadId: "thread-1" },
+      sdk: {
+        threads: {
+          timeline: async () => {
+            throw new Error("offline");
+          },
+        },
+      },
+    });
+
+    await openAndSearch("needle");
+
+    await waitFor(() => expect(screen.getByText("1/1")).toBeTruthy());
+  });
+
+  it("ignores thread data whose rows are not in this thread window", async () => {
+    mountWindowedThread();
+    await renderOverlay({
+      context: { threadId: "other-thread" },
+      sdk: {
+        threads: {
+          timeline: async () =>
+            timelinePage([
+              conversationRow("x1", "needle"),
+              conversationRow("x2", "needle"),
+            ]) as never,
+        },
+      },
+    });
+
+    await openAndSearch("needle");
+    await flushFrames();
+
+    expect(screen.getByText("1/1")).toBeTruthy();
   });
 });
 

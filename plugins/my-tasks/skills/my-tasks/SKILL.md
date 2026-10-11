@@ -100,11 +100,11 @@ For task dispatch and execution presets, read
 
    `bb my-tasks links` lists the tasks and projects the current thread is
    attached to. People attach from a thread's menu with **Attach to My
-   Tasks…**. An attached thread's header shows the same link after its
-   title: the first task's title in blue (with `+N` for more tasks), or the
-   project name when no task is attached. Clicking it opens the picker to
-   change the link. A split pane collapsed by Pane Collapse shows the same
-   task or project on its strip.
+   Tasks…**. An attached thread's header shows the same link among its
+   header actions: the first task's title in blue (with `+N` for more
+   tasks), or the project name when no task is attached. Clicking it opens
+   the picker to change the link. A split pane collapsed by Pane Collapse
+   shows the same task or project on its strip.
 
 ## Keep the project brief current
 

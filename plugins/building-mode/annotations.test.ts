@@ -151,7 +151,7 @@ describe("annotation formatting", () => {
     ]);
   });
 
-  it("prefers the element's own stamp and reports builds without stamps", () => {
+  it("prefers the element's own stamp and omits source lines without stamps", () => {
     const stamped = formatAnnotationContext({
       ...record,
       element: {
@@ -182,8 +182,21 @@ describe("annotation formatting", () => {
       ...record,
       components: [{ name: "Composer", source: null }],
     });
-    expect(unstamped).toContain("this bb build has no source stamps");
+    expect(unstamped).not.toContain("**Source");
+    expect(unstamped).not.toContain("not recorded");
+    expect(unstamped).toContain("**React:** Composer");
     expect(unstamped).not.toContain("Source paths are relative");
+
+    const bare = formatAnnotationContext({
+      ...record,
+      element: { ...record.element, attributes: {}, sources: [] },
+      components: [],
+    }).split("\n");
+    expect(bare.filter((line) => /^\*\*(?:Source|React)/u.test(line))).toEqual(
+      [],
+    );
+    expect(bare.every((line) => !/:\*\*\s*$/u.test(line))).toBe(true);
+    expect(bare).toContain(`**Feedback:** ${record.comment}`);
   });
 
   it("names the plugin whose UI rendered the element", () => {

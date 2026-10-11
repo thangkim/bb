@@ -3,19 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Press Cmd/Ctrl+C in the image preview to copy the image as PNG.",
+  "description": "Copy images as PNG from a right-click menu, or with Cmd/Ctrl+C in the image preview.",
   "engines": {
     "bb": ">=0.0",
-    "bbPluginSdk": ">=0.4.3"
+    "bbPluginSdk": ">=0.4.102"
   },
   "bb": {
     "name": "Image copy",
-    "description": "Press Cmd/Ctrl+C while an image preview is open to copy the image and close the preview.",
+    "description": "Right-click any image for Copy Image, or press Cmd/Ctrl+C while an image preview is open to copy it and close the preview.",
     "branding": {
       "icon": "Copy"
     },
     "server": "./server.ts",
-    "app": "./app.ts"
+    "app": "./app.tsx"
   },
   "keywords": [
     "bb-plugin"

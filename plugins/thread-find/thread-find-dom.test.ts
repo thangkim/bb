@@ -5,7 +5,13 @@ import {
   resolveFindShortcutTarget,
   resolveThreadWindow,
   revealRange,
+  scrollUntilRowMounted,
+  topLevelRowOf,
 } from "./thread-find-dom";
+import {
+  mountVirtualTimeline,
+  type VirtualTimeline,
+} from "./virtual-timeline.test-helpers";
 
 const ROW_LIST = '<div data-timeline-row-list="top-level"><p>text</p></div>';
 
@@ -234,5 +240,106 @@ describe("revealRange", () => {
 
     expect(scroller.scrollTop).toBe(0);
     expect(events).toEqual([]);
+  });
+});
+
+describe("topLevelRowOf", () => {
+  it("resolves the windowed top-level row, not a nested one", () => {
+    mount(`
+      <div id="list" data-timeline-row-list="top-level">
+        <div data-timeline-items="">
+          <div id="outer" data-timeline-row-id="turn">
+            <div data-timeline-row-list="bundle">
+              <div data-timeline-items="">
+                <div data-timeline-row-id="child"><p id="text">hi</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`);
+
+    expect(topLevelRowOf(byId("text"), byId("list"))).toBe(byId("outer"));
+  });
+});
+
+describe("scrollUntilRowMounted", () => {
+  let timeline: VirtualTimeline | null = null;
+
+  afterEach(() => {
+    timeline?.restore();
+    timeline = null;
+  });
+
+  function mountRows(initialScrollTop?: number) {
+    timeline = mountVirtualTimeline({
+      rows: Array.from({ length: 60 }, (_, index) => ({
+        id: `m${index}`,
+        html: `<p>row ${index}</p>`,
+      })),
+      initialScrollTop,
+    });
+    const wheels: number[] = [];
+    timeline.scroller.addEventListener("wheel", (event) =>
+      wheels.push(Math.sign(event.deltaY)),
+    );
+    return { timeline, wheels };
+  }
+
+  function request(
+    { list, scroller }: VirtualTimeline,
+    rowId: string,
+    signal = new AbortController().signal,
+  ) {
+    return {
+      list,
+      scroller,
+      rowId,
+      targetPosition: Number(rowId.slice(1)),
+      rowCount: 60,
+      positionOf: (id: string) => Number(id.slice(1)),
+      signal,
+    };
+  }
+
+  it("jumps up toward a row far above the mounted window", async () => {
+    const { timeline, wheels } = mountRows();
+    expect(timeline.mountedIds()).not.toContain("m3");
+
+    const row = await scrollUntilRowMounted(request(timeline, "m3"));
+
+    expect(row?.getAttribute("data-timeline-row-id")).toBe("m3");
+    expect(wheels.length).toBeLessThanOrEqual(3);
+    expect(wheels.every((direction) => direction === -1)).toBe(true);
+  });
+
+  it("scrolls down toward a later row", async () => {
+    const { timeline, wheels } = mountRows(0);
+
+    const row = await scrollUntilRowMounted(request(timeline, "m40"));
+
+    expect(row?.getAttribute("data-timeline-row-id")).toBe("m40");
+    expect(wheels[0]).toBe(1);
+  });
+
+  it("returns an already mounted row without scrolling", async () => {
+    const { timeline, wheels } = mountRows();
+
+    const row = await scrollUntilRowMounted(request(timeline, "m59"));
+
+    expect(row?.getAttribute("data-timeline-row-id")).toBe("m59");
+    expect(wheels).toEqual([]);
+  });
+
+  it("stops when the request is aborted", async () => {
+    const { timeline } = mountRows();
+    const controller = new AbortController();
+    controller.abort();
+
+    const row = await scrollUntilRowMounted(
+      request(timeline, "m3", controller.signal),
+    );
+
+    expect(row).toBeNull();
+    expect(timeline.scroller.scrollTop).toBe(5_700);
   });
 });

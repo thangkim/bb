@@ -74,6 +74,21 @@ function foldCase(value: string): string {
   return folded.length === value.length ? folded : value;
 }
 
+export function findTextOffsets(text: string, query: string): number[] {
+  if (query.length === 0) return [];
+  const haystack = foldCase(text);
+  const needle = foldCase(query);
+  const offsets: number[] = [];
+  for (
+    let index = haystack.indexOf(needle);
+    index !== -1;
+    index = haystack.indexOf(needle, index + needle.length)
+  ) {
+    offsets.push(index);
+  }
+  return offsets;
+}
+
 export function findTextMatches(
   root: Element,
   query: string,
@@ -81,16 +96,11 @@ export function findTextMatches(
 ): Range[] {
   if (query.length === 0) return [];
   const { segments, text } = collectTextSegments(root, isExcluded);
-  const haystack = foldCase(text);
-  const needle = foldCase(query);
+  const needleLength = foldCase(query).length;
   const ranges: Range[] = [];
-  for (
-    let index = haystack.indexOf(needle);
-    index !== -1;
-    index = haystack.indexOf(needle, index + needle.length)
-  ) {
+  for (const index of findTextOffsets(text, query)) {
     const start = locateOffset(segments, index, false);
-    const end = locateOffset(segments, index + needle.length, true);
+    const end = locateOffset(segments, index + needleLength, true);
     if (start === null || end === null) continue;
     const range = root.ownerDocument.createRange();
     range.setStart(start.node, start.offset);
@@ -108,11 +118,10 @@ function highlightRegistry(): HighlightRegistry | null {
 
 export function paintThreadFindHighlights(
   ranges: readonly Range[],
-  activeIndex: number,
+  active: Range | undefined,
 ): void {
   const registry = highlightRegistry();
   if (registry === null) return;
-  const active = ranges[activeIndex];
   registry.set(
     THREAD_FIND_MATCH_HIGHLIGHT,
     new Highlight(...ranges.filter((range) => range !== active)),
