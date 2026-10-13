@@ -17,6 +17,7 @@ export const alertSchema = z
     threadId: z.string().min(1).nullable(),
     projectId: z.string().min(1).nullable(),
     interactionId: z.string().min(1).nullable(),
+    terminalId: z.string().min(1).nullable(),
     kind: alertKindSchema,
     title: z.string(),
     body: z.string().nullable(),

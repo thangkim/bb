@@ -68,10 +68,7 @@ export function createAttentionAlertsHostEntry(deps: SoundPlayerDependencies) {
     handlers: {
       async playSound({ sound, volume }, context) {
         if (deps.platform !== "darwin") return { played: false };
-        const path = await soundFile(
-          context.experimental_paths.tempDir,
-          sound,
-        );
+        const path = await soundFile(context.experimental_paths.tempDir, sound);
         const played = await deps.run(
           AFPLAY_COMMAND,
           ["-v", volume.toFixed(2), path],

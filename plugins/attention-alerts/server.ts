@@ -14,6 +14,7 @@ import {
 } from "./contract.js";
 import { createAlertEngine, REPEAT_OPTIONS } from "./engine.js";
 import { createAlertStore } from "./store.js";
+import { createTerminalWatcher } from "./terminal-watch.js";
 
 export { attentionAlertsRpcContract } from "./contract.js";
 
@@ -22,6 +23,9 @@ interface AttentionAlertsPluginOptions {
   claimWindowMs?: number;
   tickMs?: number;
   reconcileEveryTicks?: number;
+  terminalPollMs?: number;
+  terminalMinBusyMs?: number;
+  terminalQuietMs?: number;
   createId?: () => string;
   now?: () => number;
 }
@@ -92,6 +96,13 @@ export function createAttentionAlertsPlugin(
         description: "Alert when an agent finishes its turn.",
         default: true,
       },
+      alertOnTerminals: {
+        type: "boolean",
+        label: "Terminals finishing",
+        description:
+          "Alert when a thread's terminal goes quiet after working for a while, or rings its bell, for example when Claude Code or Codex finishes an answer.",
+        default: true,
+      },
       includeChildThreads: {
         type: "boolean",
         label: "Sub-agent threads finishing or failing",
@@ -102,7 +113,8 @@ export function createAttentionAlertsPlugin(
       sound: {
         type: "boolean",
         label: "Play a sound",
-        description: "Play a sound for each new alert, even when bb is in the background.",
+        description:
+          "Play a sound for each new alert, even when bb is in the background.",
         default: true,
       },
       volume: {
@@ -177,6 +189,32 @@ export function createAttentionAlertsPlugin(
     });
     bb.onDispose(() => engine.stop());
 
+    const terminalPollMs = options.terminalPollMs ?? 1_000;
+    const terminals = createTerminalWatcher({
+      async readOutput(terminalId, sinceSeq) {
+        const output = await bb.sdk.terminals.output(
+          sinceSeq === null
+            ? { terminalId, tailBytes: 16_384 }
+            : { terminalId, sinceSeq },
+        );
+        return {
+          text: Buffer.concat(
+            output.chunks.map((chunk) =>
+              Buffer.from(chunk.dataBase64, "base64"),
+            ),
+          ).toString("utf8"),
+          nextSeq: output.nextSeq,
+          running: output.status === "running" || output.status === "starting",
+        };
+      },
+      onFinished: (finished) => engine.onTerminalFinished(finished),
+      now: options.now ?? Date.now,
+      minBusyMs: options.terminalMinBusyMs ?? 5_000,
+      quietMs: options.terminalQuietMs ?? 4_000,
+      bellGraceMs: 1_500,
+      maxWatchMs: 12 * 60 * 60_000,
+    });
+
     function logged(label: string, work: () => Promise<void> | void) {
       return async () => {
         try {
@@ -212,6 +250,10 @@ export function createAttentionAlertsPlugin(
     bb.events.on("experimental_thread.events", ({ thread }) =>
       logged("Alert cleanup", () => engine.onThreadEvents(thread.id))(),
     );
+    bb.events.on("experimental_terminal.input", ({ terminal }) => {
+      terminals.onInput(terminal);
+      engine.onTerminalInput(terminal.id);
+    });
     bb.events.on("thread.archived", ({ thread }) =>
       logged("Alert cleanup", () => engine.onThreadGone(thread.id))(),
     );
@@ -231,6 +273,21 @@ export function createAttentionAlertsPlugin(
             await logged("Alert reconcile", () => engine.reconcileAll())();
           }
           await logged("Alert reminder", () => engine.remindDue())();
+        }
+      },
+    });
+
+    bb.background.service("terminals", {
+      async start(signal) {
+        while (!signal.aborted) {
+          await sleep(terminalPollMs, signal);
+          if (signal.aborted) break;
+          if (terminals.watching() === 0) continue;
+          await terminals.tick((error) =>
+            bb.log.warn(
+              `Terminal watch failed: ${error instanceof Error ? error.message : String(error)}`,
+            ),
+          );
         }
       },
     });
@@ -260,7 +317,8 @@ export function createAttentionAlertsPlugin(
             positionals: [
               {
                 name: "id",
-                description: "Alert id, as `bb attention-alerts list` prints it",
+                description:
+                  "Alert id, as `bb attention-alerts list` prints it",
                 required: true,
               },
             ],

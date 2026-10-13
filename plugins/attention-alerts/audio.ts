@@ -41,7 +41,8 @@ export function createAlertAudio(): AlertAudio {
   async function ready(): Promise<boolean> {
     const current = ensureContext();
     if (!current) return false;
-    if (current.state !== "running") await resumeWithin(current, RESUME_TIMEOUT_MS);
+    if (current.state !== "running")
+      await resumeWithin(current, RESUME_TIMEOUT_MS);
     return current.state === "running";
   }
 

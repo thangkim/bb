@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   definePluginApp,
@@ -20,6 +20,8 @@ import { ComposeAnchor, openComposerBeside } from "./composer-beside";
 import {
   advanceSplitTracker,
   copySplitTabs,
+  localPanelStateStore,
+  seedComposerPanel,
   seedSplitTracker,
   type SplitTrackerState,
 } from "./split-tabs";
@@ -45,6 +47,8 @@ interface Controller {
   layout: PluginSidebarSplitLayout | null;
   projectId: string | null;
   threadId: string | null;
+  sourceThreadId: string | null;
+  sourceEnvironmentId: string | null;
 }
 
 let controller: Controller | null = null;
@@ -56,17 +60,61 @@ export function PaneSplitsController() {
   const navigate = useBbNavigate();
   const layout = useSidebarSplitLayout();
   const { projectId, threadId } = useBbContext();
+  const sourceThreadId =
+    layout?.panes.find((pane) => pane.isFocused)?.threadId ?? threadId;
+  const [source, setSource] = useState<{
+    threadId: string;
+    environmentId: string | null;
+  } | null>(null);
+  const sourceEnvironmentId =
+    source !== null && source.threadId === sourceThreadId
+      ? source.environmentId
+      : null;
   useEffect(() => {
     closedHistory = recordClosedPanes(closedHistory, observedLayout, layout);
     observedLayout = layout;
   }, [layout]);
   useEffect(() => {
-    const current: Controller = { sdk, navigate, layout, projectId, threadId };
+    if (sourceThreadId === null) return;
+    let current = true;
+    sdk.threads
+      .get({ threadId: sourceThreadId })
+      .then((thread) => {
+        if (current) {
+          setSource({
+            threadId: sourceThreadId,
+            environmentId: thread.environmentId,
+          });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [sdk, sourceThreadId]);
+  useEffect(() => {
+    const current: Controller = {
+      sdk,
+      navigate,
+      layout,
+      projectId,
+      threadId,
+      sourceThreadId,
+      sourceEnvironmentId,
+    };
     controller = current;
     return () => {
       if (controller === current) controller = null;
     };
-  }, [layout, navigate, projectId, sdk, threadId]);
+  }, [
+    layout,
+    navigate,
+    projectId,
+    sdk,
+    sourceEnvironmentId,
+    sourceThreadId,
+    threadId,
+  ]);
   return <ComposeAnchor />;
 }
 
@@ -88,7 +136,12 @@ export function SplitTabsController() {
     );
     tracker.current = state;
     for (const creation of created) {
-      copySplitTabs(sdk, creation).catch((error: unknown) => {
+      copySplitTabs(
+        sdk,
+        creation,
+        localPanelStateStore(window),
+        Date.now(),
+      ).catch((error: unknown) => {
         console.warn(
           `Pane Splits could not copy side panel tabs to ${creation.threadId}: ${
             error instanceof Error ? error.message : String(error)
@@ -102,7 +155,15 @@ export function SplitTabsController() {
 
 function newThreadOnRight(): void {
   if (controller === null) return;
-  openComposerBeside(controller.navigate, controller.projectId);
+  const { sourceThreadId, sourceEnvironmentId } = controller;
+  if (sourceThreadId !== null) {
+    seedComposerPanel(localPanelStateStore(window), sourceThreadId, Date.now());
+  }
+  openComposerBeside(
+    controller.navigate,
+    controller.projectId,
+    sourceEnvironmentId,
+  );
 }
 
 async function reopenClosedThread(): Promise<void> {

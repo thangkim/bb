@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type {
   PluginAppBuilder,
+  PluginBrowserBbSdk,
   PluginSidebarSplitLayout,
   PluginCommandContext,
   PluginCommandRegistration,
@@ -63,6 +64,7 @@ function mountController(
     sidebarSplitLayout?: PluginSidebarSplitLayout;
     threadId?: string;
     projectId?: string;
+    environmentId?: string | null;
     open?: () => Promise<{ delivered: number }>;
   } = {},
 ) {
@@ -81,9 +83,19 @@ function mountController(
       sdk: {
         threads: {
           open: host.open ?? (async () => ({ delivered: 1 })),
+          get: (async ({ threadId }: { threadId: string }) => ({
+            id: threadId,
+            environmentId: host.environmentId ?? null,
+          })) as unknown as PluginBrowserBbSdk["threads"]["get"],
         },
       },
     },
+  );
+}
+
+function opens(view: ReturnType<typeof mountController>) {
+  return view.inspection.sdkCalls.filter(
+    (call) => call.method === "threads.open",
   );
 }
 
@@ -181,6 +193,60 @@ describe("split-right", () => {
     ]);
   });
 
+  it("opens the composer with the focused thread's side panel so the panel stays open", () => {
+    const sourceKey = "bb.thread.fixedPanelTabsState-thr_focused-1";
+    const composerKey = "bb.thread.fixedPanelTabsState-root-compose-1";
+    const browser = {
+      id: "browser:docs:env_1",
+      kind: "browser",
+      environmentId: "env_1",
+      title: "App",
+      url: "http://localhost:3000/settings",
+    };
+    window.localStorage.setItem(
+      sourceKey,
+      JSON.stringify({
+        version: 1,
+        secondary: { tabs: [browser], activeTabId: browser.id, isOpen: true },
+        lastUsedAt: 1,
+      }),
+    );
+    const announced: (string | null)[] = [];
+    const listen = (event: StorageEvent) => announced.push(event.key);
+    window.addEventListener("storage", listen);
+    try {
+      mountController({ threadId: "thr_focused" });
+      command("split-right").run(context);
+      const copy = { ...browser, id: "browser:docs%40root-compose:env_1" };
+      expect(
+        JSON.parse(window.localStorage.getItem(composerKey)!).secondary,
+      ).toEqual({ tabs: [copy], activeTabId: copy.id, isOpen: true });
+      expect(announced).toEqual([composerKey]);
+    } finally {
+      window.removeEventListener("storage", listen);
+      window.localStorage.clear();
+    }
+  });
+
+  it("reuses the focused thread's environment so the composer's browser tabs can load", async () => {
+    const view = mountController({
+      threadId: "thr_focused",
+      projectId: "proj_focused",
+      environmentId: "env_focused",
+    });
+    await vi.waitFor(() => {
+      command("split-right").run(context);
+      expect(view.inspection.navigateCalls.at(-1)).toEqual({
+        method: "toCompose",
+        options: {
+          projectId: "proj_focused",
+          environmentId: "env_focused",
+          focusPrompt: true,
+        },
+      });
+    });
+  });
+
   it("leaves the composer's project alone when the focused pane has none", () => {
     const view = mountController();
 
@@ -224,7 +290,7 @@ describe("reopen-closed", () => {
 
     await command("reopen-closed").run(context);
 
-    expect(view.inspection.sdkCalls).toEqual([
+    expect(opens(view)).toEqual([
       {
         method: "threads.open",
         args: [{ threadId: "right-thread", split: "right", file: null }],
@@ -234,7 +300,7 @@ describe("reopen-closed", () => {
 
     await command("reopen-closed").run(context);
 
-    expect(view.inspection.sdkCalls).toHaveLength(1);
+    expect(opens(view)).toHaveLength(1);
     expect(toast).toHaveBeenCalledWith(NOTHING_TO_REOPEN_MESSAGE);
   });
 
@@ -263,7 +329,7 @@ describe("reopen-closed", () => {
 
     await command("reopen-closed").run(context);
 
-    expect(view.inspection.sdkCalls).toEqual([
+    expect(opens(view)).toEqual([
       {
         method: "threads.open",
         args: [{ threadId: "bottom-thread", split: "down", file: null }],
@@ -287,13 +353,13 @@ describe("reopen-closed", () => {
     await command("reopen-closed").run(context);
 
     expect(toast).toHaveBeenCalledWith(PANE_CAP_MESSAGE);
-    expect(full.inspection.sdkCalls).toEqual([]);
+    expect(opens(full)).toEqual([]);
     cleanup();
 
     const view = mountController({ threadId: "left-thread" });
     await command("reopen-closed").run(context);
 
-    expect(view.inspection.sdkCalls).toEqual([
+    expect(opens(view)).toEqual([
       {
         method: "threads.open",
         args: [{ threadId: "right-thread", split: "right", file: null }],

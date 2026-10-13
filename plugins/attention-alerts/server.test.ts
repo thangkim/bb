@@ -79,6 +79,7 @@ interface SetupOptions {
   settings?: Record<string, string | number | boolean>;
   hostPlays?: boolean;
   tickMs?: number;
+  terminalPollMs?: number;
 }
 
 async function setup(options: SetupOptions = {}) {
@@ -87,6 +88,8 @@ async function setup(options: SetupOptions = {}) {
   const hostCalls: { method: string; input: unknown; hostId: string }[] = [];
   let clock = 1_000_000;
   let nextId = 1;
+  const terminalOutputs: string[] = [];
+  let terminalSeq = 0;
   const fake = createFakePluginHost({
     pluginId: "attention-alerts",
     settings: options.settings ?? {},
@@ -101,6 +104,28 @@ async function setup(options: SetupOptions = {}) {
           list: async ({ threadId }) => interactions.get(threadId) ?? [],
         },
       },
+      terminals: {
+        output: async () => {
+          const text = terminalOutputs.shift() ?? "";
+          terminalSeq += 1;
+          return {
+            chunks:
+              text === ""
+                ? []
+                : [
+                    {
+                      seq: terminalSeq,
+                      dataBase64: Buffer.from(text).toString("base64"),
+                    },
+                  ],
+            nextSeq: terminalSeq,
+            truncated: false,
+            status: "running",
+            exitCode: null,
+            closeReason: null,
+          };
+        },
+      },
     },
     experimental_callHostRpc: ({ method, input, hostId }) => {
       hostCalls.push({ method, input, hostId });
@@ -112,6 +137,7 @@ async function setup(options: SetupOptions = {}) {
     batchMs: BATCH_MS,
     claimWindowMs: CLAIM_WINDOW_MS,
     tickMs: options.tickMs ?? 60_000,
+    terminalPollMs: options.terminalPollMs ?? 60_000,
     createId: () => `id-${nextId++}`,
     now: () => clock,
   })(fake.bb);
@@ -155,6 +181,7 @@ async function setup(options: SetupOptions = {}) {
     list,
     rings,
     setThread,
+    terminalOutputs,
     threads,
   };
 }
@@ -262,7 +289,10 @@ describe("alert lifecycle", () => {
   it("skips hidden threads and sub-agent completions, but not sub-agent questions", async () => {
     const host = await setup();
     const hidden = host.setThread({ visibility: "hidden" });
-    const child = host.setThread({ parentThreadId: "parent", status: "active" });
+    const child = host.setThread({
+      parentThreadId: "parent",
+      status: "active",
+    });
     const question = pendingQuestion(child.id, "interaction-child");
     host.interactions.set(child.id, [question]);
 
@@ -486,5 +516,83 @@ describe("CLI", () => {
     const cleared = await host.harness.behavior.runCli(["clear", "--json"]);
     expect(JSON.parse(cleared.stdout)).toEqual({ dismissed: 2 });
     await host.harness.lifecycle.dispose();
+  });
+});
+
+describe("terminal alerts", () => {
+  function terminal(threadId: string) {
+    return {
+      id: "terminal-1",
+      threadId,
+      environmentId: null,
+      hostId: "host-1",
+      title: "Terminal 1",
+      initialCwd: "/repo",
+      cols: 80,
+      rows: 24,
+      status: "running" as const,
+      exitCode: null,
+      closeReason: null,
+      createdAt: 1,
+      updatedAt: 1,
+      lastUserInputAt: 1,
+    };
+  }
+
+  it("alerts when a thread terminal finishes, and clears on the next input", async () => {
+    const host = await setup({ terminalPollMs: 5 });
+    const service = host.harness.behavior.runService("terminals");
+    const thread = host.setThread();
+    await host.harness.behavior.emitThreadEvent("experimental_terminal.input", {
+      terminal: terminal(thread.id),
+    });
+    await wait(20);
+    host.advance(6_000);
+    host.terminalOutputs.push("\u001b]0;✳ Refactor the parser\u0007working");
+    await wait(20);
+    host.advance(5_000);
+    await wait(20 + BATCH_MS * 4);
+
+    expect(await host.list()).toMatchObject([
+      {
+        kind: "done",
+        threadId: thread.id,
+        terminalId: "terminal-1",
+        title: "Terminal finished: Refactor the parser",
+        body: "Fix the flaky test",
+      },
+    ]);
+    expect(host.rings()).toMatchObject([{ reason: "new", sound: "done" }]);
+
+    await host.harness.behavior.emitThreadEvent("thread.active", {
+      thread: { ...thread, status: "active" },
+    });
+    expect(await host.list()).toHaveLength(1);
+
+    await host.harness.behavior.emitThreadEvent("experimental_terminal.input", {
+      terminal: terminal(thread.id),
+    });
+    expect(await host.list()).toEqual([]);
+    service.controller.abort();
+    await service.done;
+  });
+
+  it("stays quiet when terminal alerts are off", async () => {
+    const host = await setup({
+      terminalPollMs: 5,
+      settings: { alertOnTerminals: false },
+    });
+    const service = host.harness.behavior.runService("terminals");
+    const thread = host.setThread();
+    await host.harness.behavior.emitThreadEvent("experimental_terminal.input", {
+      terminal: terminal(thread.id),
+    });
+    await wait(20);
+    host.terminalOutputs.push("\u001b]9;Done\u0007");
+    host.advance(2_000);
+    await wait(20 + BATCH_MS * 4);
+    expect(await host.list()).toEqual([]);
+    service.controller.abort();
+    await service.done;
   });
 });

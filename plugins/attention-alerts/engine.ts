@@ -12,6 +12,7 @@ import {
 } from "./contract.js";
 import type { AlertStore } from "./store.js";
 import type { AlertSound } from "./sounds.js";
+import type { TerminalFinished } from "./terminal-watch.js";
 import { failedTitle, finishedTitle } from "./titles.js";
 
 type ThreadResponse = PluginThreadEventPayloads["thread.idle"]["thread"];
@@ -45,6 +46,7 @@ export interface AlertSettings {
   alertOnQuestions: boolean;
   alertOnErrors: boolean;
   alertOnDone: boolean;
+  alertOnTerminals: boolean;
   includeChildThreads: boolean;
   sound: boolean;
   volume: number;
@@ -138,7 +140,10 @@ export function describeInteraction(interaction: PendingInteraction): {
   if (payload.kind === "approval") {
     const subject = payload.subject;
     if (subject.kind === "plan") {
-      return { kind: "plan", body: "Review the plan before the agent continues" };
+      return {
+        kind: "plan",
+        body: "Review the plan before the agent continues",
+      };
     }
     if (subject.kind === "command") {
       return {
@@ -244,7 +249,11 @@ export function createAlertEngine(args: AlertEngineArgs) {
   }
 
   function addAlert(alert: Omit<Alert, "id" | "createdAt">): Alert | null {
-    const created: Alert = { ...alert, id: args.createId(), createdAt: args.now() };
+    const created: Alert = {
+      ...alert,
+      id: args.createId(),
+      createdAt: args.now(),
+    };
     if (!store.insert(created)) return null;
     queueRing(created);
     return created;
@@ -284,13 +293,19 @@ export function createAlertEngine(args: AlertEngineArgs) {
     let changed = removed.length > 0;
     changed = (await reconcileInteractions(thread.id)) || changed;
     const settings = await args.getSettings();
-    const enabled = kind === "done" ? settings.alertOnDone : settings.alertOnErrors;
-    if (enabled && isVisible(thread) && alertsForChildThread(thread, settings)) {
+    const enabled =
+      kind === "done" ? settings.alertOnDone : settings.alertOnErrors;
+    if (
+      enabled &&
+      isVisible(thread) &&
+      alertsForChildThread(thread, settings)
+    ) {
       changed =
         addAlert({
           threadId: thread.id,
           projectId: thread.projectId,
           interactionId: null,
+          terminalId: null,
           kind,
           title: truncate(
             kind === "done"
@@ -317,6 +332,7 @@ export function createAlertEngine(args: AlertEngineArgs) {
         threadId: thread.id,
         projectId: thread.projectId,
         interactionId: interaction.id,
+        terminalId: null,
         kind: described.kind,
         title: truncate(threadTitle(thread), TITLE_MAX_LENGTH),
         body: truncate(described.body, BODY_MAX_LENGTH),
@@ -347,6 +363,33 @@ export function createAlertEngine(args: AlertEngineArgs) {
 
     async onThreadEvents(threadId: string): Promise<void> {
       if (await reconcileInteractions(threadId)) publishChanged();
+    },
+
+    async onTerminalFinished({
+      terminal,
+      name,
+      message,
+    }: TerminalFinished): Promise<void> {
+      if (terminal.threadId === null) return;
+      const settings = await args.getSettings();
+      if (!settings.alertOnTerminals) return;
+      const thread = await bb.sdk.threads.get({ threadId: terminal.threadId });
+      if (!isVisible(thread)) return;
+      store.removeForTerminal(terminal.id);
+      addAlert({
+        threadId: thread.id,
+        projectId: thread.projectId,
+        interactionId: null,
+        terminalId: terminal.id,
+        kind: "done",
+        title: truncate(`Terminal finished: ${name}`, TITLE_MAX_LENGTH),
+        body: truncate(message ?? threadTitle(thread), BODY_MAX_LENGTH),
+      });
+      publishChanged();
+    },
+
+    onTerminalInput(terminalId: string): void {
+      if (store.removeForTerminal(terminalId).length > 0) publishChanged();
     },
 
     onThreadGone(threadId: string): void {
@@ -414,6 +457,7 @@ export function createAlertEngine(args: AlertEngineArgs) {
         threadId: null,
         projectId: null,
         interactionId: null,
+        terminalId: null,
         kind,
         ...TEST_ALERTS[kind],
       });

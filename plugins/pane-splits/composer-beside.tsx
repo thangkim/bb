@@ -53,10 +53,12 @@ export function splitComposerRight(anchor: HTMLAnchorElement | null): boolean {
 export function openComposerBeside(
   navigate: BbNavigate,
   projectId: string | null,
+  environmentId: string | null,
 ): boolean {
   const split = splitComposerRight(composeAnchor);
   navigate.toCompose({
     ...(projectId === null ? {} : { projectId }),
+    ...(environmentId === null ? {} : { environmentId }),
     focusPrompt: true,
   });
   return split;

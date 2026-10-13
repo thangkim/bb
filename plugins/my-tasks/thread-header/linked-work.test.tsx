@@ -147,6 +147,18 @@ describe("thread header linked work", () => {
     },
   );
 
+  it("keeps a chip drag from starting the pane header's split drag", async () => {
+    const slot = renderHeader({ tasks: [task], projects: [] });
+    const button = await slot.findByRole("button", {
+      name: "Task LCH-1: Write the launch post",
+    });
+    const headerPointerDown = vi.fn();
+    button.parentElement!.addEventListener("pointerdown", headerPointerDown);
+
+    fireEvent.pointerDown(button, { button: 0 });
+    expect(headerPointerDown).not.toHaveBeenCalled();
+  });
+
   it("renders nothing when the thread is not attached", async () => {
     const slot = renderHeader({ tasks: [], projects: [] });
     await waitFor(() =>

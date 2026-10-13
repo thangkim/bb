@@ -26,6 +26,16 @@ export function resolveLinkedWork(links: {
   return null;
 }
 
+function stopPointerDown(event: PointerEvent) {
+  event.stopPropagation();
+}
+
+function stopPointerDownAtChip(button: HTMLButtonElement | null) {
+  if (button === null) return;
+  button.addEventListener("pointerdown", stopPointerDown);
+  return () => button.removeEventListener("pointerdown", stopPointerDown);
+}
+
 function LinkedWorkBadge({
   threadId,
   projectId,
@@ -64,6 +74,7 @@ function LinkedWorkBadge({
         work.kind === "project" ? work.project.color : undefined
       }
       onClick={() => openThreadLinks({ threadId, projectId })}
+      ref={stopPointerDownAtChip}
       {...threadDragProps(
         threadId,
         work.kind === "task"

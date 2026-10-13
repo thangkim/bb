@@ -8,6 +8,7 @@ import {
   useRealtimeConnectionState,
   useRpc,
   useSettings,
+  type PluginThreadHeaderActionProps,
 } from "@get-bb/plugin-sdk/app";
 import {
   ALERTS_CHANGED_CHANNEL,
@@ -18,6 +19,11 @@ import {
   type attentionAlertsRpcContract,
 } from "./contract.js";
 import { createAlertAudio, type AlertAudio } from "./audio.js";
+import {
+  requestTerminalOpen,
+  takeTerminalOpen,
+  useTerminalOpenRequests,
+} from "./terminal-open.js";
 import type { AlertSound } from "./sounds.js";
 import {
   clientKind,
@@ -28,6 +34,8 @@ import {
 
 const WEB_CLAIM_DELAY_MS = 300;
 const COLLAPSED_LIMIT = 3;
+const TERMINAL_OPEN_ATTEMPTS = 5;
+const TERMINAL_OPEN_RETRY_MS = 300;
 const SOUND_PRIORITY: readonly AlertSound[] = ["attention", "error", "done"];
 
 interface ClientSettings {
@@ -172,7 +180,14 @@ function AttentionOverlay() {
   const open = useCallback(
     (alert: Alert) => {
       window.focus();
-      if (alert.threadId !== null) navigate.toThread(alert.threadId);
+      if (alert.threadId === null) return;
+      if (alert.terminalId !== null) {
+        requestTerminalOpen({
+          threadId: alert.threadId,
+          terminalId: alert.terminalId,
+        });
+      }
+      navigate.toThread(alert.threadId);
     },
     [navigate],
   );
@@ -228,7 +243,10 @@ function AttentionOverlay() {
 
   const previousConnection = useRef(connection);
   useEffect(() => {
-    if (previousConnection.current !== "connected" && connection === "connected") {
+    if (
+      previousConnection.current !== "connected" &&
+      connection === "connected"
+    ) {
       void refresh();
     }
     previousConnection.current = connection;
@@ -247,19 +265,27 @@ function AttentionOverlay() {
       const current = settingsRef.current;
       const viewing = threadIdRef.current;
       let pending = ring.alerts;
-      if (current.clearFinishedOnOpen && viewing !== null && document.hasFocus()) {
+      if (
+        current.clearFinishedOnOpen &&
+        viewing !== null &&
+        document.hasFocus()
+      ) {
         const seen = pending.filter(
           (alert) => isStateAlert(alert) && alert.threadId === viewing,
         );
         for (const alert of seen) {
-          await rpc.call("alerts.dismiss", { id: alert.id }).catch(() => undefined);
+          await rpc
+            .call("alerts.dismiss", { id: alert.id })
+            .catch(() => undefined);
         }
         pending = pending.filter((alert) => !seen.includes(alert));
       }
       if (pending.length === 0) return;
       if (current.sound && !(await audioRef.current?.ready())) return;
       if (kind === "web") await delay(WEB_CLAIM_DELAY_MS);
-      const { claimed } = await rpc.call("rings.claim", { ringId: ring.ringId });
+      const { claimed } = await rpc.call("rings.claim", {
+        ringId: ring.ringId,
+      });
       if (!claimed) return;
       if (current.sound) {
         await audioRef.current?.play(pickSound(pending), current.volume / 100);
@@ -353,6 +379,30 @@ function AttentionOverlay() {
       ) : null}
     </section>
   );
+}
+
+function TerminalOpener({ threadId }: PluginThreadHeaderActionProps) {
+  const navigate = useBbNavigate();
+  const requests = useTerminalOpenRequests();
+  useEffect(() => {
+    const terminalId = takeTerminalOpen(threadId);
+    if (terminalId === null) return;
+    let cancelled = false;
+    void (async () => {
+      for (let attempt = 0; attempt < TERMINAL_OPEN_ATTEMPTS; attempt += 1) {
+        if (cancelled) return;
+        const opened = await navigate
+          .experimental_openTerminal({ terminalId })
+          .catch(() => false);
+        if (opened) return;
+        await delay(TERMINAL_OPEN_RETRY_MS);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate, requests, threadId]);
+  return null;
 }
 
 function AttentionSettings() {
@@ -478,4 +528,9 @@ export default definePluginApp((app) => {
     component: AttentionOverlay,
   });
   app.slots.settingsSection({ id: "device", component: AttentionSettings });
+  app.slots.experimental_threadHeaderAction({
+    id: "terminal-opener",
+    title: "Open terminal from alert",
+    component: TerminalOpener,
+  });
 });

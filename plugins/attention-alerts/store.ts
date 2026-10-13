@@ -32,6 +32,8 @@ const MIGRATIONS = [
   `ALTER TABLE alerts_next RENAME TO alerts`,
   `CREATE INDEX alerts_thread ON alerts(thread_id)`,
   `CREATE UNIQUE INDEX alerts_interaction ON alerts(interaction_id) WHERE interaction_id IS NOT NULL`,
+  `ALTER TABLE alerts ADD COLUMN terminal_id TEXT`,
+  `CREATE INDEX alerts_terminal ON alerts(terminal_id) WHERE terminal_id IS NOT NULL`,
 ];
 
 const rowSchema = z.object({
@@ -39,6 +41,7 @@ const rowSchema = z.object({
   thread_id: z.string().nullable(),
   project_id: z.string().nullable(),
   interaction_id: z.string().nullable(),
+  terminal_id: z.string().nullable(),
   kind: alertKindSchema,
   title: z.string(),
   body: z.string().nullable(),
@@ -52,6 +55,7 @@ function toAlert(row: unknown): Alert {
     threadId: parsed.thread_id,
     projectId: parsed.project_id,
     interactionId: parsed.interaction_id,
+    terminalId: parsed.terminal_id,
     kind: parsed.kind,
     title: parsed.title,
     body: parsed.body,
@@ -69,7 +73,7 @@ export function createAlertStore(bb: BbPluginApi) {
   bb.storage.migrate(db, MIGRATIONS);
 
   const selectColumns =
-    "id, thread_id, project_id, interaction_id, kind, title, body, created_at";
+    "id, thread_id, project_id, interaction_id, terminal_id, kind, title, body, created_at";
 
   function placeholders(count: number): string {
     return Array.from({ length: count }, () => "?").join(", ");
@@ -96,14 +100,15 @@ export function createAlertStore(bb: BbPluginApi) {
       const result = db
         .prepare(
           `INSERT OR IGNORE INTO alerts
-            (id, thread_id, project_id, interaction_id, kind, title, body, created_at, last_rung_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, thread_id, project_id, interaction_id, terminal_id, kind, title, body, created_at, last_rung_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           alert.id,
           alert.threadId,
           alert.projectId,
           alert.interactionId,
+          alert.terminalId,
           alert.kind,
           alert.title,
           alert.body,
@@ -125,9 +130,16 @@ export function createAlertStore(bb: BbPluginApi) {
       if (kinds.length === 0) return [];
       return db
         .prepare(
-          `DELETE FROM alerts WHERE thread_id = ? AND kind IN (${placeholders(kinds.length)}) RETURNING id`,
+          `DELETE FROM alerts WHERE thread_id = ? AND terminal_id IS NULL AND kind IN (${placeholders(kinds.length)}) RETURNING id`,
         )
         .all(threadId, ...kinds)
+        .map((row) => idRowSchema.parse(row).id);
+    },
+
+    removeForTerminal(terminalId: string): string[] {
+      return db
+        .prepare(`DELETE FROM alerts WHERE terminal_id = ? RETURNING id`)
+        .all(terminalId)
         .map((row) => idRowSchema.parse(row).id);
     },
 

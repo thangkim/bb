@@ -79,16 +79,18 @@ describe("splitComposerRight", () => {
 });
 
 describe("openComposerBeside", () => {
-  it("splits first, then selects the project and focuses the prompt", () => {
+  it("splits first, then selects the project and environment and focuses the prompt", () => {
     renderAnchor();
     const host = captureClicks(true);
     const { calls, navigate } = fakeNavigate();
 
-    expect(openComposerBeside(navigate, "proj_a")).toBe(true);
+    expect(openComposerBeside(navigate, "proj_a", "env_a")).toBe(true);
     host.dispose();
 
     expect(host.clicks).toHaveLength(1);
-    expect(calls).toEqual([{ projectId: "proj_a", focusPrompt: true }]);
+    expect(calls).toEqual([
+      { projectId: "proj_a", environmentId: "env_a", focusPrompt: true },
+    ]);
   });
 
   it("falls back to bb's New thread screen once the anchor unmounts", () => {
@@ -97,7 +99,7 @@ describe("openComposerBeside", () => {
     const host = captureClicks(true);
     const { calls, navigate } = fakeNavigate();
 
-    expect(openComposerBeside(navigate, null)).toBe(false);
+    expect(openComposerBeside(navigate, null, null)).toBe(false);
     host.dispose();
 
     expect(host.clicks).toEqual([]);

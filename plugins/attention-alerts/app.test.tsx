@@ -87,6 +87,7 @@ function alert(overrides: Partial<Alert> = {}): Alert {
     threadId: "thread-1",
     projectId: "project-1",
     interactionId: null,
+    terminalId: null,
     kind: "question",
     title: "Fix the flaky test",
     body: "Which database should I use?",
@@ -110,6 +111,57 @@ function overlay() {
   if (!registration) throw new Error("Expected the alerts overlay");
   return registration;
 }
+
+function terminalOpener() {
+  const registration = app.threadHeaderActions[0];
+  if (!registration) throw new Error("Expected the terminal opener");
+  return registration;
+}
+
+describe("terminal alerts", () => {
+  it("opens the alert's thread, then its terminal in that thread's panel", async () => {
+    const terminalAlert = alert({
+      kind: "done",
+      terminalId: "terminal-7",
+      title: "Terminal finished: Fix the bug",
+    });
+    const slot = renderSlot(
+      overlay(),
+      {},
+      {
+        rpc: { "alerts.list": () => ({ alerts: [terminalAlert] }) },
+        settings: { clearFinishedOnOpen: false },
+      },
+    );
+    fireEvent.click(await slot.findByText("Terminal finished: Fix the bug"));
+    expect(slot.inspection.navigateCalls).toContainEqual({
+      method: "toThread",
+      threadId: "thread-1",
+    });
+
+    const other = renderSlot(terminalOpener(), {
+      threadId: "thread-2",
+      projectId: "project-1",
+      isCompactViewport: false,
+    });
+    const header = renderSlot(
+      terminalOpener(),
+      {
+        threadId: "thread-1",
+        projectId: "project-1",
+        isCompactViewport: false,
+      },
+      { openTerminal: () => true },
+    );
+    await waitFor(() =>
+      expect(header.inspection.navigateCalls).toContainEqual({
+        method: "experimental_openTerminal",
+        options: { terminalId: "terminal-7" },
+      }),
+    );
+    expect(other.inspection.navigateCalls).toEqual([]);
+  });
+});
 
 describe("attention overlay", () => {
   it("stacks open alerts newest first and dismisses or opens them", async () => {
@@ -163,9 +215,7 @@ describe("attention overlay", () => {
     });
 
     fireEvent.click(slot.getByLabelText("Dismiss Failed to deploy"));
-    await waitFor(() =>
-      expect(slot.getAllByRole("listitem")).toHaveLength(3),
-    );
+    await waitFor(() => expect(slot.getAllByRole("listitem")).toHaveLength(3));
     expect(slot.inspection.rpcCalls).toContainEqual({
       method: "alerts.dismiss",
       input: { id: "a2" },
@@ -199,9 +249,7 @@ describe("attention overlay", () => {
       }),
       expect.objectContaining({ tag: "bb-attention-a2" }),
     ]);
-    expect(FakeNotification.instances[0]?.title).toBe(
-      "Fix the flaky test",
-    );
+    expect(FakeNotification.instances[0]?.title).toBe("Fix the flaky test");
 
     await act(async () => FakeNotification.instances[1]?.onclick?.());
     expect(slot.inspection.navigateCalls).toContainEqual({
