@@ -3,6 +3,7 @@ import {
   makePluginAgentConfigurationContext,
 } from "@get-bb/plugin-sdk/testing";
 import { describe, expect, it } from "vitest";
+import { registerAgentConfiguration } from "../agents";
 import { createStore } from "../api";
 import { readBrief } from "./brief";
 import {
@@ -19,6 +20,7 @@ function setup() {
   });
   const store = createStore(bb);
   registerProjectBrief(bb, store);
+  registerAgentConfiguration(bb, store, () => false);
   const project = store.tasks.createProject({
     name: "Connect repo",
     prefix: "PRD",

@@ -36,7 +36,10 @@ import {
   useTaskListMeta,
 } from "../list/data.js";
 import { TaskChecklist, ThreadRow } from "../tasks/checklist.js";
+import { cn } from "@/lib/utils";
 import { ProjectThreadList } from "../tasks/project-threads.js";
+import { useThreadDropTarget } from "../tasks/move-thread.js";
+import { byRecentActivity, useThreadActivity } from "../tasks/thread-order.js";
 import { DelayedLoading } from "@/components/ui/delayed-loading";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -92,18 +95,33 @@ function ProjectThreads({
 }) {
   const tasks = useProjectTasks(projectId);
   const meta = useTaskListMeta(tasks.data);
-  const rows = useMemo(
-    () =>
-      (tasks.data ?? []).flatMap((task) =>
-        (meta.data?.get(task.id)?.threads ?? []).map((thread) => ({
-          task,
-          thread,
-        })),
-      ),
-    [tasks.data, meta.data],
+  const activity = useThreadActivity();
+  const rows = useMemo(() => {
+    const tasksById = new Map(
+      (tasks.data ?? []).map((task) => [task.id, task]),
+    );
+    const threads = (tasks.data ?? []).flatMap(
+      (task) => meta.data?.get(task.id)?.threads ?? [],
+    );
+    return byRecentActivity(threads, activity).flatMap((thread) => {
+      const task = tasksById.get(thread.taskId);
+      return task ? [{ task, thread }] : [];
+    });
+  }, [tasks.data, meta.data, activity]);
+  const threadDrop = useThreadDropTarget(
+    { kind: "project", projectId },
+    onError,
   );
   return (
-    <section className="mt-8">
+    <section
+      className={cn(
+        "-mx-1.5 mt-8 rounded-md px-1.5",
+        threadDrop.over &&
+          "bg-surface-selected outline-2 -outline-offset-2 outline-dashed outline-input",
+      )}
+      data-thread-drop-target={threadDrop.over || undefined}
+      {...threadDrop.props}
+    >
       <h2 className="mb-2 text-xs font-semibold text-muted-foreground">
         Threads
       </h2>
@@ -314,6 +332,7 @@ function ProjectDetail({
               projects={projects}
               labels={labels.data}
               onError={push}
+              alwaysShowCompleted
             />
           </section>
 

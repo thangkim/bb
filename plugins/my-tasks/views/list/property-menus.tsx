@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   PROJECT_STATUSES,
   type Label,
@@ -31,6 +31,7 @@ import {
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import type { TaskEdit } from "./optimistic.js";
+import { DueDateCalendar } from "./due-date-calendar.js";
 import {
   PriorityIcon,
   PriorityTag,
@@ -224,7 +225,7 @@ export function DueDateChip({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        className="min-w-44"
+        className="w-60"
         mobileTitle="Due date"
       >
         {DUE_DATE_PRESETS.map(([label, days]) => {
@@ -238,6 +239,12 @@ export function DueDateChip({
             </DropdownMenuItem>
           );
         })}
+        <DropdownMenuSeparator />
+        <DueDateCalendar
+          dueDate={dueDate}
+          onChange={onChange}
+          Item={DropdownMenuItem}
+        />
         {dueDate !== null ? (
           <>
             <DropdownMenuSeparator />
@@ -265,7 +272,7 @@ function DueDateSubmenu({
         <Icon name="Clock" className="size-3.5" />
         <span>Due date</span>
       </ContextMenuSubTrigger>
-      <ContextMenuSubContent className="min-w-44">
+      <ContextMenuSubContent className="w-60">
         {DUE_DATE_PRESETS.map(([label, days]) => {
           const value = localIsoDate(days);
           return (
@@ -277,6 +284,12 @@ function DueDateSubmenu({
             </ContextMenuItem>
           );
         })}
+        <ContextMenuSeparator />
+        <DueDateCalendar
+          dueDate={dueDate}
+          onChange={onChange}
+          Item={ContextMenuItem}
+        />
         {dueDate !== null ? (
           <>
             <ContextMenuSeparator />
@@ -398,6 +411,7 @@ export function TaskContextMenu({
   projectLabels,
   otherProjects,
   onMoveToProject,
+  onRename,
   children,
 }: {
   task: Task;
@@ -406,9 +420,11 @@ export function TaskContextMenu({
   projectLabels: readonly Label[];
   otherProjects: readonly Project[];
   onMoveToProject: (projectId: string) => void;
+  onRename: () => void;
   children: ReactNode;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const renameRequested = useRef(false);
   const done = task.status === "done";
   const toggleLabel = (labelId: string) => {
     const labelIds = task.labelIds.includes(labelId)
@@ -419,12 +435,29 @@ export function TaskContextMenu({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent className="min-w-44">
+      <ContextMenuContent
+        className="min-w-44"
+        onCloseAutoFocus={(event) => {
+          if (!renameRequested.current) return;
+          renameRequested.current = false;
+          event.preventDefault();
+        }}
+      >
         <ContextMenuItem
           onSelect={() => onEdit(task, { status: done ? "todo" : "done" })}
         >
           <TaskCheckbox done={!done} />
           <span>{done ? "Mark as not done" : "Mark as done"}</span>
+        </ContextMenuItem>
+
+        <ContextMenuItem
+          onSelect={() => {
+            renameRequested.current = true;
+            onRename();
+          }}
+        >
+          <Icon name="Edit" className="size-3.5" />
+          <span>Rename</span>
         </ContextMenuItem>
 
         <DueDateSubmenu

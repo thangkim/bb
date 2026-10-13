@@ -144,6 +144,7 @@ interface Fixture {
   settings?: Record<string, boolean>;
   threadLinks?: Record<string, { tasks: Task[]; projects: Project[] }>;
   focusedThreadId?: string;
+  threadUpdatedAt?: Record<string, number>;
 }
 
 async function openFilterSubmenu(
@@ -162,8 +163,10 @@ function renderList(fixture: Fixture = {}) {
   const archived = new Set(fixture.archivedThreadIds ?? []);
   const unarchivedThreadIds = new Set([
     ...(fixture.sidebarThreadIds ?? []),
-    ...Object.values(fixture.threadsByProject ?? {})
-      .flat()
+    ...[
+      ...Object.values(fixture.threadsByTask ?? {}).flat(),
+      ...Object.values(fixture.threadsByProject ?? {}).flat(),
+    ]
       .map((thread) => thread.threadId)
       .filter((threadId) => !archived.has(threadId)),
   ]);
@@ -178,7 +181,14 @@ function renderList(fixture: Fixture = {}) {
       fixture.renamedThreads?.[threadId] ??
       storedTitles.get(threadId) ??
       "Worker";
-    return { ...makeSidebarThread(threadId), title, displayTitle: title };
+    return {
+      ...makeSidebarThread(threadId),
+      title,
+      displayTitle: title,
+      ...(fixture.threadUpdatedAt?.[threadId] === undefined
+        ? {}
+        : { updatedAt: fixture.threadUpdatedAt[threadId] }),
+    };
   };
   const tasks = [...(fixture.tasks ?? [task(1), task(2, "done")])];
   return renderSlot(
@@ -314,23 +324,15 @@ function renderList(fixture: Fixture = {}) {
           tasks[index] = updated;
           return { task: updated };
         },
-        reorderProjectThread: (raw: unknown) => {
-          const input = rpcInput(raw);
-          const threads = fixture.threadsByProject?.[input.projectId as string];
-          if (!threads) throw new Error("unknown project");
-          const index = threads.findIndex(
-            (entry) => entry.threadId === input.threadId,
-          );
-          const updated = {
-            ...threads[index]!,
-            position: positionBetween(
-              threads.find((entry) => entry.threadId === input.beforeThreadId),
-              threads.find((entry) => entry.threadId === input.afterThreadId),
-            ),
-          };
-          threads[index] = updated;
-          return { projectThread: updated };
-        },
+        taskThreadsAttach: (raw: unknown) => ({
+          threadId: rpcInput(raw).threadId,
+        }),
+        taskThreadsDetach: (raw: unknown) => ({
+          threadId: rpcInput(raw).threadId,
+        }),
+        projectThreadsDetach: (raw: unknown) => ({
+          threadId: rpcInput(raw).threadId,
+        }),
         updateTask: (raw: unknown) => {
           const input = rpcInput(raw);
           const index = tasks.findIndex((entry) => entry.id === input.taskId);
@@ -542,6 +544,25 @@ describe("projects list", () => {
       name: "Mark Task 2 not done",
     });
     expect(done.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("lists done tasks after open ones when completed tasks are shown", async () => {
+    const slot = renderList({
+      settings: { showCompletedTasks: true },
+      tasks: [task(1, "done"), task(2), task(3)],
+    });
+    const row = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(row).getByRole("button", { name: "Show tasks" }));
+    await within(row).findByRole("checkbox", { name: "Mark Task 1 not done" });
+    expect(
+      within(row)
+        .getAllByRole("checkbox", { name: /^Mark Task \d/ })
+        .map((box) => box.getAttribute("aria-label")),
+    ).toEqual([
+      "Mark Task 2 done",
+      "Mark Task 3 done",
+      "Mark Task 1 not done",
+    ]);
   });
 
   it("hides a task checked off here only after the project is collapsed", async () => {
@@ -826,11 +847,10 @@ describe("projects list", () => {
     const sideChat = await within(row).findByRole("button", {
       name: "Why this test?",
     });
-    const [parent, other] = within(row).getAllByRole("button", {
-      name: "Worker — Working",
-    });
-    expect(parent?.parentElement?.contains(sideChat)).toBe(true);
-    expect(other?.parentElement?.contains(sideChat)).toBe(false);
+    const parent = row.querySelector('[data-task-thread-id="thr_W1"]');
+    const other = row.querySelector('[data-task-thread-id="thr_W2"]');
+    expect(parent?.contains(sideChat)).toBe(true);
+    expect(other?.contains(sideChat)).toBe(false);
     fireEvent.click(sideChat);
     expect(slot.navigateCalls).toContainEqual({
       method: "toThread",
@@ -894,6 +914,30 @@ describe("projects list", () => {
     expect(
       polish.querySelector(`[data-project-threads="${POLISH.id}"]`),
     ).toBeNull();
+  });
+
+  it("hides archived task threads from the task row", async () => {
+    const first = task(1);
+    const slot = renderList({
+      tasks: [first],
+      threadsByTask: {
+        [first.id]: [thread(first.id, "W1"), thread(first.id, "W2")],
+      },
+      archivedThreadIds: ["thr_W2"],
+    });
+    const row = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(row).getByRole("button", { name: "Show tasks" }));
+    const toggle = await within(row).findByRole("button", {
+      name: "Show attached threads",
+    });
+    await waitFor(() => expect(toggle.textContent).toContain("1"));
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(
+        row.querySelector('[data-task-thread-id="thr_W1"]'),
+      ).not.toBeNull(),
+    );
+    expect(row.querySelector('[data-task-thread-id="thr_W2"]')).toBeNull();
   });
 
   it("hides project threads until the row is expanded and keeps icon-only thread actions beside the due date", async () => {
@@ -1075,7 +1119,7 @@ describe("projects list", () => {
     );
   });
 
-  it("navigates to a thread the sidebar does not know", async () => {
+  it("opens a thread the sidebar does not know in a split", async () => {
     const first = task(1);
     const slot = renderList({
       tasks: [first],
@@ -1092,6 +1136,7 @@ describe("projects list", () => {
     expect(slot.navigateCalls).toContainEqual({
       method: "toThread",
       threadId: "thr_W1",
+      options: { split: true },
     });
   });
 
@@ -1334,51 +1379,163 @@ describe("projects list", () => {
     ).toBe(false);
   });
 
-  it("reorders a project's threads by dragging", async () => {
+  it("lists a project's threads by most recent activity first", async () => {
     const slot = renderList({
       threadsByProject: {
         [LAUNCH.id]: [
           { ...projectThread(LAUNCH.id, "P1"), position: 1024 },
           { ...projectThread(LAUNCH.id, "P2"), position: 2048 },
-          { ...projectThread(LAUNCH.id, "P3"), position: 3072 },
+          {
+            ...projectThread(LAUNCH.id, "P3"),
+            position: 3072,
+            attachedAt: "2026-07-16T00:00:00.000Z",
+          },
         ],
       },
+      threadUpdatedAt: { thr_P1: 100, thr_P2: 300 },
     });
     const source = await projectRow(slot, LAUNCH.id);
     fireEvent.click(within(source).getByRole("button", { name: "Show tasks" }));
-    const threadOrder = () =>
-      Array.from(source.querySelectorAll("[data-project-thread-id]")).map(
-        (row) => row.getAttribute("data-project-thread-id"),
-      );
     await waitFor(() =>
-      expect(threadOrder()).toEqual(["thr_P1", "thr_P2", "thr_P3"]),
+      expect(
+        Array.from(source.querySelectorAll("[data-project-thread-id]")).map(
+          (row) => row.getAttribute("data-project-thread-id"),
+        ),
+      ).toEqual(["thr_P2", "thr_P1", "thr_P3"]),
     );
+  });
 
+  it("lists a task's threads by most recent activity first", async () => {
+    const slot = renderList({
+      threadsByTask: {
+        [task(1).id]: [thread(task(1).id, "A"), thread(task(1).id, "B")],
+      },
+      sidebarThreadIds: ["thr_A", "thr_B"],
+      threadUpdatedAt: { thr_A: 100, thr_B: 200 },
+    });
+    const source = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(source).getByRole("button", { name: "Show tasks" }));
+    const taskRow = (await within(source).findByText("Task 1")).closest(
+      "[data-task-key]",
+    ) as HTMLElement;
+    fireEvent.click(
+      within(taskRow).getByRole("button", { name: "Show attached threads" }),
+    );
+    await waitFor(() =>
+      expect(
+        Array.from(taskRow.querySelectorAll("[data-task-thread-id]")).map(
+          (row) => row.getAttribute("data-task-thread-id"),
+        ),
+      ).toEqual(["thr_B", "thr_A"]),
+    );
+  });
+
+  it("moves a project's thread onto a task by dragging", async () => {
+    const slot = renderList({
+      threadsByProject: { [LAUNCH.id]: [projectThread(LAUNCH.id, "P1")] },
+    });
+    const source = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(source).getByRole("button", { name: "Show tasks" }));
+    const taskRow = (await within(source).findByText("Task 1")).closest(
+      "[data-task-key]",
+    ) as HTMLElement;
     const dataTransfer = fakeDataTransfer();
     fireEvent.dragStart(
-      source.querySelector('[data-project-thread-id="thr_P3"]') as HTMLElement,
+      await waitFor(
+        () =>
+          source.querySelector(
+            '[data-project-thread-id="thr_P1"]',
+          ) as HTMLElement,
+      ),
       { dataTransfer },
     );
-    dropOnUpperHalf(
-      source.querySelector('[data-project-thread-id="thr_P2"]') as HTMLElement,
-      dataTransfer,
-    );
+    fireEvent.dragOver(taskRow, { dataTransfer });
+    expect(taskRow.getAttribute("data-thread-drop-target")).toBe("true");
+    expect(source.getAttribute("data-thread-drop-target")).toBeNull();
+    fireEvent.drop(taskRow, { dataTransfer });
 
     await waitFor(() =>
-      expect(threadOrder()).toEqual(["thr_P1", "thr_P3", "thr_P2"]),
+      expect(
+        slot.rpcCalls
+          .filter((call) =>
+            ["taskThreadsAttach", "projectThreadsDetach"].includes(call.method),
+          )
+          .map((call) => [call.method, rpcInput(call.input)]),
+      ).toEqual([
+        ["taskThreadsAttach", { taskId: task(1).id, threadId: "thr_P1" }],
+        ["projectThreadsDetach", { projectId: LAUNCH.id, threadId: "thr_P1" }],
+      ]),
     );
+    expect(slot.rpcCalls.some((call) => call.method === "reorderTask")).toBe(
+      false,
+    );
+  });
+
+  it("moves a task's thread onto another project by dragging", async () => {
+    const slot = renderList({
+      threadsByTask: { [task(1).id]: [thread(task(1).id, "A")] },
+      sidebarThreadIds: ["thr_A"],
+    });
+    const source = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(source).getByRole("button", { name: "Show tasks" }));
+    const taskRow = (await within(source).findByText("Task 1")).closest(
+      "[data-task-key]",
+    ) as HTMLElement;
+    fireEvent.click(
+      within(taskRow).getByRole("button", { name: "Show attached threads" }),
+    );
+    const dataTransfer = fakeDataTransfer();
+    fireEvent.dragStart(
+      await waitFor(
+        () =>
+          taskRow.querySelector('[data-task-thread-id="thr_A"]') as HTMLElement,
+      ),
+      { dataTransfer },
+    );
+    expect(dataTransfer.types).toEqual(["application/x-my-tasks-thread"]);
+    const target = await projectRow(slot, POLISH.id);
+    fireEvent.dragOver(target, { dataTransfer });
+    expect(target.getAttribute("data-thread-drop-target")).toBe("true");
+    fireEvent.drop(target, { dataTransfer });
+
+    await waitFor(() =>
+      expect(
+        slot.rpcCalls
+          .filter((call) =>
+            ["projectThreadsAttach", "taskThreadsDetach"].includes(call.method),
+          )
+          .map((call) => [call.method, rpcInput(call.input)]),
+      ).toEqual([
+        ["projectThreadsAttach", { projectId: POLISH.id, threadId: "thr_A" }],
+        ["taskThreadsDetach", { taskId: task(1).id, threadId: "thr_A" }],
+      ]),
+    );
+    expect(target.getAttribute("data-thread-drop-target")).toBeNull();
+  });
+
+  it("ignores a thread dropped back on its own project", async () => {
+    const slot = renderList({
+      threadsByProject: { [LAUNCH.id]: [projectThread(LAUNCH.id, "P1")] },
+    });
+    const source = await projectRow(slot, LAUNCH.id);
+    fireEvent.click(within(source).getByRole("button", { name: "Show tasks" }));
+    const dataTransfer = fakeDataTransfer();
+    fireEvent.dragStart(
+      await waitFor(
+        () =>
+          source.querySelector(
+            '[data-project-thread-id="thr_P1"]',
+          ) as HTMLElement,
+      ),
+      { dataTransfer },
+    );
+    fireEvent.drop(source, { dataTransfer });
+    await new Promise((resolve) => setTimeout(resolve, 20));
     expect(
-      slot.rpcCalls
-        .filter((call) => call.method === "reorderProjectThread")
-        .map((call) => rpcInput(call.input)),
-    ).toEqual([
-      {
-        projectId: LAUNCH.id,
-        threadId: "thr_P3",
-        beforeThreadId: "thr_P1",
-        afterThreadId: "thr_P2",
-      },
-    ]);
+      slot.rpcCalls.some((call) =>
+        ["projectThreadsAttach", "projectThreadsDetach"].includes(call.method),
+      ),
+    ).toBe(false);
   });
 
   it("ignores a task dropped back on its own project", async () => {

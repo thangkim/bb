@@ -136,11 +136,20 @@ and a report-back contract. Its installed skill tells it to inspect the task,
 leave substantive milestone comments, attach artifacts, and mark the task done
 when its criteria are met.
 
-Project task lists (an expanded row in the list, and the project page) hide
-done tasks by default. A task you check off stays visible until you collapse
-the project or leave the page, so you can undo it. Turn on **Show completed
-tasks** in Settings → Plugins → My Tasks, or run
-`bb plugin config my-tasks set showCompletedTasks true`, to always show them.
+The project page always lists every task, with done tasks after open ones. An
+expanded project row in the list hides done tasks by default. A task you check
+off there stays visible until you collapse the project, so you can undo it.
+Turn on **Show completed tasks** in Settings → Plugins → My Tasks, or run
+`bb plugin config my-tasks set showCompletedTasks true`, to always show them
+there too.
+
+New threads are tracked automatically. When a thread starts without a task or
+project attached, its agent picks the best-fitting open project (one linked to
+the thread's bb project, or one with no bb link), files a 2-5 word task modeled
+on your recent task titles, and attaches the thread to it. Side chats, forks,
+and child threads are skipped, and so is work that fits no project. Turn it off
+with **Track new threads as tasks** in Settings → Plugins → My Tasks, or
+`bb plugin config my-tasks set autoTrackThreads false`.
 
 When a thread is open in a split pane next to My Tasks, the list highlights
 the project it is attached to (directly, or through one of its tasks) with an
@@ -150,8 +159,13 @@ while you work in the My Tasks pane.
 
 Drag a task onto another project in the list (or use **Move to project** in its
 right-click menu) to move it there. Inside an expanded project row, drag a task
-above or below another task, or a project-level thread above or below another
-thread, to change their order. New project-level threads appear at the top.
+above or below another task to change their order.
+
+Threads attached to a task or project are listed by latest activity, most
+recent first. Drag a thread onto a task or a project row to move it there: it
+is attached to the target and detached from where it was. The task or project
+chip in a thread's header drags the same way, so you can move the open thread
+without finding it in the list.
 
 The list remembers which status sections you collapsed and which project rows
 you expanded, and the navigation sidebar remembers which folders you collapsed.

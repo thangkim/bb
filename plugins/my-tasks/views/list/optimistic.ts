@@ -1,6 +1,7 @@
 import type { Task, Priority, TaskStatus } from "../../shared/contract.js";
 
 export interface TaskEdit {
+  title?: string;
   status?: TaskStatus;
   priority?: Priority;
   dueDate?: string | null;
@@ -10,6 +11,7 @@ export interface TaskEdit {
 
 type EditField = keyof TaskEdit;
 const EDIT_FIELDS: readonly EditField[] = [
+  "title",
   "status",
   "priority",
   "dueDate",
@@ -49,6 +51,7 @@ export function applyEdit(task: Task, edit: TaskEdit | undefined): Task {
   if (edit === undefined || !hasFields(edit)) return task;
   return {
     ...task,
+    ...(edit.title !== undefined ? { title: edit.title } : {}),
     ...(edit.status !== undefined ? { status: edit.status } : {}),
     ...(edit.priority !== undefined ? { priority: edit.priority } : {}),
     ...(edit.dueDate !== undefined ? { dueDate: edit.dueDate } : {}),

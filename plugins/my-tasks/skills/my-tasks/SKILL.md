@@ -157,9 +157,14 @@ each renders its own card.
   --status done|todo`.
 - List display settings are plugin config, not `bb my-tasks` flags:
   `bb plugin config my-tasks set showCompletedTasks true` keeps done tasks in
-  project task lists, and
+  expanded project rows (the project page always shows them, after open
+  tasks), and
   `bb plugin config my-tasks set showCollapsedProjectThreads true` lists
   project threads on collapsed project rows. Both default to false.
+- `autoTrackThreads` (default true) gives a new thread with no task or project
+  attached the `my_tasks_track_thread` tool and instructions to file a 2-5 word
+  task in the best-fitting project. Call it once, before other work; it does
+  nothing when the thread is already attached to a task.
 - Repeatable options (`--label`, `--status`, `--priority`, `--add-label`,
   `--remove-label`) accept a repeated flag or one comma-separated list.
 - Unknown options and stray arguments are errors, never ignored, and every

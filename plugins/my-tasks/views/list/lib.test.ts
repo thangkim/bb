@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Label } from "../../shared/contract.js";
 import {
+  calendarWeeks,
+  shiftCalendarMonth,
   formatDueDate,
   groupProjectsByStatus,
   partitionLabels,
@@ -80,6 +82,42 @@ describe("partitionLabels", () => {
     expect(partitionLabels(labels, 1)).toEqual({
       visible: [labels[0]],
       hidden: [labels[1], labels[2]],
+    });
+  });
+});
+
+describe("calendarWeeks", () => {
+  it("lays out six Monday-first weeks padded with neighbouring months", () => {
+    const weeks = calendarWeeks({ year: 2026, month: 9 });
+    expect(weeks).toHaveLength(6);
+    expect(weeks[0]?.[0]).toEqual({
+      iso: "2026-09-28",
+      day: 28,
+      inMonth: false,
+    });
+    expect(weeks[0]?.[3]).toEqual({ iso: "2026-10-01", day: 1, inMonth: true });
+    expect(weeks[4]?.[5]).toEqual({
+      iso: "2026-10-31",
+      day: 31,
+      inMonth: true,
+    });
+    expect(weeks[5]?.[6]).toEqual({
+      iso: "2026-11-08",
+      day: 8,
+      inMonth: false,
+    });
+  });
+});
+
+describe("shiftCalendarMonth", () => {
+  it("rolls over year boundaries", () => {
+    expect(shiftCalendarMonth({ year: 2026, month: 11 }, 1)).toEqual({
+      year: 2027,
+      month: 0,
+    });
+    expect(shiftCalendarMonth({ year: 2026, month: 0 }, -1)).toEqual({
+      year: 2025,
+      month: 11,
     });
   });
 });

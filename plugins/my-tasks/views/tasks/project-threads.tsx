@@ -1,12 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { experimental_useSidebarThreads } from "@get-bb/plugin-sdk/app";
 import type { ProjectThread } from "../../shared/contract.js";
-import { errorMessage } from "../../shared/errors.js";
-import { useTasksRpc } from "../../shell/data.js";
 import { useProjectThreads } from "../list/data.js";
 import { isBusyThread, SideChatLinks } from "./side-chats.js";
 import { ThreadLink } from "./thread-link.js";
-import { DropLine, positionBetween, useReorderList } from "./reorder.js";
+import { threadDragProps } from "./move-thread.js";
+import { useThreadsByRecentActivity } from "./thread-order.js";
 import { AttachThreadPicker, NewThreadButton } from "./thread-actions.js";
 import { cn } from "@/lib/utils";
 
@@ -29,10 +28,10 @@ export function useUnarchivedThreadIds(): ReadonlySet<string> | null {
   }, [status, threads]);
 }
 
-export function withoutArchivedThreads(
-  threads: readonly ProjectThread[],
+export function withoutArchivedThreads<T extends { threadId: string }>(
+  threads: readonly T[],
   unarchivedThreadIds: ReadonlySet<string> | null,
-): readonly ProjectThread[] {
+): readonly T[] {
   if (unarchivedThreadIds === null) return threads;
   const visible = threads.filter((thread) =>
     unarchivedThreadIds.has(thread.threadId),
@@ -40,119 +39,11 @@ export function withoutArchivedThreads(
   return visible.length === threads.length ? threads : visible;
 }
 
-interface PositionOverride {
-  position: number;
-  gen: number;
-}
-
-type PositionOverrides = ReadonlyMap<string, PositionOverride>;
-
-export function pruneSettledOverrides(
-  overrides: PositionOverrides,
-  threads: readonly ProjectThread[],
-): PositionOverrides {
-  if (overrides.size === 0) return overrides;
-  const positions = new Map(
-    threads.map((thread) => [thread.id, thread.position]),
-  );
-  const next = new Map(
-    [...overrides].filter(([id, override]) => {
-      const position = positions.get(id);
-      return position !== undefined && position !== override.position;
-    }),
-  );
-  return next.size === overrides.size ? overrides : next;
-}
-
-export function orderedProjectThreads(
-  threads: readonly ProjectThread[],
-  overrides: PositionOverrides,
-): readonly ProjectThread[] {
-  if (overrides.size === 0) return threads;
-  return threads
-    .map((thread) => {
-      const override = overrides.get(thread.id);
-      return override ? { ...thread, position: override.position } : thread;
-    })
-    .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
-}
-
-function useReorderedProjectThreads(
-  projectId: string,
-  threads: readonly ProjectThread[],
-  onError: (message: string) => void,
-) {
-  const rpc = useTasksRpc();
-  const [overrides, setOverrides] = useState<PositionOverrides>(
-    () => new Map(),
-  );
-  const genRef = useRef(0);
-  const threadsRef = useRef(threads);
-  threadsRef.current = threads;
-  const onErrorRef = useRef(onError);
-  onErrorRef.current = onError;
-
-  useEffect(() => {
-    setOverrides((prev) => pruneSettledOverrides(prev, threads));
-  }, [threads]);
-
-  const settle = useCallback(
-    (id: string, gen: number, position: number | null) => {
-      setOverrides((prev) => {
-        if (prev.get(id)?.gen !== gen) return prev;
-        const next = new Map(prev);
-        if (position === null) next.delete(id);
-        else next.set(id, { position, gen });
-        return pruneSettledOverrides(next, threadsRef.current);
-      });
-    },
-    [],
-  );
-
-  const reorder = useCallback(
-    (
-      thread: ProjectThread,
-      before: ProjectThread | undefined,
-      after: ProjectThread | undefined,
-    ) => {
-      const gen = (genRef.current += 1);
-      setOverrides((prev) =>
-        new Map(prev).set(thread.id, {
-          position: positionBetween(before, after),
-          gen,
-        }),
-      );
-      void rpc
-        .call("reorderProjectThread", {
-          projectId,
-          threadId: thread.threadId,
-          beforeThreadId: before?.threadId ?? null,
-          afterThreadId: after?.threadId ?? null,
-        })
-        .then(
-          (result) => settle(thread.id, gen, result.projectThread.position),
-          (error: unknown) => {
-            settle(thread.id, gen, null);
-            onErrorRef.current(errorMessage(error));
-          },
-        );
-    },
-    [rpc, projectId, settle],
-  );
-
-  const ordered = useMemo(
-    () => orderedProjectThreads(threads, overrides),
-    [threads, overrides],
-  );
-  return { ordered, reorder };
-}
-
 interface ProjectThreadLinksProps {
   projectId: string;
   threads: readonly ProjectThread[];
   error: string | null;
   busyThreadIds: ReadonlySet<string>;
-  onError: (message: string) => void;
   className?: string;
   children?: React.ReactNode;
 }
@@ -162,26 +53,14 @@ export function ProjectThreadLinks({
   threads,
   error,
   busyThreadIds,
-  onError,
   className,
   children,
 }: ProjectThreadLinksProps) {
-  const { ordered, reorder } = useReorderedProjectThreads(
-    projectId,
-    threads,
-    onError,
-  );
-  const reorderList = useReorderList<ProjectThread>({
-    kind: "project-thread",
-    scopeId: projectId,
-    items: ordered,
-    onReorder: (thread, { before, after }) => reorder(thread, before, after),
-  });
+  const ordered = useThreadsByRecentActivity(threads);
   return (
     <div
       data-project-threads={projectId}
       className={cn("flex flex-col gap-0.5", className)}
-      {...reorderList.listProps}
     >
       {error !== null ? (
         <span className="text-xs text-destructive">{error}</span>
@@ -193,7 +72,10 @@ export function ProjectThreadLinks({
             key={thread.id}
             data-project-thread-id={thread.threadId}
             className="relative flex flex-col gap-0.5"
-            {...reorderList.itemProps(thread)}
+            {...threadDragProps(thread.threadId, {
+              kind: "project",
+              projectId,
+            })}
           >
             <ThreadLink
               threadId={thread.threadId}
@@ -202,7 +84,6 @@ export function ProjectThreadLinks({
               working={working}
             />
             <SideChatLinks threadId={thread.threadId} />
-            <DropLine placement={reorderList.dropPlacement(thread.id)} />
           </div>
         );
       })}
@@ -265,15 +146,13 @@ export function ProjectThreadList({
 }: ProjectThreadListProps) {
   const threads = useProjectThreads(projectId);
   const busyThreadIds = useBusyThreadIds();
-  const unarchivedThreadIds = useUnarchivedThreadIds();
   const attached = threads.data ?? [];
   return (
     <ProjectThreadLinks
       projectId={projectId}
-      threads={withoutArchivedThreads(attached, unarchivedThreadIds)}
+      threads={attached}
       error={threads.error}
       busyThreadIds={busyThreadIds}
-      onError={onError}
       className={className}
     >
       <ProjectThreadActions

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useSettings } from "@get-bb/plugin-sdk/app";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Tag01Icon from "@hugeicons/core-free-icons/Tag01Icon";
@@ -35,6 +35,12 @@ import { AttachThreadPicker, NewThreadButton } from "./thread-actions.js";
 import { SideChatLinks } from "./side-chats.js";
 import { ThreadLink } from "./thread-link.js";
 import { useMoveTaskToProject, writeDraggedTask } from "./move-task.js";
+import { threadDragProps, useThreadDropTarget } from "./move-thread.js";
+import { useThreadsByRecentActivity } from "./thread-order.js";
+import {
+  useUnarchivedThreadIds,
+  withoutArchivedThreads,
+} from "./project-threads.js";
 import {
   DropLine,
   useReorderList,
@@ -112,9 +118,18 @@ function LabelChips({
   );
 }
 
+const NO_THREADS: readonly TaskThread[] = [];
+
 export function ThreadRow({ thread }: { thread: TaskThread }) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5">
+    <div
+      data-task-thread-id={thread.threadId}
+      className="flex min-w-0 flex-col gap-0.5"
+      {...threadDragProps(thread.threadId, {
+        kind: "task",
+        taskId: thread.taskId,
+      })}
+    >
       <ThreadLink
         threadId={thread.threadId}
         title={thread.title}
@@ -136,10 +151,48 @@ interface TaskChecklistRowProps {
   pending: boolean;
   dragProps: ReorderItemProps;
   dropPlacement: DropPlacement | null;
+  unarchivedThreadIds: ReadonlySet<string> | null;
   onEdit: TaskEditFn;
   onDelete: () => void;
   onMoveToProject: (projectId: string) => void;
   onError: (message: string) => void;
+}
+
+function TaskTitleInput({
+  title,
+  onCommit,
+  onCancel,
+}: {
+  title: string;
+  onCommit: (title: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(title);
+  const settled = useRef(false);
+  const commit = () => {
+    if (settled.current) return;
+    settled.current = true;
+    onCommit(value.trim());
+  };
+  return (
+    <input
+      autoFocus
+      value={value}
+      aria-label="Task title"
+      onFocus={(event) => event.currentTarget.select()}
+      onChange={(event) => setValue(event.target.value)}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === "Enter") commit();
+        if (event.key === "Escape") {
+          settled.current = true;
+          onCancel();
+        }
+      }}
+      onBlur={commit}
+      className="h-5 min-w-0 flex-1 rounded-sm bg-transparent text-sm outline-none ring-1 ring-ring"
+    />
+  );
 }
 
 function TaskChecklistRow({
@@ -152,6 +205,7 @@ function TaskChecklistRow({
   pending,
   dragProps,
   dropPlacement,
+  unarchivedThreadIds,
   onEdit,
   onDelete,
   onMoveToProject,
@@ -160,9 +214,19 @@ function TaskChecklistRow({
   const navigation = useTasksNavigation();
   const [threadsOpen, setThreadsOpen] = useState(false);
   const [priorityOpen, setPriorityOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const done = task.status === "done";
-  const threads = meta?.threads ?? [];
+  const visibleThreads = useMemo(
+    () =>
+      withoutArchivedThreads(meta?.threads ?? NO_THREADS, unarchivedThreadIds),
+    [meta?.threads, unarchivedThreadIds],
+  );
+  const threads = useThreadsByRecentActivity(visibleThreads);
   const working = (meta?.activeThreads.length ?? 0) > 0;
+  const threadDrop = useThreadDropTarget(
+    { kind: "task", taskId: task.id },
+    onError,
+  );
   const activeThreadTask = useActiveThread().taskIds.has(task.id);
   return (
     <TaskContextMenu
@@ -172,11 +236,23 @@ function TaskChecklistRow({
       projectLabels={projectLabels}
       otherProjects={otherProjects}
       onMoveToProject={onMoveToProject}
+      onRename={() => setRenaming(true)}
     >
       <div
         data-task-key={task.key}
         aria-busy={pending || undefined}
         {...dragProps}
+        onDragOver={(event) => {
+          threadDrop.props.onDragOver(event);
+          dragProps.onDragOver(event);
+        }}
+        onDragLeave={threadDrop.props.onDragLeave}
+        onDrop={(event) => {
+          threadDrop.props.onDrop(event);
+          dragProps.onDrop(event);
+        }}
+        data-thread-drop-target={threadDrop.over || undefined}
+        draggable={!renaming}
         onDragStart={(event) => {
           event.stopPropagation();
           dragProps.onDragStart(event);
@@ -189,6 +265,8 @@ function TaskChecklistRow({
         className={cn(
           "relative -mx-1.5 rounded-md px-1.5 py-1",
           activeThreadTask && "bg-surface-selected",
+          threadDrop.over &&
+            "bg-surface-selected outline-2 -outline-offset-2 outline-dashed outline-input",
           pending && "opacity-70",
         )}
       >
@@ -203,16 +281,28 @@ function TaskChecklistRow({
           >
             <TaskCheckbox done={done} />
           </button>
-          <button
-            type="button"
-            onClick={() => navigation.go({ kind: "task", taskKey: task.key })}
-            className={cn(
-              "min-w-0 flex-1 cursor-pointer truncate text-left text-sm hover:underline",
-              done && "text-muted-foreground line-through",
-            )}
-          >
-            {task.title}
-          </button>
+          {renaming ? (
+            <TaskTitleInput
+              title={task.title}
+              onCommit={(title) => {
+                setRenaming(false);
+                if (title !== "" && title !== task.title)
+                  onEdit(task, { title });
+              }}
+              onCancel={() => setRenaming(false)}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigation.go({ kind: "task", taskKey: task.key })}
+              className={cn(
+                "min-w-0 flex-1 cursor-pointer truncate text-left text-sm hover:underline",
+                done && "text-muted-foreground line-through",
+              )}
+            >
+              {task.title}
+            </button>
+          )}
           {task.dueDate !== null ? (
             <DueDateChip
               dueDate={task.dueDate}
@@ -356,6 +446,7 @@ interface TaskChecklistProps {
   projects: readonly Project[] | undefined;
   labels: readonly Label[] | undefined;
   onError: (message: string) => void;
+  alwaysShowCompleted?: boolean;
   className?: string;
 }
 
@@ -364,12 +455,14 @@ export function TaskChecklist({
   projects,
   labels,
   onError,
+  alwaysShowCompleted = false,
   className,
 }: TaskChecklistProps) {
   const tasks = useProjectTasks(projectId);
   const meta = useTaskListMeta(tasks.data);
   const edits = useListTaskEdits(tasks.data, onError);
-  const showCompleted = readShowCompletedTasks(useSettings().values);
+  const showCompleted =
+    readShowCompletedTasks(useSettings().values) || alwaysShowCompleted;
   const [completedHere, setCompletedHere] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -386,7 +479,12 @@ export function TaskChecklist({
   const displayTasks = useMemo(() => {
     if (tasks.data === undefined) return undefined;
     const edited = sortItems(editedTasks(tasks.data, edits.entries), "manual");
-    if (showCompleted) return edited;
+    if (showCompleted) {
+      return [
+        ...edited.filter((task) => task.status !== "done"),
+        ...edited.filter((task) => task.status === "done"),
+      ];
+    }
     return edited.filter(
       (task) => task.status !== "done" || completedHere.has(task.id),
     );
@@ -409,6 +507,7 @@ export function TaskChecklist({
       ? projectId
       : null;
   const moveTask = useMoveTaskToProject(onError);
+  const unarchivedThreadIds = useUnarchivedThreadIds();
   const reorderList = useReorderList<Task>({
     kind: "task",
     scopeId: projectId,
@@ -445,6 +544,7 @@ export function TaskChecklist({
           pending={edits.pending.has(task.id)}
           dragProps={reorderList.itemProps(task)}
           dropPlacement={reorderList.dropPlacement(task.id)}
+          unarchivedThreadIds={unarchivedThreadIds}
           onEdit={editTask}
           onDelete={() => edits.remove(task)}
           onMoveToProject={(targetId) => moveTask(task.id, targetId)}

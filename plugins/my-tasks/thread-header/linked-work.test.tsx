@@ -3,6 +3,7 @@ import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { makeProject, makeTask } from "../test-fixtures.js";
+import { THREAD_DRAG_TYPE } from "../views/tasks/move-thread.js";
 import {
   closeThreadLinks,
   getThreadLinksTarget,
@@ -40,7 +41,10 @@ const otherTask = makeTask({
 
 function renderHeader(
   links: { tasks: (typeof task)[]; projects: (typeof project)[] },
-  options: { isCompactViewport?: boolean; openThreadPanel?: () => boolean } = {},
+  options: {
+    isCompactViewport?: boolean;
+    openThreadPanel?: () => boolean;
+  } = {},
 ) {
   const slot = app.threadHeaderActions.find(
     (entry) => entry.id === "linked-work",
@@ -111,6 +115,38 @@ describe("thread header linked work", () => {
     expect(slot.navigateCalls).toEqual([]);
   });
 
+  it.each([
+    {
+      links: { tasks: [task], projects: [project] },
+      name: "Task LCH-1: Write the launch post",
+      from: { kind: "task", taskId: task.id },
+    },
+    {
+      links: { tasks: [], projects: [otherProject] },
+      name: "Project Research",
+      from: { kind: "project", projectId: otherProject.id },
+    },
+  ])(
+    "drags the thread out of its $from.kind",
+    async ({ links, name, from }) => {
+      const slot = renderHeader(links);
+      const button = await slot.findByRole("button", { name });
+      expect(button.draggable).toBe(true);
+
+      const data = new Map<string, string>();
+      const dataTransfer = {
+        setData: (type: string, value: string) => data.set(type, value),
+        effectAllowed: "",
+      };
+      fireEvent.dragStart(button, { dataTransfer });
+      expect(JSON.parse(data.get(THREAD_DRAG_TYPE)!)).toEqual({
+        threadId: "thr_header",
+        from,
+      });
+      expect(dataTransfer.effectAllowed).toBe("move");
+    },
+  );
+
   it("renders nothing when the thread is not attached", async () => {
     const slot = renderHeader({ tasks: [], projects: [] });
     await waitFor(() =>
@@ -129,7 +165,11 @@ describe("thread header linked work", () => {
     };
     const slot = renderSlot(
       app.threadHeaderActions.find((entry) => entry.id === "linked-work")!,
-      { threadId: "thr_header", projectId: "proj_bb", isCompactViewport: false },
+      {
+        threadId: "thr_header",
+        projectId: "proj_bb",
+        isCompactViewport: false,
+      },
       { rpc: { listThreadLinks: () => links } },
     );
     await waitFor(() => expect(slot.inspection.rpcCalls).toHaveLength(1));

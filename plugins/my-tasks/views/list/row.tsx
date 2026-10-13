@@ -28,6 +28,7 @@ import {
   PROJECT_DRAG_TYPE,
   readDraggedTask,
 } from "../tasks/move-task.js";
+import { useThreadDropTarget } from "../tasks/move-thread.js";
 import {
   DueDateChip,
   isBareKey,
@@ -72,6 +73,10 @@ export function ProjectRow({
   isLastInSection,
 }: ProjectRowProps) {
   const [taskDragOver, setTaskDragOver] = useState(false);
+  const threadDrop = useThreadDropTarget(
+    { kind: "project", projectId: project.id },
+    onError,
+  );
   const [openMenu, setOpenMenu] = useState<"priority" | "dueDate" | null>(null);
   const [expandedProjects, toggleProjectExpanded] = usePersistedToggleSet(
     EXPANDED_PROJECTS_STORAGE_KEY,
@@ -93,8 +98,10 @@ export function ProjectRow({
       <div
         data-project-id={project.id}
         data-task-drop-target={taskDragOver || undefined}
+        data-thread-drop-target={threadDrop.over || undefined}
         data-active-thread-project={activeThreadProject || undefined}
         onDragOver={(event) => {
+          threadDrop.props.onDragOver(event);
           if (
             !isTaskDrag(event.dataTransfer) ||
             isReorderDragIn(event.dataTransfer, "task", project.id)
@@ -107,6 +114,7 @@ export function ProjectRow({
           setTaskDragOver(true);
         }}
         onDragLeave={(event) => {
+          threadDrop.props.onDragLeave(event);
           const next = event.relatedTarget;
           if (next instanceof Node && event.currentTarget.contains(next)) {
             return;
@@ -114,6 +122,7 @@ export function ProjectRow({
           setTaskDragOver(false);
         }}
         onDrop={(event) => {
+          threadDrop.props.onDrop(event);
           const dragged = readDraggedTask(event.dataTransfer);
           if (dragged === null) return;
           event.preventDefault();
@@ -125,7 +134,7 @@ export function ProjectRow({
           "group/project relative w-full text-left",
           activeThreadProject ? "bg-surface-selected" : "hover:bg-state-hover",
           !isLastInSection && "border-b border-border-hairline",
-          taskDragOver &&
+          (taskDragOver || threadDrop.over) &&
             "bg-surface-selected outline-2 -outline-offset-2 outline-dashed outline-input",
         )}
       >
@@ -239,7 +248,6 @@ export function ProjectRow({
                 threads={visibleThreads}
                 error={threadsError}
                 busyThreadIds={busyThreadIds}
-                onError={onError}
                 className={
                   expanded
                     ? "mb-1 border-b border-border-hairline pb-1.5"

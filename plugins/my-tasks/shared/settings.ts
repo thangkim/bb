@@ -14,3 +14,5 @@ export function readShowCollapsedProjectThreads(
 ): boolean {
   return values?.[SHOW_COLLAPSED_PROJECT_THREADS_SETTING] === true;
 }
+
+export const AUTO_TRACK_THREADS_SETTING = "autoTrackThreads";

@@ -1791,6 +1791,15 @@ export function createTasksStore(db: PluginDatabase) {
       .map(taskFromRow);
   }
 
+  function listRecentTaskTitles(limit: number): string[] {
+    return db
+      .prepare<[number], { title: string }>(
+        "SELECT title FROM tasks ORDER BY created_at DESC, id DESC LIMIT ?",
+      )
+      .all(limit)
+      .map((row) => row.title);
+  }
+
   function listProjectsByThreadId(threadId: string): Project[] {
     return db
       .prepare<[string], ProjectRow>(
@@ -2252,6 +2261,7 @@ export function createTasksStore(db: PluginDatabase) {
     listProjectThreadsForProjects,
     reorderProjectThread,
     listProjectsByThreadId,
+    listRecentTaskTitles,
     deleteProjectThread,
     createPreset,
     getPreset,

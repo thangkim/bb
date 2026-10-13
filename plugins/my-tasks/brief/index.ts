@@ -242,14 +242,4 @@ export function registerProjectBrief(
       }
     },
   });
-
-  bb.agents.configure(({ thread }) => {
-    const instructions = briefInstructions(linkedProjects(store, thread.id));
-    if (instructions === null) return { tools: [], skills: [MY_TASKS_SKILL] };
-    return {
-      tools: [READ_BRIEF_TOOL, UPDATE_BRIEF_TOOL],
-      skills: [MY_TASKS_SKILL],
-      instructions,
-    };
-  });
 }

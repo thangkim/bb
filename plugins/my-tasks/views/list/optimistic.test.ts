@@ -31,6 +31,7 @@ describe("applyEdit / editedTasks", () => {
     expect(applyEdit(base, { status: "done" }).status).toBe("done");
     expect(applyEdit(base, { dueDate: null }).dueDate).toBeNull();
     expect(applyEdit(base, { position: 42 }).position).toBe(42);
+    expect(applyEdit(base, { title: "Renamed" }).title).toBe("Renamed");
     expect(applyEdit(base, { status: "done" }).dueDate).toBe("2026-07-20");
   });
 

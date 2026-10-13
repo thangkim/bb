@@ -1,8 +1,10 @@
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 
+import { registerAgentConfiguration } from "./agents";
 import { createStore, registerTasksApi } from "./api";
 import { registerAttachments } from "./attachments";
+import { registerAutoTrack } from "./auto-track";
 import { registerProjectBrief } from "./brief";
 import { registerTasksCli } from "./cli";
 import { registerDelegation } from "./delegate";
@@ -10,6 +12,7 @@ import { registerLifecycle } from "./lifecycle";
 import { registerMentions } from "./mentions";
 import { registerProjectMentions } from "./mentions/project-mentions";
 import {
+  AUTO_TRACK_THREADS_SETTING,
   SHOW_COLLAPSED_PROJECT_THREADS_SETTING,
   SHOW_COMPLETED_TASKS_SETTING,
 } from "./shared/settings";
@@ -31,12 +34,12 @@ function statusPayload() {
 export default async function plugin(bb: BbPluginApi) {
   bb.log.info(`${TASKS_PLUGIN_NAME} ${TASKS_PLUGIN_VERSION} loaded`);
 
-  bb.settings.define({
+  const settings = bb.settings.define({
     [SHOW_COMPLETED_TASKS_SETTING]: {
       type: "boolean",
       label: "Show completed tasks",
       description:
-        "Show done tasks in project task lists. When off, a task you check off stays visible until you collapse the project or leave the page.",
+        "Show done tasks in expanded project rows. When off, a task you check off stays visible until you collapse the project. The project page always shows done tasks.",
       default: false,
     },
     [SHOW_COLLAPSED_PROJECT_THREADS_SETTING]: {
@@ -46,6 +49,17 @@ export default async function plugin(bb: BbPluginApi) {
         "List each project's threads in the project list even when its row is collapsed. When off, a project's threads appear only after you expand its row.",
       default: false,
     },
+    [AUTO_TRACK_THREADS_SETTING]: {
+      type: "boolean",
+      label: "Track new threads as tasks",
+      description:
+        "When a new thread is not attached to any task or project, its agent files a concise task for the work in the best-fitting project and attaches the thread to it.",
+      default: true,
+    },
+  });
+  let autoTrackEnabled = (await settings.get())[AUTO_TRACK_THREADS_SETTING];
+  settings.onChange((next) => {
+    autoTrackEnabled = next[AUTO_TRACK_THREADS_SETTING];
   });
 
   const store = createStore(bb);
@@ -56,6 +70,8 @@ export default async function plugin(bb: BbPluginApi) {
   registerMentions(bb, store);
   registerProjectMentions(bb, store);
   registerProjectBrief(bb, store);
+  registerAutoTrack(bb, store);
+  registerAgentConfiguration(bb, store, () => autoTrackEnabled);
   await registerLifecycle(bb, store);
 
   bb.rpc.register(tasksRpcContract, {
