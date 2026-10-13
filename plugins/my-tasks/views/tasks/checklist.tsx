@@ -252,6 +252,7 @@ function TaskChecklistRow({
           dragProps.onDrop(event);
         }}
         data-thread-drop-target={threadDrop.over || undefined}
+        data-thread-drop-owner={threadDrop.props["data-thread-drop-owner"]}
         draggable={!renaming}
         onDragStart={(event) => {
           event.stopPropagation();

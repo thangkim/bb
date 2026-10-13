@@ -23,6 +23,7 @@ import {
   makeTask,
   rpcInput,
 } from "../../test-fixtures.js";
+import { beginPointerThreadDrag } from "../tasks/move-thread.js";
 import { positionBetween } from "../tasks/reorder.js";
 
 window.matchMedia = (query: string) => ({
@@ -558,11 +559,7 @@ describe("projects list", () => {
       within(row)
         .getAllByRole("checkbox", { name: /^Mark Task \d/ })
         .map((box) => box.getAttribute("aria-label")),
-    ).toEqual([
-      "Mark Task 2 done",
-      "Mark Task 3 done",
-      "Mark Task 1 not done",
-    ]);
+    ).toEqual(["Mark Task 2 done", "Mark Task 3 done", "Mark Task 1 not done"]);
   });
 
   it("hides a task checked off here only after the project is collapsed", async () => {
@@ -1508,6 +1505,48 @@ describe("projects list", () => {
       ).toEqual([
         ["projectThreadsAttach", { projectId: POLISH.id, threadId: "thr_A" }],
         ["taskThreadsDetach", { taskId: task(1).id, threadId: "thr_A" }],
+      ]),
+    );
+    expect(target.getAttribute("data-thread-drop-target")).toBeNull();
+  });
+
+  it("moves a thread dragged from its header chip onto another project", async () => {
+    const slot = renderList();
+    const target = await projectRow(slot, POLISH.id);
+    const elementsFromPoint = document.elementsFromPoint;
+    document.elementsFromPoint = () => [target];
+    try {
+      beginPointerThreadDrag(
+        new MouseEvent("pointerdown", {
+          button: 0,
+          clientX: 0,
+          clientY: 0,
+        }) as PointerEvent,
+        "thr_header",
+        { kind: "task", taskId: task(1).id },
+      );
+      fireEvent.pointerMove(window, { clientX: 40, clientY: 40 });
+      await waitFor(() =>
+        expect(target.getAttribute("data-thread-drop-target")).toBe("true"),
+      );
+      fireEvent.pointerUp(window, { clientX: 40, clientY: 40 });
+    } finally {
+      document.elementsFromPoint = elementsFromPoint;
+    }
+
+    await waitFor(() =>
+      expect(
+        slot.rpcCalls
+          .filter((call) =>
+            ["projectThreadsAttach", "taskThreadsDetach"].includes(call.method),
+          )
+          .map((call) => [call.method, rpcInput(call.input)]),
+      ).toEqual([
+        [
+          "projectThreadsAttach",
+          { projectId: POLISH.id, threadId: "thr_header" },
+        ],
+        ["taskThreadsDetach", { taskId: task(1).id, threadId: "thr_header" }],
       ]),
     );
     expect(target.getAttribute("data-thread-drop-target")).toBeNull();

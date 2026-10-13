@@ -163,9 +163,10 @@ above or below another task to change their order.
 
 Threads attached to a task or project are listed by latest activity, most
 recent first. Drag a thread onto a task or a project row to move it there: it
-is attached to the target and detached from where it was. The task or project
-chip in a thread's header drags the same way, so you can move the open thread
-without finding it in the list.
+is attached to the target and detached from where it was. Dragging the task or
+project chip in a thread's header works like dragging the thread's title: drop
+it on a pane edge to split, or on a task or project to move the open thread
+there.
 
 The list remembers which status sections you collapsed and which project rows
 you expanded, and the navigation sidebar remembers which folders you collapsed.

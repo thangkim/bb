@@ -5,7 +5,7 @@ import type { Project, Task } from "../shared/contract.js";
 import { useTasksQuery } from "../shell/data.js";
 import { TasksRefreshProvider } from "../shell/refresh.js";
 import { openThreadLinks } from "../thread-links/store.js";
-import { threadDragProps } from "../views/tasks/move-thread.js";
+import { beginPointerThreadDrag } from "../views/tasks/move-thread.js";
 
 type LinkedWork =
   | { kind: "task"; task: Task; extra: number }
@@ -24,16 +24,6 @@ export function resolveLinkedWork(links: {
     return { kind: "project", project, extra: otherProjects.length };
   }
   return null;
-}
-
-function stopPointerDown(event: PointerEvent) {
-  event.stopPropagation();
-}
-
-function stopPointerDownAtChip(button: HTMLButtonElement | null) {
-  if (button === null) return;
-  button.addEventListener("pointerdown", stopPointerDown);
-  return () => button.removeEventListener("pointerdown", stopPointerDown);
 }
 
 function LinkedWorkBadge({
@@ -65,7 +55,7 @@ function LinkedWorkBadge({
       type="button"
       aria-label={fullTitle}
       aria-haspopup="dialog"
-      title={`${fullTitle} — click to change, drag onto a task or project to move`}
+      title={`${fullTitle} — click to change, drag to split or onto a task or project to move`}
       data-linked-work-kind={work.kind}
       data-linked-work-label={
         work.kind === "task" ? work.task.title : work.project.name
@@ -74,13 +64,15 @@ function LinkedWorkBadge({
         work.kind === "project" ? work.project.color : undefined
       }
       onClick={() => openThreadLinks({ threadId, projectId })}
-      ref={stopPointerDownAtChip}
-      {...threadDragProps(
-        threadId,
-        work.kind === "task"
-          ? { kind: "task", taskId: work.task.id }
-          : { kind: "project", projectId: work.project.id },
-      )}
+      onPointerDown={(event) =>
+        beginPointerThreadDrag(
+          event.nativeEvent,
+          threadId,
+          work.kind === "task"
+            ? { kind: "task", taskId: work.task.id }
+            : { kind: "project", projectId: work.project.id },
+        )
+      }
       className="flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
     >
       {work.kind === "project" ? (

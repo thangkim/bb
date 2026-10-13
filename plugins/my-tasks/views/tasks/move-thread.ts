@@ -1,9 +1,17 @@
-import { useCallback, useEffect, useState, type DragEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type DragEvent,
+} from "react";
 import { useRpc } from "@get-bb/plugin-sdk/app";
 import type { DelegationRpcContract } from "../../delegate/contract.js";
 import { errorMessage } from "../../shared/errors.js";
 
 export const THREAD_DRAG_TYPE = "application/x-my-tasks-thread";
+export const THREAD_DROP_OWNER_ATTR = "data-thread-drop-owner";
+const POINTER_DRAG_ENGAGE_PX = 7;
 
 export type ThreadOwner =
   | { kind: "task"; taskId: string }
@@ -81,6 +89,125 @@ export function threadDragProps(threadId: string, from: ThreadOwner) {
   };
 }
 
+function ownerKey(owner: ThreadOwner): string {
+  return owner.kind === "task"
+    ? `task:${owner.taskId}`
+    : `project:${owner.projectId}`;
+}
+
+type PointerDropHandler = (dragged: DraggedThread) => void;
+
+const pointerDropHandlers = new Map<string, Set<PointerDropHandler>>();
+const pointerHoverListeners = new Set<() => void>();
+let pointerHoverKey: string | null = null;
+
+function setPointerHoverKey(key: string | null) {
+  if (key === pointerHoverKey) return;
+  pointerHoverKey = key;
+  for (const listener of pointerHoverListeners) listener();
+}
+
+function subscribePointerHover(listener: () => void) {
+  pointerHoverListeners.add(listener);
+  return () => {
+    pointerHoverListeners.delete(listener);
+  };
+}
+
+function pointerDropKeyAt(x: number, y: number): string | null {
+  for (const element of document.elementsFromPoint(x, y)) {
+    const target = element.closest(`[${THREAD_DROP_OWNER_ATTR}]`);
+    const key = target?.getAttribute(THREAD_DROP_OWNER_ATTR);
+    if (key) return key;
+  }
+  return null;
+}
+
+function hostSplitOverlay(): HTMLElement | null {
+  return (
+    document.querySelector<HTMLElement>("[data-split-drag-label]")
+      ?.parentElement ?? null
+  );
+}
+
+function forwardToPaneTitle(event: PointerEvent) {
+  if (!(event.target instanceof Element)) return;
+  const title = event.target
+    .closest("[data-split-pane-id]")
+    ?.querySelector<HTMLElement>("header p.cursor-grab");
+  if (!title) return;
+  title.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      button: event.button,
+      buttons: event.buttons,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      isPrimary: event.isPrimary,
+    }),
+  );
+}
+
+export function beginPointerThreadDrag(
+  event: PointerEvent,
+  threadId: string,
+  from: ThreadOwner,
+) {
+  if (event.button !== 0) return;
+  forwardToPaneTitle(event);
+  const fromKey = ownerKey(from);
+  const startX = event.clientX;
+  const startY = event.clientY;
+  let engaged = false;
+
+  const finish = () => {
+    window.removeEventListener("pointermove", onMove, true);
+    window.removeEventListener("pointerup", onUp, true);
+    window.removeEventListener("pointercancel", finish, true);
+    window.removeEventListener("keydown", onKeyDown, true);
+    const overlay = hostSplitOverlay();
+    if (overlay) overlay.style.visibility = "";
+    setPointerHoverKey(null);
+  };
+  const onMove = (move: PointerEvent) => {
+    if (!engaged) {
+      engaged =
+        Math.hypot(move.clientX - startX, move.clientY - startY) >
+        POINTER_DRAG_ENGAGE_PX;
+      if (!engaged) return;
+    }
+    const key = pointerDropKeyAt(move.clientX, move.clientY);
+    const target = key === fromKey ? null : key;
+    setPointerHoverKey(target);
+    const overlay = hostSplitOverlay();
+    if (overlay) overlay.style.visibility = target === null ? "" : "hidden";
+  };
+  const onUp = () => {
+    const key = pointerHoverKey;
+    finish();
+    if (key === null) return;
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Escape",
+        code: "Escape",
+        bubbles: true,
+      }),
+    );
+    const handler = pointerDropHandlers.get(key)?.values().next().value;
+    handler?.({ threadId, from });
+  };
+  const onKeyDown = (keydown: KeyboardEvent) => {
+    if (keydown.code === "Escape") finish();
+  };
+  window.addEventListener("pointermove", onMove, true);
+  window.addEventListener("pointerup", onUp, true);
+  window.addEventListener("pointercancel", finish, true);
+  window.addEventListener("keydown", onKeyDown, true);
+}
+
 export function useMoveThread(onError: (message: string) => void) {
   const rpc = useRpc<DelegationRpcContract>();
   return useCallback(
@@ -122,14 +249,39 @@ export function useThreadDropTarget(
   onError: (message: string) => void,
 ) {
   const moveThread = useMoveThread(onError);
-  const [over, setOver] = useState(false);
+  const [nativeOver, setOver] = useState(false);
+  const key = ownerKey(to);
+  const pointerOver = useSyncExternalStore(
+    subscribePointerHover,
+    () => pointerHoverKey === key,
+  );
+  const over = nativeOver || pointerOver;
+  const toKind = to.kind;
+  const toId = to.kind === "task" ? to.taskId : to.projectId;
   useEffect(() => {
-    if (!over) return;
+    const target: ThreadOwner =
+      toKind === "task"
+        ? { kind: "task", taskId: toId }
+        : { kind: "project", projectId: toId };
+    const handler: PointerDropHandler = (dragged) => {
+      void moveThread(dragged, target);
+    };
+    const handlers = pointerDropHandlers.get(key) ?? new Set();
+    handlers.add(handler);
+    pointerDropHandlers.set(key, handlers);
+    return () => {
+      handlers.delete(handler);
+      if (handlers.size === 0) pointerDropHandlers.delete(key);
+    };
+  }, [key, toKind, toId, moveThread]);
+  useEffect(() => {
+    if (!nativeOver) return;
     const reset = () => setOver(false);
     window.addEventListener("dragend", reset);
     return () => window.removeEventListener("dragend", reset);
-  }, [over]);
+  }, [nativeOver]);
   const props = {
+    [THREAD_DROP_OWNER_ATTR]: key,
     onDragOver: (event: DragEvent<HTMLElement>) => {
       if (!isThreadDrag(event.dataTransfer)) return;
       if (claimedDrops.has(event.nativeEvent)) {

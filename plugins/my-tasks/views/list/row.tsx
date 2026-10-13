@@ -99,6 +99,7 @@ export function ProjectRow({
         data-project-id={project.id}
         data-task-drop-target={taskDragOver || undefined}
         data-thread-drop-target={threadDrop.over || undefined}
+        data-thread-drop-owner={threadDrop.props["data-thread-drop-owner"]}
         data-active-thread-project={activeThreadProject || undefined}
         onDragOver={(event) => {
           threadDrop.props.onDragOver(event);
