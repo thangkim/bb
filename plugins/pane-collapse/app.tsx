@@ -38,6 +38,7 @@ import {
 } from "./collapsed-panes";
 import { usePaneLinkedWork } from "./linked-work";
 import { AttentionDot, MinimizedChip, paneLabel } from "./chip";
+import { installBridgedDividerDrag } from "./bridged-divider";
 import { readSplitDom, stampGridRoots } from "./split-dom";
 
 export const collapsedPanes = createCollapsedPaneStore();
@@ -319,7 +320,9 @@ export function CollapsedPaneOverlay() {
       }
     }
     apply();
+    const uninstallDrag = installBridgedDividerDrag(document);
     return () => {
+      uninstallDrag();
       observer.disconnect();
       style.remove();
       stampGridRoots([]);

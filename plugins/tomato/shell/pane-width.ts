@@ -4,6 +4,7 @@ export const PANE_WIDTH_STORAGE_KEY = "bb-tomato:pane-width";
 export const MIN_PANE_WIDTH_PX = 240;
 export const MIN_OTHER_PANES_WIDTH_PX = 240;
 const CELL_ATTRIBUTE = "data-tomato-pane-width";
+const ROW_ATTRIBUTE = "data-tomato-pane-row";
 const STYLE_ID = "bb-tomato-pane-width";
 const PANE_SELECTOR = "[data-split-pane-id]";
 const GRID_ROOT_SELECTOR = "[data-split-resize-grid-root]";
@@ -29,7 +30,10 @@ function readPaneWidth(): number | null {
 
 function storePaneWidth(width: number): void {
   try {
-    window.localStorage.setItem(PANE_WIDTH_STORAGE_KEY, String(Math.round(width)));
+    window.localStorage.setItem(
+      PANE_WIDTH_STORAGE_KEY,
+      String(Math.round(width)),
+    );
   } catch {}
 }
 
@@ -51,41 +55,94 @@ export function rowCellOf(element: Element): HTMLElement | null {
   return null;
 }
 
+interface RowSibling {
+  nthChild: number;
+  grow: number;
+}
+
 export interface RowMeasurement {
   rootWidth: number;
   fixedWidth: number;
-  otherGrow: number;
+  siblings: readonly RowSibling[];
 }
 
-export function pinnedFlexGrow(
+export interface RowGrows {
+  self: number;
+  siblings: readonly RowSibling[];
+}
+
+function normalizedRowGrows(
+  self: number,
+  siblings: readonly RowSibling[],
+): RowGrows | null {
+  const total = siblings.reduce((sum, sibling) => sum + sibling.grow, self);
+  if (!(self > 0) || !(total > 0)) return null;
+  return {
+    self: self / total,
+    siblings: siblings.map(({ nthChild, grow }) => ({
+      nthChild,
+      grow: grow / total,
+    })),
+  };
+}
+
+export function pinnedRowGrows(
   width: number,
-  { rootWidth, fixedWidth, otherGrow }: RowMeasurement,
-): number | null {
+  { rootWidth, fixedWidth, siblings }: RowMeasurement,
+): RowGrows | null {
   const free = rootWidth - fixedWidth;
+  const otherGrow = siblings.reduce((sum, sibling) => sum + sibling.grow, 0);
   if (otherGrow <= 0 || free <= 0) return null;
   const target = Math.min(
     Math.max(width, MIN_PANE_WIDTH_PX),
     free - MIN_OTHER_PANES_WIDTH_PX,
   );
   if (target <= 0) return null;
-  return (target * otherGrow) / (free - target);
+  const share = target / free;
+  return {
+    self: share,
+    siblings: siblings.map(({ nthChild, grow }) => ({
+      nthChild,
+      grow: (grow * (1 - share)) / otherGrow,
+    })),
+  };
+}
+
+function isHidden(element: HTMLElement): boolean {
+  return getComputedStyle(element).display === "none";
+}
+
+function cellGrow(cell: HTMLElement): number | null {
+  const computed = Number.parseFloat(getComputedStyle(cell).flexGrow);
+  if (!(computed > 0)) return null;
+  return inlineFlexGrow(cell) ?? computed;
 }
 
 function measureRow(cell: HTMLElement): RowMeasurement | null {
   const root = cell.parentElement;
   if (!root) return null;
   let fixedWidth = 0;
-  let otherGrow = 0;
-  for (const child of root.children) {
-    if (child === cell || !(child instanceof HTMLElement)) continue;
-    const grow = Number.parseFloat(getComputedStyle(child).flexGrow);
-    if (child.hasAttribute(DIVIDER_ATTRIBUTE) || !(grow > 0)) {
-      fixedWidth += child.getBoundingClientRect().width;
-    } else {
-      otherGrow += grow;
-    }
-  }
-  return { rootWidth: root.getBoundingClientRect().width, fixedWidth, otherGrow };
+  const siblings: RowSibling[] = [];
+  [...root.children].forEach((child, index) => {
+    if (child === cell || !(child instanceof HTMLElement)) return;
+    if (isHidden(child)) return;
+    const grow = child.hasAttribute(DIVIDER_ATTRIBUTE) ? null : cellGrow(child);
+    if (grow === null) fixedWidth += child.getBoundingClientRect().width;
+    else siblings.push({ nthChild: index + 1, grow });
+  });
+  return {
+    rootWidth: root.getBoundingClientRect().width,
+    fixedWidth,
+    siblings,
+  };
+}
+
+function liveRowGrows(cell: HTMLElement): RowGrows | null {
+  const self = inlineFlexGrow(cell);
+  const measurement = measureRow(cell);
+  return self === null || measurement === null
+    ? null
+    : normalizedRowGrows(self, measurement.siblings);
 }
 
 function adjacentDividers(cell: HTMLElement): HTMLElement[] {
@@ -108,8 +165,16 @@ export function inlineFlexGrow(cell: HTMLElement): number | null {
   return Number.isFinite(grow) && grow > 0 ? grow : null;
 }
 
-function pin(cell: HTMLElement, grow: number): void {
-  const css = `${GRID_ROOT_SELECTOR} > [${CELL_ATTRIBUTE}][${CELL_ATTRIBUTE}] { flex-grow: ${grow.toFixed(6)} !important; }`;
+function pin(cell: HTMLElement, grows: RowGrows): void {
+  const root = cell.parentElement;
+  if (!root) return;
+  const css = [
+    `${GRID_ROOT_SELECTOR} > [${CELL_ATTRIBUTE}][${CELL_ATTRIBUTE}] { flex-grow: ${grows.self.toFixed(6)} !important; }`,
+    ...grows.siblings.map(
+      ({ nthChild, grow }) =>
+        `${GRID_ROOT_SELECTOR}[${ROW_ATTRIBUTE}] > :nth-child(${nthChild}) { flex-grow: ${grow.toFixed(6)} !important; }`,
+    ),
+  ].join("\n");
   let style = document.getElementById(STYLE_ID);
   if (!(style instanceof HTMLStyleElement)) {
     style = document.createElement("style");
@@ -118,10 +183,12 @@ function pin(cell: HTMLElement, grow: number): void {
   }
   if (style.textContent !== css) style.textContent = css;
   if (!cell.hasAttribute(CELL_ATTRIBUTE)) cell.setAttribute(CELL_ATTRIBUTE, "");
+  if (!root.hasAttribute(ROW_ATTRIBUTE)) root.setAttribute(ROW_ATTRIBUTE, "");
 }
 
 function unpin(cell: HTMLElement | null): void {
   cell?.removeAttribute(CELL_ATTRIBUTE);
+  cell?.parentElement?.removeAttribute(ROW_ATTRIBUTE);
 }
 
 interface DragState {
@@ -169,6 +236,7 @@ export function usePersistentPaneWidth(
         });
       }
       resizes?.observe(root);
+      for (const child of root.children) resizes?.observe(child);
     };
 
     sync.current = () => {
@@ -185,24 +253,26 @@ export function usePersistentPaneWidth(
       observe(cell.parentElement);
       if (isDragging(cell)) {
         drag ??= { startStyle: cell.getAttribute("style") };
-        const grow = inlineFlexGrow(cell);
-        if (cell.getAttribute("style") !== drag.startStyle && grow !== null) {
-          pin(cell, grow);
-        }
+        const grows =
+          cell.getAttribute("style") === drag.startStyle
+            ? null
+            : liveRowGrows(cell);
+        if (grows !== null) pin(cell, grows);
         return;
       }
       if (drag !== null) {
         drag = null;
-        storePaneWidth(cell.getBoundingClientRect().width);
+        const draggedWidth = cell.getBoundingClientRect().width;
+        if (draggedWidth > 0) storePaneWidth(draggedWidth);
       }
-      const width = readPaneWidth();
+      const width = isHidden(cell) ? null : readPaneWidth();
       const measurement = width === null ? null : measureRow(cell);
-      const grow =
+      const grows =
         width === null || measurement === null
           ? null
-          : pinnedFlexGrow(width, measurement);
-      if (grow === null) unpin(cell);
-      else pin(cell, grow);
+          : pinnedRowGrows(width, measurement);
+      if (grows === null) unpin(cell);
+      else pin(cell, grows);
     };
 
     sync.current();

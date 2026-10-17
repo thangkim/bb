@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   PANE_WIDTH_STORAGE_KEY,
   parsePaneWidth,
-  pinnedFlexGrow,
+  pinnedRowGrows,
   rowCellOf,
   usePersistentPaneWidth,
 } from "./pane-width";
@@ -50,25 +50,44 @@ describe("parsePaneWidth", () => {
   });
 });
 
-describe("pinnedFlexGrow", () => {
-  it("gives the pane the remembered width out of the row's free space", () => {
-    const grow = pinnedFlexGrow(400, {
+describe("pinnedRowGrows", () => {
+  it("fills the row when the remembered width is under half of it", () => {
+    const grows = pinnedRowGrows(400, {
       rootWidth: 1201,
       fixedWidth: 1,
-      otherGrow: 0.5,
+      siblings: [{ nthChild: 3, grow: 0.5 }],
     });
-    expect((1200 * grow!) / (grow! + 0.5)).toBeCloseTo(400);
+    expect(grows!.self).toBeCloseTo(1 / 3);
+    expect(grows!.siblings).toEqual([
+      { nthChild: 3, grow: expect.closeTo(2 / 3) },
+    ]);
+  });
+
+  it("splits the rest between the other panes in their current proportions", () => {
+    const grows = pinnedRowGrows(600, {
+      rootWidth: 1200,
+      fixedWidth: 0,
+      siblings: [
+        { nthChild: 3, grow: 0.5 },
+        { nthChild: 5, grow: 0.25 },
+      ],
+    });
+    expect(grows!.self).toBeCloseTo(0.5);
+    expect(grows!.siblings.map((sibling) => sibling.grow)).toEqual([
+      expect.closeTo(1 / 3),
+      expect.closeTo(1 / 6),
+    ]);
   });
 
   it("leaves room for the other panes and gives up when nothing else grows", () => {
-    const grow = pinnedFlexGrow(2000, {
+    const grows = pinnedRowGrows(2000, {
       rootWidth: 1000,
       fixedWidth: 0,
-      otherGrow: 1,
+      siblings: [{ nthChild: 3, grow: 1 }],
     });
-    expect((1000 * grow!) / (grow! + 1)).toBeCloseTo(760);
+    expect(grows!.self).toBeCloseTo(0.76);
     expect(
-      pinnedFlexGrow(400, { rootWidth: 1000, fixedWidth: 0, otherGrow: 0 }),
+      pinnedRowGrows(400, { rootWidth: 1000, fixedWidth: 0, siblings: [] }),
     ).toBeNull();
   });
 });
@@ -117,7 +136,8 @@ describe("usePersistentPaneWidth", () => {
     rowSplit();
     const cell = document.getElementById("tasks-cell")!;
     cell.getBoundingClientRect = () => ({ width: 355 }) as DOMRect;
-    const separator = document.querySelector<HTMLElement>('[role="separator"]')!;
+    const separator =
+      document.querySelector<HTMLElement>('[role="separator"]')!;
     render(<Probe layoutKey={0} />);
 
     await act(async () => {
@@ -126,9 +146,9 @@ describe("usePersistentPaneWidth", () => {
       cell.style.flexGrow = "0.3";
       await Promise.resolve();
     });
-    expect(document.getElementById("bb-tomato-pane-width")?.textContent).toContain(
-      "flex-grow: 0.300000",
-    );
+    expect(
+      document.getElementById("bb-tomato-pane-width")?.textContent,
+    ).toContain("flex-grow: 0.375000");
     expect(cell.hasAttribute("data-tomato-pane-width")).toBe(true);
 
     await act(async () => {
@@ -138,6 +158,31 @@ describe("usePersistentPaneWidth", () => {
     expect(window.localStorage.getItem(PANE_WIDTH_STORAGE_KEY)).toBe("355");
   });
 
+  it("pins every visible pane in the row to the remembered width", () => {
+    mountSplit(`
+      <div data-split-resize-grid-root="" id="outer">
+        <div id="tasks-cell" style="flex-grow: 0.333">
+          <div data-split-pane-id="pane-1"><div id="slot"></div></div>
+        </div>
+        ${divider("vertical")}
+        <div style="flex-grow: 0.333"><div data-split-pane-id="pane-2"></div></div>
+        ${divider("vertical")}
+        <div style="flex-grow: 0.333; display: none"><div data-split-pane-id="pane-3"></div></div>
+      </div>`);
+    document.getElementById("outer")!.getBoundingClientRect = () =>
+      ({ width: 1200 }) as DOMRect;
+    window.localStorage.setItem(PANE_WIDTH_STORAGE_KEY, "400");
+    render(<Probe layoutKey={0} />);
+
+    const css = document.getElementById("bb-tomato-pane-width")!.textContent;
+    expect(css).toContain("[data-tomato-pane-width] { flex-grow: 0.333333");
+    expect(css).toContain(":nth-child(3) { flex-grow: 0.666667");
+    expect(css).not.toContain(":nth-child(5)");
+    expect(
+      document.getElementById("outer")!.hasAttribute("data-tomato-pane-row"),
+    ).toBe(true);
+  });
+
   it("does nothing until a width has been chosen, and unpins on unmount", () => {
     rowSplit();
     const cell = document.getElementById("tasks-cell")!;
@@ -145,5 +190,8 @@ describe("usePersistentPaneWidth", () => {
     expect(cell.hasAttribute("data-tomato-pane-width")).toBe(false);
     view.unmount();
     expect(cell.hasAttribute("data-tomato-pane-width")).toBe(false);
+    expect(
+      document.getElementById("outer")!.hasAttribute("data-tomato-pane-row"),
+    ).toBe(false);
   });
 });
