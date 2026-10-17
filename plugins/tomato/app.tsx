@@ -1,0 +1,74 @@
+import {
+  definePluginApp,
+  experimental_THREAD_ACTION_GROUPS,
+} from "@get-bb/plugin-sdk/app";
+import { TasksAppShell } from "./shell/app-shell.js";
+import { TasksSidebarAccessory } from "./shell/sidebar-accessory.js";
+import { TasksNavigationPanel } from "./shell/navigation-panel.js";
+import { TaskDirectiveCard, TaskEmbedPanel } from "./views/embed/index.js";
+import { ThreadLinksOverlay } from "./thread-links/dialog.js";
+import { openThreadLinks } from "./thread-links/store.js";
+import { SplitAttachController } from "./split-attach/controller.js";
+import { ThreadLinkedWork } from "./thread-header/linked-work.js";
+import { ComposeAnchor } from "./views/tasks/composer-beside.js";
+import { migrateLegacyStorageKeys } from "./shell/legacy-storage.js";
+
+export default definePluginApp((app) => {
+  migrateLegacyStorageKeys();
+  app.slots.navPanel({
+    id: "tasks",
+    title: "Tomato",
+    icon: "ListTodo",
+    path: "tasks",
+    component: TasksAppShell,
+    experimental_sidebarAccessory: TasksSidebarAccessory,
+    fixedTabs: [
+      {
+        panelId: "tasks",
+        id: "navigation",
+        title: "Navigation",
+        icon: "ListView",
+        component: TasksNavigationPanel,
+        layout: "flush",
+      },
+    ],
+  });
+  app.slots.threadPanelAction({
+    id: "task",
+    title: "Task",
+    icon: "ListTodo",
+    component: TaskEmbedPanel,
+  });
+  app.slots.experimental_threadHeaderAction({
+    id: "linked-work",
+    title: "Tomato work",
+    component: ThreadLinkedWork,
+  });
+  app.slots.messageDirective({ id: "tomato-task", component: TaskDirectiveCard });
+  app.slots.messageDirective({ id: "my-task", component: TaskDirectiveCard });
+  app.slots.experimental_appOverlay({
+    id: "thread-links",
+    component: ThreadLinksOverlay,
+  });
+  app.slots.experimental_appOverlay({
+    id: "split-attach",
+    component: SplitAttachController,
+  });
+  app.slots.experimental_appOverlay({
+    id: "compose-anchor",
+    component: ComposeAnchor,
+  });
+  app.slots.experimental_threadAction({
+    id: "attach",
+    title: "Attach to Tomato…",
+    icon: "ListTodo",
+    group: experimental_THREAD_ACTION_GROUPS.organize,
+    item: ({ thread }) => ({
+      label: "Attach to Tomato…",
+      icon: "ListTodo",
+      run: () => {
+        openThreadLinks({ threadId: thread.id, projectId: thread.projectId });
+      },
+    }),
+  });
+});
