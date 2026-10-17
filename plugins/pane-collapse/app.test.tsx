@@ -118,6 +118,8 @@ const threadA = {
   hasPendingInteraction: true,
 } as PluginSidebarThread;
 
+const sentMessages: unknown[] = [];
+
 function mountOverlay(focused: PaneId) {
   return renderSlot(
     app.appOverlays[0]!,
@@ -126,12 +128,22 @@ function mountOverlay(focused: PaneId) {
       sidebarSplitLayout: splitLayout(focused),
       sidebarThreads: { threads: [threadA] },
       pluginId: "pane-collapse",
+      sdk: {
+        threads: {
+          output: async () => ({ output: "Plan drafted. Want me to start?" }),
+          send: async (args) => {
+            sentMessages.push(args);
+            return { ok: true, delivery: "sent" };
+          },
+        },
+      },
     },
   );
 }
 
 afterEach(() => {
   cleanup();
+  sentMessages.length = 0;
   collapsedPanes.set(new Set());
   document.body.replaceChildren();
 });
@@ -300,6 +312,101 @@ describe("minimized threads in the window title bar", () => {
         chip.getAttribute("aria-label"),
       ),
     ).toEqual(["Restore Alpha thread", "Restore Thread"]);
+  });
+});
+
+describe("minimized thread chip", () => {
+  it("shows the linked task beside the title", async () => {
+    mountTitleBar();
+    const panes = mountSplitDom();
+    const badge = document.createElement("button");
+    badge.dataset.linkedWorkKind = "task";
+    badge.dataset.linkedWorkLabel = "Install anfra";
+    panes.pa.pane.append(badge);
+    mountOverlay("pb");
+    act(() => collapsedPanes.set(new Set(["pa"])));
+
+    const chip = await screen.findByRole("button", {
+      name: "Restore Alpha thread — Task Install anfra",
+    });
+    expect(chip.textContent).toBe("Alpha threadInstall anfra");
+  });
+
+  it("turns the chat icon blue while a finished reply is unread", async () => {
+    mountTitleBar();
+    mountSplitDom();
+    const threads = [
+      { ...threadA, hasPendingInteraction: false, indicator: "unread-success" },
+      { id: "t-c", displayTitle: "Gamma", indicator: "none" },
+    ] as PluginSidebarThread[];
+    renderSlot(
+      app.appOverlays[0]!,
+      {},
+      {
+        sidebarSplitLayout: splitLayout("pb"),
+        sidebarThreads: { threads },
+        pluginId: "pane-collapse",
+      },
+    );
+    act(() => collapsedPanes.set(new Set(["pa", "pc"])));
+
+    const finished = await screen.findByRole("button", {
+      name: "Restore Alpha thread, new reply",
+    });
+    const read = screen.getByRole("button", { name: "Restore Gamma" });
+    expect(finished.querySelector("svg")?.getAttribute("class")).toContain(
+      "text-timeline-accent",
+    );
+    expect(read.querySelector("svg")?.getAttribute("class")).not.toContain(
+      "text-timeline-accent",
+    );
+  });
+
+  it("opens on hover with the latest message and sends a quick reply", async () => {
+    mountTitleBar();
+    mountSplitDom();
+    mountOverlay("pb");
+    act(() => collapsedPanes.set(new Set(["pa"])));
+    const chip = await screen.findByRole("button", {
+      name: "Restore Alpha thread",
+    });
+
+    fireEvent.pointerEnter(chip);
+    expect(
+      await screen.findByText("Plan drafted. Want me to start?"),
+    ).toBeDefined();
+    expect(
+      screen.getByText(/Waiting for your approval or answer/),
+    ).toBeDefined();
+
+    const reply = screen.getByRole("textbox", { name: "Reply" });
+    fireEvent.change(reply, { target: { value: "  Yes, go ahead  " } });
+    fireEvent.keyDown(reply, { key: "Enter" });
+
+    await screen.findByText("Sent");
+    expect(sentMessages).toEqual([
+      {
+        threadId: "t-a",
+        input: [{ type: "text", text: "Yes, go ahead", mentions: [] }],
+        mode: "queue-if-active",
+      },
+    ]);
+    expect((reply as HTMLTextAreaElement).value).toBe("");
+    expect(collapsedPanes.get().has("pa")).toBe(true);
+  });
+
+  it("keeps Shift+Enter as a new line", async () => {
+    mountTitleBar();
+    mountSplitDom();
+    mountOverlay("pb");
+    act(() => collapsedPanes.set(new Set(["pa"])));
+    fireEvent.pointerEnter(
+      await screen.findByRole("button", { name: "Restore Alpha thread" }),
+    );
+    const reply = await screen.findByRole("textbox", { name: "Reply" });
+    fireEvent.change(reply, { target: { value: "line one" } });
+    fireEvent.keyDown(reply, { key: "Enter", shiftKey: true });
+    expect(sentMessages).toEqual([]);
   });
 });
 

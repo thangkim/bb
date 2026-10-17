@@ -531,6 +531,89 @@ describe("Tasks RPC domain API", () => {
     await harness.dispose();
   });
 
+  it("lists a thread's used side chats oldest first, including hidden ones without a title", async () => {
+    const sideChat = (
+      id: string,
+      overrides: Partial<ReturnType<typeof makeThreadResponse>>,
+    ) =>
+      makeThreadResponse({
+        id,
+        title: null,
+        titleFallback: `Asked in ${id}`,
+        sourceThreadId: "thr_worker",
+        originKind: "fork",
+        originPluginId: "side-chat-plus",
+        visibility: "hidden",
+        status: "idle",
+        ...overrides,
+      });
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "tasks",
+      sdk: {
+        threads: {
+          list: async () => [
+            sideChat("thr_later", { createdAt: 20 }),
+            sideChat("thr_earlier", {
+              createdAt: 10,
+              originPluginId: "side-chat",
+            }),
+            sideChat("thr_unasked", { createdAt: 5, titleFallback: null }),
+            sideChat("thr_first_reply", {
+              createdAt: 30,
+              titleFallback: null,
+              status: "active",
+            }),
+            sideChat("thr_visible_fork", {
+              createdAt: 1,
+              visibility: "visible",
+            }),
+            sideChat("thr_other_source", {
+              createdAt: 2,
+              sourceThreadId: "thr_other",
+            }),
+          ],
+        },
+      },
+    });
+    registerTasksApi(bb, createStore(bb));
+
+    await expect(
+      harness.callRpc("listSideChats", { threadId: "thr_worker" }),
+    ).resolves.toEqual({
+      sideChats: [
+        {
+          id: "thr_earlier",
+          title: "Asked in thr_earlier",
+          status: "idle",
+          createdAt: 10,
+        },
+        {
+          id: "thr_later",
+          title: "Asked in thr_later",
+          status: "idle",
+          createdAt: 20,
+        },
+        {
+          id: "thr_first_reply",
+          title: "Side chat",
+          status: "active",
+          createdAt: 30,
+        },
+      ],
+    });
+    expect(harness.sdk.callsTo("threads.list")).toEqual([
+      [
+        {
+          sourceThreadId: "thr_worker",
+          originKind: "fork",
+          includeHidden: true,
+          archived: false,
+        },
+      ],
+    ]);
+    await harness.dispose();
+  });
+
   it("does not send for notify=false or when no prior agent has replied", async () => {
     const { bb, harness } = createFakePluginHost({
       pluginId: "tasks",

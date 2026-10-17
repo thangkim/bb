@@ -1,5 +1,10 @@
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
+import {
+  buildTitlePrompt,
+  firstTitleLine,
+  sideChatTitleHostContract,
+} from "./title.js";
 
 export const REPLY_SEED_PREFIX =
   "Replying to this earlier message in the conversation:\n\n";
@@ -29,6 +34,54 @@ export function cleanSideChatTitle(raw: string): string {
   return title.length <= SIDE_CHAT_TITLE_MAX_LENGTH
     ? title
     : `${title.slice(0, SIDE_CHAT_TITLE_MAX_LENGTH - 1).trimEnd()}…`;
+}
+
+export const AUTO_TITLE_MAX_ATTEMPTS = 2;
+
+const turnRequestDataSchema = z.object({
+  initiator: z.string().optional(),
+  input: z.array(
+    z.object({
+      type: z.string(),
+      text: z.string().optional(),
+      visibility: z.string().optional(),
+    }),
+  ),
+});
+
+export interface SideChatPrompt {
+  quote: string | null;
+  question: string;
+}
+
+export function firstUserPrompt(
+  rows: readonly { data: unknown }[],
+): SideChatPrompt | null {
+  for (const row of rows) {
+    const parsed = turnRequestDataSchema.safeParse(row.data);
+    if (!parsed.success || parsed.data.initiator !== "user") continue;
+    const texts = parsed.data.input.filter(
+      (item): item is typeof item & { text: string } =>
+        item.type === "text" && item.text !== undefined,
+    );
+    const seed = texts.find(
+      (item) =>
+        item.visibility === "agent-only" &&
+        item.text.startsWith(REPLY_SEED_PREFIX),
+    );
+    const question = texts
+      .filter((item) => item.visibility !== "agent-only")
+      .map((item) => item.text)
+      .join("\n")
+      .trim();
+    if (question === "") continue;
+    return {
+      quote:
+        seed === undefined ? null : seed.text.slice(REPLY_SEED_PREFIX.length),
+      question,
+    };
+  }
+  return null;
 }
 
 interface SideChatTimelineRowLike {
@@ -189,6 +242,73 @@ export default async function plugin(bb: BbPluginApi) {
         : [],
     skills: [],
   }));
+
+  const titleHost = bb.hosts.experimental_client({
+    contract: sideChatTitleHostContract,
+  });
+  const titling = new Set<string>();
+  const titleAttempts = new Map<string, number>();
+
+  async function autoTitle(thread: {
+    id: string;
+    title: string | null;
+    originKind: string | null;
+    originPluginId: string | null;
+  }): Promise<void> {
+    if (
+      thread.originKind !== "fork" ||
+      thread.originPluginId !== bb.pluginId ||
+      (thread.title !== null && thread.title.trim() !== "") ||
+      titling.has(thread.id) ||
+      (titleAttempts.get(thread.id) ?? 0) >= AUTO_TITLE_MAX_ATTEMPTS
+    ) {
+      return;
+    }
+    titling.add(thread.id);
+    try {
+      const requests = await bb.sdk.threads.events.list({
+        threadId: thread.id,
+        types: ["client/turn/requested"],
+        order: "asc",
+        limit: "20",
+      });
+      const prompt = firstUserPrompt(requests);
+      if (prompt === null) return;
+      titleAttempts.set(thread.id, (titleAttempts.get(thread.id) ?? 0) + 1);
+      const hostId = (await bb.sdk.system.config()).primaryHostId;
+      if (hostId === null) return;
+      const result = await titleHost.call(
+        "generateTitle",
+        { prompt: buildTitlePrompt(prompt) },
+        { hostId },
+      );
+      if (!result.ok) {
+        bb.log.warn(
+          `side chat title for ${thread.id} failed: ${result.message}`,
+        );
+        return;
+      }
+      const line = firstTitleLine(result.text);
+      const label = line === null ? "" : cleanSideChatTitle(line);
+      if (label === "") return;
+      const current = await bb.sdk.threads.get({ threadId: thread.id });
+      if (current.title !== null && current.title.trim() !== "") return;
+      await bb.sdk.threads.update({ threadId: thread.id, title: label });
+      const event: SideChatTitleEvent = { threadId: thread.id, title: label };
+      bb.realtime.publish(TITLE_CHANNEL, event);
+    } catch (error) {
+      bb.log.warn(
+        `side chat title for ${thread.id} failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    } finally {
+      titling.delete(thread.id);
+    }
+  }
+
+  bb.events.on("thread.active", ({ thread }) => autoTitle(thread));
+  bb.events.on("thread.idle", ({ thread }) => autoTitle(thread));
 
   bb.background.schedule("empty-fork-cleanup", "13 * * * *", async () => {
     const now = Date.now();

@@ -11,7 +11,14 @@ with automatic and editable labels. Keep the built-in plugin disabled so the
 
 ## Labels
 
-- Inside a side chat, the agent has the `side_chat_set_title` tool. At the end
+- When a side chat starts its first turn, the server names it. It reads the
+  first user prompt from the thread's `client/turn/requested` events (and the
+  quoted message from the agent-only reply seed), then asks the plugin's
+  `bb.host` entry to run `claude -p --model haiku` on the primary machine for
+  a 2 to 5 word title. The host entry runs claude without tools, MCP servers,
+  settings, or a saved session. If that fails (no `claude` CLI, not logged
+  in), it retries once when the turn ends, then logs a warning.
+- As a fallback, inside a side chat, the agent has the `side_chat_set_title` tool. At the end
   of its first reply it calls the tool once with a 2 to 5 word label in the
   user's language. The tool row is collapsed by default.
 - The tool sets the thread title only while it is empty, so a name the user
@@ -42,4 +49,8 @@ with automatic and editable labels. Keep the built-in plugin disabled so the
   whose first message was sent before the plugin loaded has no tool until its
   session restarts.
 - bb's own title AI is not used: plugins cannot call it, and bb only titles a
-  thread created with a first message.
+  thread created with a first message. Naming needs the `claude` CLI on the
+  primary machine, found on the daemon PATH, `~/.local/bin`,
+  `~/.claude/local`, `/opt/homebrew/bin`, or `/usr/local/bin`.
+- An untitled side chat from before this change is named the next time it
+  starts or finishes a turn.

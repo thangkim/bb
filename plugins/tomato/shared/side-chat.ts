@@ -17,3 +17,28 @@ export function isSideChatShapedThread(thread: SideChatShapeThread): boolean {
     thread.visibility === "hidden"
   );
 }
+
+const BUSY_THREAD_STATUSES: ReadonlySet<string> = new Set([
+  "starting",
+  "active",
+  "stopping",
+]);
+
+export function isBusyThreadStatus(status: string): boolean {
+  return BUSY_THREAD_STATUSES.has(status);
+}
+
+interface UsedSideChatThread extends SideChatShapeThread {
+  title: string | null;
+  titleFallback: string | null;
+  status: string;
+}
+
+export function isUsedSideChat(thread: UsedSideChatThread): boolean {
+  return (
+    isSideChatShapedThread(thread) &&
+    (thread.title !== null ||
+      thread.titleFallback !== null ||
+      isBusyThreadStatus(thread.status))
+  );
+}

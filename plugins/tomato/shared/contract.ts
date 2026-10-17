@@ -17,13 +17,7 @@ export const PROJECT_STATUSES = [
 
 export const TASK_STATUSES = ["todo", "done"] as const;
 
-export const PRIORITIES = [
-  "urgent",
-  "high",
-  "medium",
-  "low",
-  "none",
-] as const;
+export const PRIORITIES = ["urgent", "high", "medium", "low", "none"] as const;
 
 export const TASK_THREAD_LIVE_STATUSES = [
   "starting",
@@ -781,6 +775,23 @@ export const tasksRpcContract = defineRpcContract({
       })
       .strict(),
   },
+  listSideChats: {
+    input: z.object({ threadId: z.string() }).strict(),
+    output: z
+      .object({
+        sideChats: z.array(
+          z
+            .object({
+              id: z.string(),
+              title: z.string(),
+              status: threadSearchStatusSchema,
+              createdAt: z.number(),
+            })
+            .strict(),
+        ),
+      })
+      .strict(),
+  },
   listBbProjects: {
     input: z.null(),
     output: z
@@ -837,6 +848,9 @@ export type TaskPullRequest = z.infer<typeof taskPullRequestSchema>;
 export type Preset = z.infer<typeof presetSchema>;
 export type TasksDomainError = z.infer<typeof tasksDomainErrorSchema>;
 export type TaskMutationResult = z.infer<typeof taskMutationResultSchema>;
+export type SideChat = z.infer<
+  (typeof tasksRpcContract)["listSideChats"]["output"]
+>["sideChats"][number];
 export type BbProjectOption = z.infer<
   (typeof tasksRpcContract)["listBbProjects"]["output"]
 >["bbProjects"][number];

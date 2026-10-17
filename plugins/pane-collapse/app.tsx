@@ -36,7 +36,8 @@ import {
   type CollapsedPaneDisplay,
   type CollapsedPanes,
 } from "./collapsed-panes";
-import { usePaneLinkedWork, type PaneLinkedWork } from "./linked-work";
+import { usePaneLinkedWork } from "./linked-work";
+import { AttentionDot, MinimizedChip, paneLabel } from "./chip";
 import { readSplitDom, stampGridRoots } from "./split-dom";
 
 export const collapsedPanes = createCollapsedPaneStore();
@@ -154,57 +155,6 @@ function useTitleBarTray(
   return tray;
 }
 
-function paneLabel(title: string, work: PaneLinkedWork | null): string {
-  return work === null
-    ? title
-    : `${title} — ${work.kind === "task" ? "Task" : "Project"} ${work.label}`;
-}
-
-function AttentionDot() {
-  return (
-    <span className="absolute -right-1 -top-1 size-2 rounded-full bg-attention" />
-  );
-}
-
-interface MinimizedChipProps {
-  pane: HTMLElement;
-  title: string;
-  needsInput: boolean;
-  onRestore: () => void;
-}
-
-function MinimizedChip({
-  pane,
-  title,
-  needsInput,
-  onRestore,
-}: MinimizedChipProps) {
-  const work = usePaneLinkedWork(pane);
-  const label = paneLabel(title, work);
-  return (
-    <button
-      type="button"
-      aria-label={`Restore ${label}`}
-      title={label}
-      onClick={onRestore}
-      className="relative z-50 flex h-6 min-w-12 max-w-48 shrink cursor-pointer items-center gap-1.5 rounded-md border border-border px-2 text-xs text-muted-foreground [-webkit-app-region:no-drag] [app-region:no-drag] hover:bg-state-hover hover:text-foreground"
-    >
-      <span className="relative flex shrink-0">
-        <Icon name="MessageSquare" className="size-3.5" />
-        {needsInput ? <AttentionDot /> : null}
-      </span>
-      {work?.kind === "project" && work.color !== null ? (
-        <span
-          aria-hidden
-          className="size-2 shrink-0 rounded-full"
-          style={{ backgroundColor: work.color }}
-        />
-      ) : null}
-      <span className="min-w-0 truncate">{title}</span>
-    </button>
-  );
-}
-
 interface StripHost {
   paneId: string;
   threadId: string | null;
@@ -241,6 +191,7 @@ interface CollapsedStripProps {
   title: string;
   vertical: boolean;
   needsInput: boolean;
+  finishedUnread: boolean;
   onRestore: () => void;
 }
 
@@ -253,6 +204,7 @@ function CollapsedStrip({
   title,
   vertical,
   needsInput,
+  finishedUnread,
   onRestore,
 }: CollapsedStripProps) {
   const work = usePaneLinkedWork(pane);
@@ -265,7 +217,7 @@ function CollapsedStrip({
     >
       <button
         type="button"
-        aria-label={`Restore ${label}`}
+        aria-label={`Restore ${label}${finishedUnread ? ", new reply" : ""}`}
         title={label}
         onClick={onRestore}
         className={cn(
@@ -274,7 +226,10 @@ function CollapsedStrip({
         )}
       >
         <span className="relative flex shrink-0">
-          <Icon name="MessageSquare" className="size-4" />
+          <Icon
+            name="MessageSquare"
+            className={cn("size-4", finishedUnread && "text-timeline-accent")}
+          />
           {needsInput ? <AttentionDot /> : null}
         </span>
         <span
@@ -384,6 +339,8 @@ export function CollapsedPaneOverlay() {
       host,
       title: thread?.displayTitle ?? "Thread",
       needsInput: thread?.hasPendingInteraction ?? false,
+      finishedUnread: thread?.indicator === "unread-success",
+      updatedAt: thread?.updatedAt ?? 0,
       onRestore: () => restorePane(host.paneId, host.threadId, navigate),
     };
   });
@@ -392,22 +349,34 @@ export function CollapsedPaneOverlay() {
     return createPortal(
       [...panes]
         .reverse()
-        .map(({ host, title, needsInput, onRestore }) => (
-          <MinimizedChip
-            key={host.paneId}
-            pane={host.element}
-            title={title}
-            needsInput={needsInput}
-            onRestore={onRestore}
-          />
-        )),
+        .map(
+          ({
+            host,
+            title,
+            needsInput,
+            finishedUnread,
+            updatedAt,
+            onRestore,
+          }) => (
+            <MinimizedChip
+              key={host.paneId}
+              pane={host.element}
+              threadId={host.threadId}
+              finishedUnread={finishedUnread}
+              updatedAt={updatedAt}
+              title={title}
+              needsInput={needsInput}
+              onRestore={onRestore}
+            />
+          ),
+        ),
       tray,
     );
   }
 
   return (
     <>
-      {panes.map(({ host, title, needsInput, onRestore }) =>
+      {panes.map(({ host, title, needsInput, finishedUnread, onRestore }) =>
         createPortal(
           <CollapsedStrip
             pluginId={pluginId}
@@ -415,6 +384,7 @@ export function CollapsedPaneOverlay() {
             title={title}
             vertical={host.vertical}
             needsInput={needsInput}
+            finishedUnread={finishedUnread}
             onRestore={onRestore}
           />,
           host.element,

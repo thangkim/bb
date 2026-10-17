@@ -13,7 +13,7 @@ import {
 } from "../attachments";
 import { deliverCommentToLatestAgent } from "../steer";
 import { displayName } from "../shared/display-name";
-import { isSideChatShapedThread } from "../shared/side-chat";
+import { isSideChatShapedThread, isUsedSideChat } from "../shared/side-chat";
 import {
   tasksRpcContract,
   type Attachment as AttachmentMetadata,
@@ -1024,6 +1024,33 @@ export function registerHandlers(
             id: thread.id,
             title: thread.title ?? thread.titleFallback ?? "Untitled thread",
             status: thread.status,
+          })),
+      };
+    },
+    async listSideChats(input) {
+      const forks = await bb.sdk.threads.list({
+        sourceThreadId: input.threadId,
+        originKind: "fork",
+        includeHidden: true,
+        archived: false,
+      });
+      return {
+        sideChats: forks
+          .filter(
+            (thread) =>
+              thread.sourceThreadId === input.threadId &&
+              isUsedSideChat(thread),
+          )
+          .sort(
+            (left, right) =>
+              left.createdAt - right.createdAt ||
+              left.id.localeCompare(right.id),
+          )
+          .map((thread) => ({
+            id: thread.id,
+            title: thread.title ?? thread.titleFallback ?? "Side chat",
+            status: thread.status,
+            createdAt: thread.createdAt,
           })),
       };
     },

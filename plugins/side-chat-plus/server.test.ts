@@ -8,6 +8,7 @@ import plugin, {
   cleanSideChatTitle,
   EMPTY_FORK_MAX_AGE_MS,
   EMPTY_FORK_SWEEP_PAGE_SIZE,
+  firstUserPrompt,
   REPLY_SEED_PREFIX,
   SET_TITLE_TOOL,
   TITLE_CHANNEL,
@@ -500,5 +501,121 @@ describe("side chat titles", () => {
       "Fix the flaky test",
     );
     expect(cleanSideChatTitle("x".repeat(80))).toHaveLength(60);
+  });
+});
+
+describe("automatic side chat title", () => {
+  const userRequest = (input: Array<Record<string, string>>) => ({
+    data: { initiator: "user", input },
+  });
+  const seed = {
+    type: "text",
+    text: `${REPLY_SEED_PREFIX}The copy passes the guideline.`,
+    visibility: "agent-only",
+  };
+
+  it("reads the first user prompt and its quoted message, skipping the spawn request", () => {
+    expect(
+      firstUserPrompt([
+        { data: { initiator: "agent", input: [seed] } },
+        userRequest([seed, { type: "text", text: "Give me 3 more options" }]),
+        userRequest([{ type: "text", text: "Apply option 1" }]),
+      ]),
+    ).toEqual({
+      quote: "The copy passes the guideline.",
+      question: "Give me 3 more options",
+    });
+    expect(
+      firstUserPrompt([{ data: { initiator: "agent", input: [seed] } }]),
+    ).toBeNull();
+  });
+
+  async function loadTitling(options: {
+    title?: string | null;
+    hostText?: string;
+    requests?: unknown[];
+  }) {
+    const update = vi.fn(async () => makeThreadResponse({ id: "thr_side" }));
+    const list = vi.fn(
+      async () =>
+        options.requests ?? [
+          userRequest([seed, { type: "text", text: "Give me 3 more options" }]),
+        ],
+    );
+    const host = createFakePluginHost({
+      pluginId: PLUGIN_ID,
+      sdk: {
+        threads: {
+          events: { list },
+          get: async () =>
+            makeThreadResponse({
+              id: "thr_side",
+              title: options.title ?? null,
+            }),
+          update,
+        },
+        system: { config: async () => ({ primaryHostId: "host_1" }) },
+      },
+      experimental_callHostRpc: () => ({
+        ok: true,
+        text: options.hostText ?? 'Title: "More wording options."\n',
+      }),
+    });
+    await plugin(host.bb);
+    const sideChat = makeThreadResponse({
+      id: "thr_side",
+      title: options.title ?? null,
+      originKind: "fork",
+      originPluginId: PLUGIN_ID,
+      visibility: "hidden",
+    });
+    return { ...host, update, list, sideChat };
+  }
+
+  it("names an untitled side chat from its first prompt when it starts working", async () => {
+    const { harness, update, sideChat } = await loadTitling({});
+    await harness.emitThreadEvent("thread.active", { thread: sideChat });
+
+    expect(harness.experimental_hostRpcCalls).toHaveLength(1);
+    const call = harness.experimental_hostRpcCalls[0]!;
+    expect(call.hostId).toBe("host_1");
+    expect(call.input).toEqual({
+      prompt: expect.stringContaining("Give me 3 more options"),
+    });
+    expect(call.input).toEqual({
+      prompt: expect.stringContaining("The copy passes the guideline."),
+    });
+    expect(update).toHaveBeenCalledWith({
+      threadId: "thr_side",
+      title: "More wording options",
+    });
+    expect(harness.realtimeSignals).toContainEqual(
+      expect.objectContaining({
+        channel: TITLE_CHANNEL,
+        payload: { threadId: "thr_side", title: "More wording options" },
+      }),
+    );
+  });
+
+  it("leaves titled side chats, other threads, and prompt-less side chats alone", async () => {
+    const titled = await loadTitling({ title: "Named already" });
+    await titled.harness.emitThreadEvent("thread.active", {
+      thread: titled.sideChat,
+    });
+    expect(titled.harness.experimental_hostRpcCalls).toHaveLength(0);
+
+    const other = await loadTitling({});
+    await other.harness.emitThreadEvent("thread.active", {
+      thread: { ...other.sideChat, originPluginId: "side-chat" },
+    });
+    expect(other.harness.experimental_hostRpcCalls).toHaveLength(0);
+
+    const empty = await loadTitling({ requests: [] });
+    await empty.harness.emitThreadEvent("thread.idle", {
+      thread: empty.sideChat,
+      lastAssistantText: null,
+    });
+    expect(empty.harness.experimental_hostRpcCalls).toHaveLength(0);
+    expect(empty.update).not.toHaveBeenCalled();
   });
 });

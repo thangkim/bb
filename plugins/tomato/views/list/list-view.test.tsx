@@ -136,10 +136,7 @@ interface Fixture {
     id: string;
     title: string;
     sourceThreadId: string;
-    replied?: boolean;
-    pluginId?: string;
     status?: PluginSidebarThread["status"];
-    createdAt?: number;
   }[];
   renamedThreads?: Record<string, string>;
   settings?: Record<string, boolean>;
@@ -222,18 +219,29 @@ function renderList(fixture: Fixture = {}) {
           ...[...unarchivedThreadIds].map(sidebarThread),
           ...(fixture.sideChats ?? []).map((sideChat) => ({
             ...makeSidebarThread(sideChat.id),
-            title: sideChat.replied === false ? null : sideChat.title,
+            title: null,
+            titleFallback: sideChat.title,
             displayTitle: sideChat.title,
             sourceThreadId: sideChat.sourceThreadId,
             originKind: "fork" as const,
-            originPluginId: sideChat.pluginId ?? "side-chat",
-            status: sideChat.status ?? "idle",
-            createdAt: sideChat.createdAt ?? 1,
+            originPluginId: "side-chat-plus",
             isHidden: true,
           })),
         ],
       },
       rpc: {
+        listSideChats: (raw: unknown) => ({
+          sideChats: (fixture.sideChats ?? [])
+            .filter(
+              (sideChat) => sideChat.sourceThreadId === rpcInput(raw).threadId,
+            )
+            .map((sideChat) => ({
+              id: sideChat.id,
+              title: sideChat.title,
+              status: sideChat.status ?? "idle",
+              createdAt: 1,
+            })),
+        }),
         listProjects: () => ({ projects }),
         listFolders: () => ({ folders: [] }),
         listPresets: () => ({ presets: fixture.presets ?? [] }),
@@ -771,37 +779,18 @@ describe("projects list", () => {
     });
   });
 
-  it("lists only replied side chats under a project thread, oldest first, from either side chat plugin", async () => {
+  it("lists a project thread's side chats in server order and marks running ones", async () => {
     const slot = renderList({
       threadsByProject: { [LAUNCH.id]: [projectThread(LAUNCH.id, "P1")] },
       sidebarThreadIds: ["thr_P1"],
       sideChats: [
-        {
-          id: "thr_S2",
-          title: "Later question",
-          sourceThreadId: "thr_P1",
-          pluginId: "side-chat-plus",
-          createdAt: 20,
-        },
-        {
-          id: "thr_S1",
-          title: "Earlier question",
-          sourceThreadId: "thr_P1",
-          createdAt: 10,
-        },
-        {
-          id: "thr_S3",
-          title: "Opened, never asked",
-          sourceThreadId: "thr_P1",
-          replied: false,
-        },
+        { id: "thr_S1", title: "Earlier question", sourceThreadId: "thr_P1" },
+        { id: "thr_S2", title: "Later question", sourceThreadId: "thr_P1" },
         {
           id: "thr_S4",
           title: "First reply running",
           sourceThreadId: "thr_P1",
-          replied: false,
           status: "active",
-          createdAt: 30,
         },
       ],
     });

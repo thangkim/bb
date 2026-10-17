@@ -232,19 +232,18 @@ describe("task detail side chats", () => {
       app.navPanels[0]!,
       { subPath: "task/TSK-5" },
       {
-        rpc: detailRpc(),
-        sidebarThreads: {
-          threads: [
-            {
-              ...makeSidebarThread("thr_side0001"),
-              title: "Why the retry?",
-              displayTitle: "Why the retry?",
-              sourceThreadId: "thr_worker000",
-              originKind: "fork",
-              originPluginId: "side-chat-plus",
-              isHidden: true,
-            },
-          ],
+        rpc: {
+          ...detailRpc(),
+          listSideChats: () => ({
+            sideChats: [
+              {
+                id: "thr_side0001",
+                title: "Why the retry?",
+                status: "idle",
+                createdAt: 1,
+              },
+            ],
+          }),
         },
       },
     );

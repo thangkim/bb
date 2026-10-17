@@ -1,11 +1,13 @@
 ---
 name: pane-collapse
-description: Temporarily minimize a thread pane in a split from the thread's "..." menu or Shift+Option+Z, restore it from the window title bar, and the limits of how it hooks into bb's split layout.
+description: Temporarily minimize a thread pane in a split from the thread's "..." menu or Shift+Option+Z, preview and reply to it from its chip in the window title bar, restore it, and the limits of how it hooks into bb's split layout.
 ---
 
 Pane Collapse adds **Minimize pane** to the thread actions menu (the "..." in a thread header, and a sidebar row's menu) for every thread shown in a split. Minimizing hides that pane and moves focus to the nearest expanded thread pane. The menu item is hidden when there is no split and on the last expanded pane, so a split always keeps one full-size pane.
 
-A minimized thread appears as a chip in the window title bar, between the sidebar toggle and the right panel toggle, with the most recently minimized thread on the left. Each chip shows a chat icon and the thread title. A dot on the icon means the thread is waiting for an approval or an answer. When the thread is attached to a Tomato task or project, the chip's tooltip names it and a project's color dot appears before the title. Click a chip, or press Cmd+Ctrl+Z for the leftmost one, to restore the pane and focus its thread. Focusing a minimized pane another way, such as clicking its thread in the sidebar, also restores it.
+A minimized thread appears as a chip in the window title bar, between the sidebar toggle and the right panel toggle, with the most recently minimized thread on the left. Each chip shows a chat icon and the thread title. When the thread is attached to a Tomato task or project, the task title (in blue) or the project's color dot and name follow the title. A dot on the icon means the thread is waiting for an approval or an answer. The icon turns blue when the agent has finished a reply you haven't read yet, and goes back to grey once you open the thread. Click a chip, or press Cmd+Ctrl+Z for the leftmost one, to restore the pane and focus its thread. Focusing a minimized pane another way, such as clicking its thread in the sidebar, also restores it.
+
+Hover a chip to open a popover with the thread's latest agent message and a reply box. Enter sends the reply (Shift+Enter adds a new line); it is queued if the agent is still working, and the pane stays minimized. The popover stays open while the reply box has focus, and an unsent draft is kept until the window reloads. A plain reply does not answer a pending approval or question; the popover says so, and its Open button restores the pane so you can respond there.
 
 When bb shows no window title bar (the sidebar is not framed, or on a compact screen), a minimized pane shrinks to a 36px strip instead: a narrow column in a side-by-side split, a short bar in a stacked one, with the same icon, dot, title and linked task or project. Click the strip to restore it.
 
