@@ -3,14 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Temporarily collapse a split pane's thread to a narrow strip, and expand it again with one click.",
+  "description": "Temporarily minimize a split pane's thread to a chip in the window title bar, and restore it with one click.",
   "engines": {
     "bb": ">=0.0",
     "bbPluginSdk": ">=0.5.27"
   },
   "bb": {
     "name": "Pane Collapse",
-    "description": "Collapse a thread pane in a split to a narrow chat strip from its header, then click the strip to expand it again.",
+    "description": "Minimize a thread pane in a split from its \"...\" menu or Shift+Option+Z, then click its chip in the window title bar to restore it.",
     "branding": {
       "icon": "Columns2"
     },

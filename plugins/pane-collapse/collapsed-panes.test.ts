@@ -111,17 +111,21 @@ const ROOT = '[data-pane-collapse-root="0"]';
 
 describe("collapsedLayoutCss", () => {
   it("pins collapsed cells to a strip and scales the rest to fill the grid", () => {
-    const css = collapsedLayoutCss([
-      {
-        rootId: "0",
-        cells: [
-          { nthChild: 1, grow: 0.2, pinned: false, collapsed: false },
-          { nthChild: 3, grow: 0.2, pinned: false, collapsed: true },
-          { nthChild: 5, grow: 0.2, pinned: false, collapsed: true },
-          { nthChild: 7, grow: 0.4, pinned: false, collapsed: false },
-        ],
-      },
-    ]);
+    const css = collapsedLayoutCss(
+      [
+        {
+          rootId: "0",
+          cells: [
+            { nthChild: 1, grow: 0.2, pinned: false, collapsed: false },
+            { nthChild: 3, grow: 0.2, pinned: false, collapsed: true },
+            { nthChild: 5, grow: 0.2, pinned: false, collapsed: true },
+            { nthChild: 7, grow: 0.4, pinned: false, collapsed: false },
+          ],
+          dividers: [2, 4, 6],
+        },
+      ],
+      "strip",
+    );
     expect(css).toContain(
       `${ROOT.repeat(3)} > :nth-child(3) { flex: 0 0 36px !important; }`,
     );
@@ -137,17 +141,21 @@ describe("collapsedLayoutCss", () => {
   });
 
   it("leaves cells another stylesheet pins alone and fills around them", () => {
-    const css = collapsedLayoutCss([
-      {
-        rootId: "0",
-        cells: [
-          { nthChild: 1, grow: 0.19, pinned: true, collapsed: false },
-          { nthChild: 3, grow: 0.2, pinned: false, collapsed: true },
-          { nthChild: 5, grow: 0.25, pinned: false, collapsed: false },
-          { nthChild: 7, grow: 0.75, pinned: false, collapsed: false },
-        ],
-      },
-    ]);
+    const css = collapsedLayoutCss(
+      [
+        {
+          rootId: "0",
+          cells: [
+            { nthChild: 1, grow: 0.19, pinned: true, collapsed: false },
+            { nthChild: 3, grow: 0.2, pinned: false, collapsed: true },
+            { nthChild: 5, grow: 0.25, pinned: false, collapsed: false },
+            { nthChild: 7, grow: 0.75, pinned: false, collapsed: false },
+          ],
+          dividers: [2, 4, 6],
+        },
+      ],
+      "strip",
+    );
     expect(css).not.toContain(":nth-child(1)");
     expect(css).toContain(
       `${ROOT} > :nth-child(5) { flex-grow: 0.25 !important; }`,
@@ -155,5 +163,32 @@ describe("collapsedLayoutCss", () => {
     expect(css).toContain(
       `${ROOT} > :nth-child(7) { flex-grow: 0.75 !important; }`,
     );
+  });
+
+  it("hides minimized cells and keeps one divider between each pair of visible cells", () => {
+    const css = collapsedLayoutCss(
+      [
+        {
+          rootId: "0",
+          cells: [
+            { nthChild: 1, grow: 0.25, pinned: false, collapsed: true },
+            { nthChild: 3, grow: 0.25, pinned: false, collapsed: false },
+            { nthChild: 5, grow: 0.25, pinned: false, collapsed: true },
+            { nthChild: 7, grow: 0.25, pinned: false, collapsed: false },
+            { nthChild: 9, grow: 0.25, pinned: false, collapsed: true },
+          ],
+          dividers: [2, 4, 6, 8],
+        },
+      ],
+      "hidden",
+    );
+    const hidden = [
+      ...css.matchAll(/:nth-child\((\d+)\)[^{]*\{ display: none/g),
+    ].map((match) => Number(match[1]));
+    expect(hidden).toEqual([1, 5, 9, 2, 6, 8]);
+    expect(css).toContain(
+      `${ROOT.repeat(3)} > :nth-child(1):not(:has([data-maximized])) { display: none !important; }`,
+    );
+    expect(css).not.toContain("36px");
   });
 });

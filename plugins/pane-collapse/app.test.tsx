@@ -14,15 +14,18 @@ import type {
   PluginCommandRegistration,
   PluginSidebarSplitLayout,
   PluginSidebarThread,
-  PluginThreadHeaderActionProps,
+  PluginThreadActionTarget,
+  PluginThreadActionItemInput,
+  BbNavigate,
 } from "@get-bb/plugin-sdk/app";
 
 const app = await loadPluginApp(() => import("./app"));
 const {
   default: definition,
-  CollapsePaneButton,
   collapsedPanes,
+  minimizePaneAction,
 } = await import("./app");
+type MinimizeActionData = import("./app").MinimizeActionData;
 
 const commands = new Map<string, PluginCommandRegistration>();
 definition.setup({
@@ -33,7 +36,7 @@ definition.setup({
   },
   slots: {
     experimental_appOverlay: () => {},
-    experimental_threadHeaderAction: () => {},
+    experimental_threadAction: () => {},
   },
 } as unknown as PluginAppBuilder);
 
@@ -61,6 +64,18 @@ function splitLayout(focused: PaneId): PluginSidebarSplitLayout {
       isFocused: focused === paneId,
     })),
   };
+}
+
+function mountTitleBar(): HTMLElement {
+  const titleBar = document.createElement("div");
+  titleBar.dataset.testid = "app-window-title-bar";
+  const left = document.createElement("div");
+  left.id = "left-controls";
+  const right = document.createElement("div");
+  right.id = "right-toggle";
+  titleBar.append(left, right);
+  document.body.append(titleBar);
+  return titleBar;
 }
 
 function mountSplitDom(): Record<
@@ -128,7 +143,7 @@ describe("collapsed pane strips", () => {
     act(() => collapsedPanes.set(new Set(["pa"])));
 
     const strip = await screen.findByRole("button", {
-      name: "Expand Alpha thread",
+      name: "Restore Alpha thread",
     });
     expect(panes.pa.pane.contains(strip)).toBe(true);
     expect(styleText()).toContain(
@@ -137,7 +152,7 @@ describe("collapsed pane strips", () => {
 
     fireEvent.click(strip);
     expect(collapsedPanes.get().size).toBe(0);
-    expect(screen.queryByRole("button", { name: /Expand/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Restore/ })).toBeNull();
     expect(styleText()).not.toContain("data-pane-collapse-root");
     expect(document.querySelector("[data-pane-collapse-root]")).toBeNull();
   });
@@ -148,12 +163,12 @@ describe("collapsed pane strips", () => {
     panes.pa.pane.append(badge);
     mountOverlay("pb");
     act(() => collapsedPanes.set(new Set(["pa"])));
-    await screen.findByRole("button", { name: "Expand Alpha thread" });
+    await screen.findByRole("button", { name: "Restore Alpha thread" });
 
     badge.dataset.linkedWorkKind = "task";
     badge.dataset.linkedWorkLabel = "Write the launch post";
     const strip = await screen.findByRole("button", {
-      name: "Expand Alpha thread — Task Write the launch post",
+      name: "Restore Alpha thread — Task Write the launch post",
     });
     expect(strip.textContent).toBe("Alpha threadWrite the launch post");
 
@@ -161,7 +176,7 @@ describe("collapsed pane strips", () => {
     badge.dataset.linkedWorkLabel = "Launch";
     badge.dataset.linkedWorkColor = "#ff0000";
     await screen.findByRole("button", {
-      name: "Expand Alpha thread — Project Launch",
+      name: "Restore Alpha thread — Project Launch",
     });
     expect(
       strip.querySelector<HTMLElement>(".rounded-full:not(.bg-attention)")
@@ -169,7 +184,7 @@ describe("collapsed pane strips", () => {
     ).toBe("rgb(255, 0, 0)");
 
     badge.remove();
-    await screen.findByRole("button", { name: "Expand Alpha thread" });
+    await screen.findByRole("button", { name: "Restore Alpha thread" });
   });
 
   it("lets the expanded panes fill the width a collapsed pane gives up", async () => {
@@ -205,9 +220,7 @@ describe("collapsed pane strips", () => {
     mountOverlay("pb");
     act(() => collapsedPanes.set(new Set(["pa"])));
 
-    expect(styleText()).toContain(
-      ":nth-child(3) { flex-grow: 1 !important; }",
-    );
+    expect(styleText()).toContain(":nth-child(3) { flex-grow: 1 !important; }");
     expect(styleText()).not.toContain(":nth-child(5)");
     spy.mockRestore();
   });
@@ -231,38 +244,134 @@ describe("collapsed pane strips", () => {
   });
 });
 
-describe("collapse button", () => {
-  const props: PluginThreadHeaderActionProps = {
-    threadId: "t-a",
-    projectId: "p",
-    isCompactViewport: false,
-  };
+describe("minimized threads in the window title bar", () => {
+  it("hides the pane, shows a chip between the title bar controls, and restores on click", async () => {
+    const titleBar = mountTitleBar();
+    mountSplitDom();
+    const view = mountOverlay("pb");
+    act(() => collapsedPanes.set(new Set(["pa"])));
 
-  function InPane(paneProps: PluginThreadHeaderActionProps) {
-    return (
-      <div data-split-pane-id="pa">
-        <CollapsePaneButton {...paneProps} />
-      </div>
-    );
-  }
-
-  it("collapses its own pane and hands focus to the other pane", () => {
-    const view = renderSlot({ component: InPane }, props, {
-      sidebarSplitLayout: splitLayout("pa"),
+    const chip = await screen.findByRole("button", {
+      name: "Restore Alpha thread",
     });
+    const tray = titleBar.querySelector("[data-pane-collapse-tray]");
+    expect(tray?.contains(chip)).toBe(true);
+    expect([...titleBar.children].map((child) => child.id || "tray")).toEqual([
+      "left-controls",
+      "tray",
+      "right-toggle",
+    ]);
+    expect(chip.querySelector(".bg-attention")).not.toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse pane" }));
+    const root = '[data-pane-collapse-root="0"]'.repeat(3);
+    expect(styleText()).toContain(
+      `${root} > :nth-child(1):not(:has([data-maximized])) { display: none !important; }`,
+    );
+    expect(styleText()).toContain(
+      `${root} > :nth-child(2) { display: none !important; }`,
+    );
+    expect(styleText()).not.toContain(":nth-child(4) { display: none");
+    expect(styleText()).not.toContain("36px");
+    expect(document.querySelector("[data-pane-collapse-strip]")).toBeNull();
 
-    expect([...collapsedPanes.get()]).toEqual(["pa"]);
+    fireEvent.click(chip);
+    expect(collapsedPanes.get().size).toBe(0);
     expect(view.navigateCalls).toContainEqual({
       method: "toThread",
-      threadId: "t-b",
+      threadId: "t-a",
     });
-    expect(screen.queryByRole("button", { name: "Collapse pane" })).toBeNull();
+    expect(titleBar.querySelector("[data-pane-collapse-tray]")).toBeNull();
+    expect(styleText()).not.toContain("data-pane-collapse-root");
   });
 
-  it("is hidden when the thread is not in a split", () => {
-    renderSlot({ component: InPane }, props);
-    expect(screen.queryByRole("button", { name: "Collapse pane" })).toBeNull();
+  it("lists the most recently minimized pane first", async () => {
+    mountTitleBar();
+    mountSplitDom();
+    mountOverlay("pb");
+    act(() => collapsedPanes.set(new Set(["pc", "pa"])));
+
+    const tray = await waitFor(() => {
+      const element = document.querySelector("[data-pane-collapse-tray]");
+      expect(element?.children).toHaveLength(2);
+      return element!;
+    });
+    expect(
+      [...tray.querySelectorAll("button")].map((chip) =>
+        chip.getAttribute("aria-label"),
+      ),
+    ).toEqual(["Restore Alpha thread", "Restore Thread"]);
+  });
+});
+
+describe("minimize pane thread action", () => {
+  const thread = { id: "t-a" } as PluginThreadActionTarget;
+
+  function item(data: MinimizeActionData) {
+    const navigateCalls: string[] = [];
+    const navigate = {
+      toThread: (threadId: string) => navigateCalls.push(threadId),
+    } as unknown as BbNavigate;
+    const action = minimizePaneAction({
+      thread,
+      data,
+      navigate,
+    } as PluginThreadActionItemInput<MinimizeActionData>);
+    return { action, navigateCalls };
+  }
+
+  it("minimizes the thread's pane and hands focus to its neighbour", async () => {
+    const { action, navigateCalls } = item({
+      layout: splitLayout("pa"),
+      collapsed: new Set(),
+    });
+    expect(action?.label).toBe("Minimize pane");
+
+    await action?.run({ requestRename: () => {} });
+
+    expect([...collapsedPanes.get()]).toEqual(["pa"]);
+    expect(navigateCalls).toEqual(["t-b"]);
+  });
+
+  it("is hidden outside a split, when already minimized, and on the last expanded pane", () => {
+    expect(item({ layout: null, collapsed: new Set() }).action).toBeNull();
+    expect(
+      item({ layout: splitLayout("pb"), collapsed: new Set(["pa"]) }).action,
+    ).toBeNull();
+    expect(
+      item({ layout: splitLayout("pa"), collapsed: new Set(["pb", "pc"]) })
+        .action,
+    ).toBeNull();
+  });
+
+  it("restores the most recently minimized pane by command and focuses its thread", () => {
+    mountSplitDom();
+    const view = mountOverlay("pb");
+    act(() => collapsedPanes.set(new Set(["pc", "pa"])));
+
+    expect(command("restore-latest").isAvailable?.(context)).toBe(true);
+    act(() => void command("restore-latest").run(context));
+
+    expect([...collapsedPanes.get()]).toEqual(["pc"]);
+    expect(view.navigateCalls).toContainEqual({
+      method: "toThread",
+      threadId: "t-a",
+    });
+
+    act(() => void command("restore-latest").run(context));
+    expect(collapsedPanes.get().size).toBe(0);
+    expect(command("restore-latest").isAvailable?.(context)).toBe(false);
+  });
+
+  it("binds Shift+Option+Z to minimize and Cmd+Ctrl+Z to restore by default", () => {
+    expect(command("restore-latest").defaultShortcut).toEqual({
+      key: "z",
+      meta: true,
+      control: true,
+    });
+    expect(command("collapse-focused").defaultShortcut).toEqual({
+      key: "z",
+      alt: true,
+      shift: true,
+    });
   });
 });

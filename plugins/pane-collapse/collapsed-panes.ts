@@ -11,6 +11,8 @@ export const ROOT_ATTRIBUTE = "data-pane-collapse-root";
 export const GRID_ROOT_SELECTOR = "[data-split-resize-grid-root]";
 export const GRID_DIVIDER_ATTRIBUTE = "data-split-resize-grid-boundary";
 
+export type CollapsedPaneDisplay = "strip" | "hidden";
+
 export interface CollapsedPaneStore {
   get(): CollapsedPanes;
   set(next: CollapsedPanes): void;
@@ -45,6 +47,10 @@ export function withoutPane(collapsed: CollapsedPanes, paneId: string) {
   const next = new Set(collapsed);
   next.delete(paneId);
   return next;
+}
+
+export function latestCollapsed(collapsed: CollapsedPanes): string | null {
+  return [...collapsed].at(-1) ?? null;
 }
 
 export function pruneCollapsed(
@@ -123,9 +129,23 @@ export interface SplitCell {
 export interface SplitGrid {
   rootId: string;
   cells: readonly SplitCell[];
+  dividers: readonly number[];
 }
 
-export function collapsedLayoutCss(grids: readonly SplitGrid[]): string {
+function redundantDividers(grid: SplitGrid): number[] {
+  return grid.dividers.filter((divider) => {
+    const before = grid.cells.filter((cell) => cell.nthChild < divider).at(-1);
+    const visibleAfter = grid.cells.some(
+      (cell) => cell.nthChild > divider && !cell.collapsed,
+    );
+    return before === undefined || before.collapsed || !visibleAfter;
+  });
+}
+
+export function collapsedLayoutCss(
+  grids: readonly SplitGrid[],
+  display: CollapsedPaneDisplay,
+): string {
   const rules = [
     `${PANE_SELECTOR}[data-maximized] > [${STRIP_ATTRIBUTE}] { display: none !important; }`,
   ];
@@ -137,11 +157,20 @@ export function collapsedLayoutCss(grids: readonly SplitGrid[]): string {
       const child = ` > :nth-child(${cell.nthChild})`;
       if (cell.collapsed) {
         rules.push(
-          `${root.repeat(3)}${child} { flex: 0 0 ${COLLAPSED_PANE_SIZE_PX}px !important; }`,
+          display === "strip"
+            ? `${root.repeat(3)}${child} { flex: 0 0 ${COLLAPSED_PANE_SIZE_PX}px !important; }`
+            : `${root.repeat(3)}${child}:not(:has([data-maximized])) { display: none !important; }`,
         );
       } else if (!cell.pinned && total > 0) {
         rules.push(
           `${root}${child} { flex-grow: ${cell.grow / total} !important; }`,
+        );
+      }
+    }
+    if (display === "hidden") {
+      for (const divider of redundantDividers(grid)) {
+        rules.push(
+          `${root.repeat(3)} > :nth-child(${divider}) { display: none !important; }`,
         );
       }
     }

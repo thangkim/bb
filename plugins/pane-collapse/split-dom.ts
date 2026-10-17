@@ -69,13 +69,17 @@ export function readSplitDom(collapsed: CollapsedPanes): SplitDom {
         !child.hasAttribute(GRID_DIVIDER_ATTRIBUTE),
     );
     cells.push(...children);
+    const nth = (child: Element) => [...root.children].indexOf(child) + 1;
     return {
       rootId: String(index),
       cells: children.map((cell) => ({
-        nthChild: [...root.children].indexOf(cell) + 1,
+        nthChild: nth(cell),
         ...readCellGrow(cell),
         collapsed: isCollapsedCell(cell, collapsed),
       })),
+      dividers: [...root.children]
+        .filter((child) => child.hasAttribute(GRID_DIVIDER_ATTRIBUTE))
+        .map(nth),
     };
   });
   return { grids, roots, cells };

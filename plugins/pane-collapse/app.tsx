@@ -1,6 +1,7 @@
 import {
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -8,15 +9,16 @@ import {
 import { createPortal } from "react-dom";
 import {
   definePluginApp,
+  experimental_THREAD_ACTION_GROUPS,
   experimental_usePluginId,
   experimental_useSidebarThreads,
   useBbNavigate,
   useSidebarSplitLayout,
   type BbNavigate,
   type PluginSidebarSplitLayout,
-  type PluginThreadHeaderActionProps,
+  type PluginThreadActionItemInput,
+  type PluginThreadAction,
 } from "@get-bb/plugin-sdk/app";
-import { Button } from "@bb/shared-ui/button";
 import { Icon } from "@bb/shared-ui/icon";
 import { cn } from "@bb/shared-ui/lib/utils";
 import {
@@ -26,13 +28,15 @@ import {
   collapsedLayoutCss,
   createCollapsedPaneStore,
   focusTargetAfterCollapse,
+  latestCollapsed,
   newlyFocusedCollapsedPane,
   pruneCollapsed,
   withPane,
   withoutPane,
+  type CollapsedPaneDisplay,
   type CollapsedPanes,
 } from "./collapsed-panes";
-import { usePaneLinkedWork } from "./linked-work";
+import { usePaneLinkedWork, type PaneLinkedWork } from "./linked-work";
 import { readSplitDom, stampGridRoots } from "./split-dom";
 
 export const collapsedPanes = createCollapsedPaneStore();
@@ -61,39 +65,143 @@ function collapsePane(
   return true;
 }
 
-function expandPane(paneId: string): void {
+function restorePane(
+  paneId: string,
+  threadId: string | null,
+  navigate: BbNavigate | null,
+): void {
   collapsedPanes.set(withoutPane(collapsedPanes.get(), paneId));
+  if (threadId !== null) navigate?.toThread(threadId);
 }
 
-export function CollapsePaneButton(_props: PluginThreadHeaderActionProps) {
-  const anchor = useRef<HTMLSpanElement>(null);
-  const [paneId, setPaneId] = useState<string | null>(null);
+export interface MinimizeActionData {
+  layout: PluginSidebarSplitLayout | null;
+  collapsed: CollapsedPanes;
+}
+
+export function useMinimizeActionData(): MinimizeActionData {
   const layout = useSidebarSplitLayout();
   const collapsed = useCollapsedPanes();
-  const navigate = useBbNavigate();
+  return useMemo(() => ({ layout, collapsed }), [layout, collapsed]);
+}
+
+export function minimizePaneAction({
+  thread,
+  data,
+  navigate,
+}: PluginThreadActionItemInput<MinimizeActionData>): PluginThreadAction | null {
+  const pane = data.layout?.panes.find(
+    (candidate) => candidate.threadId === thread.id,
+  );
+  if (
+    pane === undefined ||
+    !canCollapse(data.layout, data.collapsed, pane.paneId)
+  ) {
+    return null;
+  }
+  return {
+    label: "Minimize pane",
+    icon: "Minus",
+    run: () => {
+      collapsePane(data.layout, navigate, pane.paneId);
+    },
+  };
+}
+
+export const TITLE_BAR_SELECTOR = '[data-testid="app-window-title-bar"]';
+export const TRAY_ATTRIBUTE = "data-pane-collapse-tray";
+
+function useTitleBar(active: boolean): HTMLElement | null {
+  const [titleBar, setTitleBar] = useState<HTMLElement | null>(null);
   useLayoutEffect(() => {
-    setPaneId(
-      anchor.current?.closest<HTMLElement>(PANE_SELECTOR)?.dataset
-        .splitPaneId ?? null,
-    );
-  }, [layout]);
-  const available = paneId !== null && canCollapse(layout, collapsed, paneId);
+    if (!active) {
+      setTitleBar(null);
+      return;
+    }
+    const update = () => {
+      const next = document.querySelector<HTMLElement>(TITLE_BAR_SELECTOR);
+      setTitleBar((current) => (current === next ? current : next));
+    };
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [active]);
+  return titleBar;
+}
+
+function useTitleBarTray(
+  titleBar: HTMLElement | null,
+  pluginId: string,
+): HTMLElement | null {
+  const [tray, setTray] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    if (titleBar === null) {
+      setTray(null);
+      return;
+    }
+    const element = document.createElement("div");
+    element.dataset.bbPlugin = pluginId;
+    element.setAttribute(TRAY_ATTRIBUTE, "");
+    element.setAttribute("role", "group");
+    element.setAttribute("aria-label", "Minimized threads");
+    element.className =
+      "flex min-w-0 flex-1 items-center gap-1 overflow-hidden px-2 [transform:translateY(var(--bb-macos-chrome-control-y,2px))]";
+    titleBar.insertBefore(element, titleBar.children[1] ?? null);
+    setTray(element);
+    return () => element.remove();
+  }, [titleBar, pluginId]);
+  return tray;
+}
+
+function paneLabel(title: string, work: PaneLinkedWork | null): string {
+  return work === null
+    ? title
+    : `${title} — ${work.kind === "task" ? "Task" : "Project"} ${work.label}`;
+}
+
+function AttentionDot() {
   return (
-    <>
-      <span ref={anchor} hidden />
-      {available ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Collapse pane"
-          className="size-7 text-muted-foreground"
-          onClick={() => collapsePane(layout, navigate, paneId)}
-        >
-          <Icon name="Minus" />
-        </Button>
+    <span className="absolute -right-1 -top-1 size-2 rounded-full bg-attention" />
+  );
+}
+
+interface MinimizedChipProps {
+  pane: HTMLElement;
+  title: string;
+  needsInput: boolean;
+  onRestore: () => void;
+}
+
+function MinimizedChip({
+  pane,
+  title,
+  needsInput,
+  onRestore,
+}: MinimizedChipProps) {
+  const work = usePaneLinkedWork(pane);
+  const label = paneLabel(title, work);
+  return (
+    <button
+      type="button"
+      aria-label={`Restore ${label}`}
+      title={label}
+      onClick={onRestore}
+      className="relative z-50 flex h-6 min-w-12 max-w-48 shrink cursor-pointer items-center gap-1.5 rounded-md border border-border px-2 text-xs text-muted-foreground [-webkit-app-region:no-drag] [app-region:no-drag] hover:bg-state-hover hover:text-foreground"
+    >
+      <span className="relative flex shrink-0">
+        <Icon name="MessageSquare" className="size-3.5" />
+        {needsInput ? <AttentionDot /> : null}
+      </span>
+      {work?.kind === "project" && work.color !== null ? (
+        <span
+          aria-hidden
+          className="size-2 shrink-0 rounded-full"
+          style={{ backgroundColor: work.color }}
+        />
       ) : null}
-    </>
+      <span className="min-w-0 truncate">{title}</span>
+    </button>
   );
 }
 
@@ -109,8 +217,9 @@ function stripHosts(
   collapsed: CollapsedPanes,
 ): StripHost[] {
   if (layout === null) return [];
-  return layout.panes.flatMap((pane) => {
-    if (!collapsed.has(pane.paneId)) return [];
+  return [...collapsed].flatMap((paneId) => {
+    const pane = layout.panes.find((candidate) => candidate.paneId === paneId);
+    if (pane === undefined) return [];
     const element = [
       ...document.querySelectorAll<HTMLElement>(PANE_SELECTOR),
     ].find((candidate) => candidate.dataset.splitPaneId === pane.paneId);
@@ -132,7 +241,7 @@ interface CollapsedStripProps {
   title: string;
   vertical: boolean;
   needsInput: boolean;
-  onExpand: () => void;
+  onRestore: () => void;
 }
 
 const UPRIGHT_VERTICAL_TEXT_CLASS =
@@ -144,13 +253,10 @@ function CollapsedStrip({
   title,
   vertical,
   needsInput,
-  onExpand,
+  onRestore,
 }: CollapsedStripProps) {
   const work = usePaneLinkedWork(pane);
-  const label =
-    work === null
-      ? title
-      : `${title} — ${work.kind === "task" ? "Task" : "Project"} ${work.label}`;
+  const label = paneLabel(title, work);
   return (
     <div
       data-bb-plugin={pluginId}
@@ -159,9 +265,9 @@ function CollapsedStrip({
     >
       <button
         type="button"
-        aria-label={`Expand ${label}`}
+        aria-label={`Restore ${label}`}
         title={label}
-        onClick={onExpand}
+        onClick={onRestore}
         className={cn(
           "flex size-full cursor-pointer items-center gap-2 overflow-hidden text-muted-foreground hover:bg-state-hover hover:text-foreground",
           vertical ? "flex-col py-3" : "flex-row px-3",
@@ -169,9 +275,7 @@ function CollapsedStrip({
       >
         <span className="relative flex shrink-0">
           <Icon name="MessageSquare" className="size-4" />
-          {needsInput ? (
-            <span className="absolute -right-1 -top-1 size-2 rounded-full bg-attention" />
-          ) : null}
+          {needsInput ? <AttentionDot /> : null}
         </span>
         <span
           className={cn(
@@ -211,7 +315,7 @@ function CollapsedStrip({
   );
 }
 
-export function CollapsedPaneStrips() {
+export function CollapsedPaneOverlay() {
   const layout = useSidebarSplitLayout();
   const navigate = useBbNavigate();
   const collapsed = useCollapsedPanes();
@@ -219,6 +323,9 @@ export function CollapsedPaneStrips() {
   const { threads } = experimental_useSidebarThreads();
   const focusedPaneId = useRef<string | null>(null);
   const [hosts, setHosts] = useState<StripHost[]>([]);
+  const titleBar = useTitleBar(collapsed.size > 0);
+  const tray = useTitleBarTray(titleBar, pluginId);
+  const display: CollapsedPaneDisplay = tray === null ? "strip" : "hidden";
 
   useEffect(() => {
     latestLayout = layout;
@@ -247,7 +354,7 @@ export function CollapsedPaneStrips() {
       style.textContent = "";
       const dom = readSplitDom(collapsed);
       stampGridRoots(dom.roots);
-      style.textContent = collapsedLayoutCss(dom.grids);
+      style.textContent = collapsedLayoutCss(dom.grids, display);
       observer.disconnect();
       for (const root of dom.roots) {
         observer.observe(root, { childList: true });
@@ -262,32 +369,58 @@ export function CollapsedPaneStrips() {
       style.remove();
       stampGridRoots([]);
     };
-  }, [collapsed, layout, pluginId]);
+  }, [collapsed, display, layout, pluginId]);
 
   useLayoutEffect(() => {
     setHosts(stripHosts(layout, collapsed));
   }, [layout, collapsed]);
 
+  const panes = hosts.map((host) => {
+    const thread =
+      host.threadId === null
+        ? undefined
+        : threads.find((candidate) => candidate.id === host.threadId);
+    return {
+      host,
+      title: thread?.displayTitle ?? "Thread",
+      needsInput: thread?.hasPendingInteraction ?? false,
+      onRestore: () => restorePane(host.paneId, host.threadId, navigate),
+    };
+  });
+
+  if (tray !== null) {
+    return createPortal(
+      [...panes]
+        .reverse()
+        .map(({ host, title, needsInput, onRestore }) => (
+          <MinimizedChip
+            key={host.paneId}
+            pane={host.element}
+            title={title}
+            needsInput={needsInput}
+            onRestore={onRestore}
+          />
+        )),
+      tray,
+    );
+  }
+
   return (
     <>
-      {hosts.map((host) => {
-        const thread =
-          host.threadId === null
-            ? undefined
-            : threads.find((candidate) => candidate.id === host.threadId);
-        return createPortal(
+      {panes.map(({ host, title, needsInput, onRestore }) =>
+        createPortal(
           <CollapsedStrip
             pluginId={pluginId}
             pane={host.element}
-            title={thread?.displayTitle ?? "Thread"}
+            title={title}
             vertical={host.vertical}
-            needsInput={thread?.hasPendingInteraction ?? false}
-            onExpand={() => expandPane(host.paneId)}
+            needsInput={needsInput}
+            onRestore={onRestore}
           />,
           host.element,
           host.paneId,
-        );
-      })}
+        ),
+      )}
     </>
   );
 }
@@ -297,19 +430,23 @@ function focusedPaneId(): string | null {
 }
 
 export default definePluginApp((app) => {
-  app.slots.experimental_threadHeaderAction({
-    id: "collapse-pane",
-    title: "Collapse pane",
-    component: CollapsePaneButton,
+  app.slots.experimental_threadAction<MinimizeActionData>({
+    id: "minimize-pane",
+    title: "Minimize pane",
+    icon: "Minus",
+    group: experimental_THREAD_ACTION_GROUPS.open,
+    useData: useMinimizeActionData,
+    item: minimizePaneAction,
   });
   app.slots.experimental_appOverlay({
     id: "collapsed-strips",
-    component: CollapsedPaneStrips,
+    component: CollapsedPaneOverlay,
   });
 
   app.commands.register({
     id: "collapse-focused",
-    title: "Panes: collapse focused pane",
+    title: "Panes: minimize focused pane",
+    defaultShortcut: { key: "z", alt: true, shift: true },
     isAvailable: () => {
       const paneId = focusedPaneId();
       return (
@@ -324,8 +461,23 @@ export default definePluginApp((app) => {
   });
 
   app.commands.register({
+    id: "restore-latest",
+    title: "Panes: restore most recently minimized pane",
+    defaultShortcut: { key: "z", meta: true, control: true },
+    isAvailable: () => latestCollapsed(collapsedPanes.get()) !== null,
+    run: () => {
+      const paneId = latestCollapsed(collapsedPanes.get());
+      if (paneId === null) return;
+      const threadId =
+        latestLayout?.panes.find((pane) => pane.paneId === paneId)?.threadId ??
+        null;
+      restorePane(paneId, threadId, latestNavigate);
+    },
+  });
+
+  app.commands.register({
     id: "expand-all",
-    title: "Panes: expand collapsed panes",
+    title: "Panes: restore minimized panes",
     isAvailable: () => collapsedPanes.get().size > 0,
     run: () => collapsedPanes.set(new Set()),
   });
