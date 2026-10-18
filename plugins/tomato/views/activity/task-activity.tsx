@@ -20,7 +20,10 @@ import {
   useTasksQuery,
   useTasksRpc,
 } from "../../shell/data.js";
-import { Lightbox } from "../detail/attachments.js";
+import {
+  AttachmentPreview,
+  canPreviewAttachment,
+} from "../detail/attachments.js";
 import {
   AttachmentChip,
   settleStagedUploads,
@@ -109,14 +112,19 @@ function UserAvatar({ name }: { name: string }) {
   );
 }
 
-function FileAttachmentCard({ attachment }: { attachment: Attachment }) {
-  return (
-    <a
-      href={attachmentDownloadUrl(attachment.id)}
-      download={attachment.fileName}
-      title={`${attachment.fileName} · ${formatFileSize(attachment.sizeBytes)}`}
-      className="inline-flex min-w-0 max-w-60 items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs shadow-2xs hover:border-input hover:bg-state-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-    >
+const FILE_CARD_CLASS =
+  "inline-flex min-w-0 max-w-60 items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-left text-xs shadow-2xs hover:border-input hover:bg-state-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
+function FileAttachmentCard({
+  attachment,
+  onOpen,
+}: {
+  attachment: Attachment;
+  onOpen: (attachment: Attachment) => void;
+}) {
+  const title = `${attachment.fileName} · ${formatFileSize(attachment.sizeBytes)}`;
+  const label = (
+    <>
       <span className="flex size-6 shrink-0 items-center justify-center rounded-sm bg-secondary text-muted-foreground">
         <HugeiconsIcon icon={File01Icon} className="size-3.5" />
       </span>
@@ -126,16 +134,39 @@ function FileAttachmentCard({ attachment }: { attachment: Attachment }) {
           {formatFileSize(attachment.sizeBytes)}
         </small>
       </span>
+    </>
+  );
+  if (canPreviewAttachment(attachment)) {
+    return (
+      <button
+        type="button"
+        aria-label={`Open ${attachment.fileName}`}
+        title={title}
+        className={FILE_CARD_CLASS}
+        onClick={() => onOpen(attachment)}
+      >
+        {label}
+      </button>
+    );
+  }
+  return (
+    <a
+      href={attachmentDownloadUrl(attachment.id)}
+      download={attachment.fileName}
+      title={title}
+      className={FILE_CARD_CLASS}
+    >
+      {label}
     </a>
   );
 }
 
 function ImageAttachmentFigure({
   attachment,
-  onOpenImage,
+  onOpen,
 }: {
   attachment: Attachment;
-  onOpenImage: (attachment: Attachment) => void;
+  onOpen: (attachment: Attachment) => void;
 }) {
   return (
     <figure className="relative m-0 flex min-w-0 max-w-full flex-col">
@@ -144,7 +175,7 @@ function ImageAttachmentFigure({
         aria-label={`View ${attachment.fileName}`}
         title={attachment.fileName}
         className="block max-w-[211px] rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring @2xl:max-w-[282px]"
-        onClick={() => onOpenImage(attachment)}
+        onClick={() => onOpen(attachment)}
       >
         <img
           src={attachmentDownloadUrl(attachment.id)}
@@ -164,10 +195,10 @@ function ImageAttachmentFigure({
 
 export function AttachmentTracks({
   attachments,
-  onOpenImage,
+  onOpen,
 }: {
   attachments: Attachment[];
-  onOpenImage: (attachment: Attachment) => void;
+  onOpen: (attachment: Attachment) => void;
 }) {
   const files = attachments.filter((attachment) => !attachment.isImage);
   const images = attachments.filter((attachment) => attachment.isImage);
@@ -176,7 +207,11 @@ export function AttachmentTracks({
       {files.length > 0 ? (
         <div className="flex flex-wrap items-start gap-1.5">
           {files.map((attachment) => (
-            <FileAttachmentCard key={attachment.id} attachment={attachment} />
+            <FileAttachmentCard
+              key={attachment.id}
+              attachment={attachment}
+              onOpen={onOpen}
+            />
           ))}
         </div>
       ) : null}
@@ -191,7 +226,7 @@ export function AttachmentTracks({
             <ImageAttachmentFigure
               key={attachment.id}
               attachment={attachment}
-              onOpenImage={onOpenImage}
+              onOpen={onOpen}
             />
           ))}
         </div>
@@ -231,7 +266,7 @@ function CommentCard({ entry, nowMs }: { entry: FeedEntry; nowMs: number }) {
   const { comment, attachments } = entry;
   const agent = comment.kind === "agent";
   const navigate = useBbNavigate();
-  const [lightbox, setLightbox] = useState<Attachment | null>(null);
+  const [preview, setPreview] = useState<Attachment | null>(null);
   return (
     <div className="relative mb-3.5 flex gap-2.5">
       {agent ? (
@@ -259,13 +294,13 @@ function CommentCard({ entry, nowMs }: { entry: FeedEntry; nowMs: number }) {
           onOpenThread={(threadId) => navigate.toThread(threadId)}
         />
         {attachments.length > 0 ? (
-          <AttachmentTracks
-            attachments={attachments}
-            onOpenImage={setLightbox}
-          />
+          <AttachmentTracks attachments={attachments} onOpen={setPreview} />
         ) : null}
-        {lightbox ? (
-          <Lightbox attachment={lightbox} onClose={() => setLightbox(null)} />
+        {preview ? (
+          <AttachmentPreview
+            attachment={preview}
+            onClose={() => setPreview(null)}
+          />
         ) : null}
         {comment.kind === "user" && comment.notifiedCount > 0 ? (
           <div className="mt-1 flex items-center gap-1 text-2xs font-medium text-success">

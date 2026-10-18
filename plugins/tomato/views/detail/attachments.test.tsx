@@ -6,6 +6,7 @@ import { AttachmentsGrid } from "./attachments.js";
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
 });
 
 function imageAttachment(overrides: Partial<Attachment> = {}): Attachment {
@@ -88,5 +89,85 @@ describe("AttachmentsGrid removal", () => {
 
     await waitFor(() => expect(onError).toHaveBeenCalledWith("blob is busy"));
     expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("AttachmentsGrid file preview", () => {
+  const markdownFile = imageAttachment({
+    id: "01JFILE00000000000000000A1",
+    fileName: "report.md",
+    mime: "application/octet-stream",
+    isImage: false,
+  });
+
+  it("opens a markdown file in the in-app viewer instead of downloading it", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("# Findings\n\nForum needs"));
+    vi.stubGlobal("fetch", fetchMock);
+    const screen = render(
+      <AttachmentsGrid
+        attachments={[markdownFile]}
+        onRemove={vi.fn().mockResolvedValue(undefined)}
+        onError={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open report.md" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "report.md" });
+    await waitFor(() => expect(dialog.textContent).toContain("Forum needs"));
+    expect(fetchMock.mock.calls[0]?.[0]).toContain(
+      "attachmentId=01JFILE00000000000000000A1",
+    );
+    expect(
+      screen
+        .getAllByLabelText("Download report.md")[0]
+        ?.getAttribute("download"),
+    ).toBe("report.md");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("shows the load failure inside the viewer", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("gone", { status: 404 })),
+    );
+    const screen = render(
+      <AttachmentsGrid
+        attachments={[markdownFile]}
+        onRemove={vi.fn().mockResolvedValue(undefined)}
+        onError={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open report.md" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "HTTP 404",
+    );
+  });
+
+  it("keeps other file types as downloads", () => {
+    const screen = render(
+      <AttachmentsGrid
+        attachments={[
+          imageAttachment({
+            fileName: "data.csv",
+            mime: "text/csv",
+            isImage: false,
+          }),
+        ]}
+        onRemove={vi.fn().mockResolvedValue(undefined)}
+        onError={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Open data.csv" })).toBeNull();
+    expect(
+      screen.getByText("data.csv").closest("a")?.getAttribute("download"),
+    ).toBe("data.csv");
   });
 });

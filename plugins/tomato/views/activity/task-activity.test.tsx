@@ -104,7 +104,7 @@ describe("AttachmentTracks", () => {
           attachment("01HZZZZZZZZZZZZZZZZZZZZ1F1", "notes.md", false),
           attachment("01HZZZZZZZZZZZZZZZZZZZZ1I2", "shot-b.png", true),
         ]}
-        onOpenImage={() => {}}
+        onOpen={() => {}}
       />,
     );
     const file = screen.getByText("notes.md");
@@ -120,7 +120,7 @@ describe("AttachmentTracks", () => {
         attachments={[
           attachment("01HZZZZZZZZZZZZZZZZZZZZ1I1", "shot.png", true),
         ]}
-        onOpenImage={() => {}}
+        onOpen={() => {}}
       />,
     );
     const figure = screen.getByRole("figure");

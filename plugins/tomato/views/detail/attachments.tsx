@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import { attachmentDownloadUrl } from "../../shared/attachments.js";
+import { Markdown } from "@get-bb/plugin-sdk/app";
+import {
+  attachmentDownloadUrl,
+  isMarkdownAttachment,
+} from "../../shared/attachments.js";
 import type { Attachment } from "../../shared/contract.js";
 import { errorMessage } from "../../shared/errors.js";
 import { formatFileSize } from "../activity/time.js";
@@ -66,13 +70,7 @@ export async function uploadAttachment(
   return { attachmentId: result.attachmentId, url: result.url };
 }
 
-export function Lightbox({
-  attachment,
-  onClose,
-}: {
-  attachment: Attachment;
-  onClose: () => void;
-}) {
+function useEscapeToClose(onClose: () => void) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -83,6 +81,128 @@ export function Lightbox({
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [onClose]);
+}
+
+export function canPreviewAttachment(attachment: Attachment): boolean {
+  return attachment.isImage || isMarkdownAttachment(attachment);
+}
+
+export function AttachmentPreview({
+  attachment,
+  onClose,
+}: {
+  attachment: Attachment;
+  onClose: () => void;
+}) {
+  return attachment.isImage ? (
+    <Lightbox attachment={attachment} onClose={onClose} />
+  ) : (
+    <MarkdownViewer
+      key={attachment.id}
+      attachment={attachment}
+      onClose={onClose}
+    />
+  );
+}
+
+type MarkdownSource =
+  | { kind: "loading" }
+  | { kind: "ready"; content: string }
+  | { kind: "error"; message: string };
+
+function MarkdownViewer({
+  attachment,
+  onClose,
+}: {
+  attachment: Attachment;
+  onClose: () => void;
+}) {
+  useEscapeToClose(onClose);
+  const [source, setSource] = useState<MarkdownSource>({ kind: "loading" });
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch(attachmentDownloadUrl(attachment.id), {
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`failed to load file (HTTP ${response.status})`);
+        }
+        const content = await response.text();
+        if (!controller.signal.aborted) setSource({ kind: "ready", content });
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setSource({ kind: "error", message: errorMessage(error) });
+      }
+    })();
+    return () => controller.abort();
+  }, [attachment.id]);
+
+  return (
+    <div
+      role="dialog"
+      aria-label={attachment.fileName}
+      className="fixed inset-0 z-50 flex items-center justify-center p-8"
+      style={{ background: "color-mix(in oklab, var(--ink) 60%, transparent)" }}
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-border bg-background text-foreground shadow-md"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2.5">
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-sm bg-secondary text-muted-foreground">
+            <Icon name="File" className="size-3.5" />
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">
+            {attachment.fileName}
+          </span>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {formatFileSize(attachment.sizeBytes)}
+          </span>
+          <a
+            href={attachmentDownloadUrl(attachment.id)}
+            download={attachment.fileName}
+            aria-label={`Download ${attachment.fileName}`}
+            title="Download"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-state-hover hover:text-foreground"
+          >
+            <Icon name="Download" className="size-4" />
+          </a>
+          <button
+            type="button"
+            aria-label="Close"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-state-hover hover:text-foreground"
+            onClick={onClose}
+          >
+            <Icon name="X" className="size-4" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          {source.kind === "ready" ? (
+            <Markdown content={source.content} />
+          ) : source.kind === "error" ? (
+            <p role="alert" className="text-sm text-destructive">
+              {source.message}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Lightbox({
+  attachment,
+  onClose,
+}: {
+  attachment: Attachment;
+  onClose: () => void;
+}) {
+  useEscapeToClose(onClose);
   return (
     <div
       role="dialog"
@@ -134,7 +254,7 @@ export function AttachmentsGrid({
   onRemove: (attachment: Attachment) => Promise<void>;
   onError: (message: string) => void;
 }) {
-  const [lightbox, setLightbox] = useState<Attachment | null>(null);
+  const [preview, setPreview] = useState<Attachment | null>(null);
   const [confirm, setConfirm] = useState<Attachment | null>(null);
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
 
@@ -142,7 +262,7 @@ export function AttachmentsGrid({
 
   const performRemove = async (attachment: Attachment) => {
     setConfirm(null);
-    setLightbox((current) => (current?.id === attachment.id ? null : current));
+    setPreview((current) => (current?.id === attachment.id ? null : current));
     setPending((current) => new Set(current).add(attachment.id));
     try {
       await onRemove(attachment);
@@ -185,26 +305,54 @@ export function AttachmentsGrid({
     );
   };
 
+  const fileCardLabel = (attachment: Attachment) => (
+    <>
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-sm bg-secondary text-muted-foreground">
+        <Icon name="File" className="size-3.5" />
+      </span>
+      <span className="min-w-0">
+        <span className="block max-w-48 truncate">{attachment.fileName}</span>
+        <span className="block text-2xs text-muted-foreground">
+          {formatFileSize(attachment.sizeBytes)}
+        </span>
+      </span>
+    </>
+  );
+
   const fileCard = (attachment: Attachment) => (
     <div
       key={attachment.id}
       className="flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-sm shadow-2xs"
     >
-      <a
-        href={attachmentDownloadUrl(attachment.id)}
-        download={attachment.fileName}
-        className="flex min-w-0 items-center gap-2 rounded-sm hover:bg-state-hover"
-      >
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-sm bg-secondary text-muted-foreground">
-          <Icon name="File" className="size-3.5" />
-        </span>
-        <span className="min-w-0">
-          <span className="block max-w-48 truncate">{attachment.fileName}</span>
-          <span className="block text-2xs text-muted-foreground">
-            {formatFileSize(attachment.sizeBytes)}
-          </span>
-        </span>
-      </a>
+      {canPreviewAttachment(attachment) ? (
+        <>
+          <button
+            type="button"
+            aria-label={`Open ${attachment.fileName}`}
+            className="flex min-w-0 items-center gap-2 rounded-sm text-left hover:bg-state-hover"
+            onClick={() => setPreview(attachment)}
+          >
+            {fileCardLabel(attachment)}
+          </button>
+          <a
+            href={attachmentDownloadUrl(attachment.id)}
+            download={attachment.fileName}
+            aria-label={`Download ${attachment.fileName}`}
+            title="Download"
+            className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-state-hover hover:text-foreground"
+          >
+            <Icon name="Download" className="size-3" />
+          </a>
+        </>
+      ) : (
+        <a
+          href={attachmentDownloadUrl(attachment.id)}
+          download={attachment.fileName}
+          className="flex min-w-0 items-center gap-2 rounded-sm hover:bg-state-hover"
+        >
+          {fileCardLabel(attachment)}
+        </a>
+      )}
       {removeButton(attachment, "file")}
     </div>
   );
@@ -218,7 +366,7 @@ export function AttachmentsGrid({
         type="button"
         className="block"
         title={`${attachment.fileName} · ${formatFileSize(attachment.sizeBytes)}`}
-        onClick={() => setLightbox(attachment)}
+        onClick={() => setPreview(attachment)}
       >
         <img
           src={attachmentDownloadUrl(attachment.id)}
@@ -251,8 +399,11 @@ export function AttachmentsGrid({
           {images.map(imageTile)}
         </div>
       ) : null}
-      {lightbox ? (
-        <Lightbox attachment={lightbox} onClose={() => setLightbox(null)} />
+      {preview ? (
+        <AttachmentPreview
+          attachment={preview}
+          onClose={() => setPreview(null)}
+        />
       ) : null}
       <ConfirmDialog
         open={confirm !== null}

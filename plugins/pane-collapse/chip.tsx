@@ -263,7 +263,7 @@ export function MinimizedChip({
         onOpenAutoFocus={(event) => event.preventDefault()}
         onPointerEnter={hoverIn}
         onPointerLeave={hoverOut}
-        className="flex w-96 flex-col gap-2 p-3"
+        className="flex max-h-[min(600px,var(--radix-popover-content-available-height))] w-96 flex-col gap-2 p-3"
       >
         <div className="flex min-w-0 items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-sm font-medium">
@@ -291,7 +291,7 @@ export function MinimizedChip({
             Waiting for your approval or answer. Open the thread to respond.
           </p>
         ) : null}
-        <div className="max-h-64 overflow-y-auto rounded-md bg-muted/40 p-2">
+        <div className="min-h-0 overflow-y-auto rounded-md bg-muted/40 p-2">
           <LatestMessageBody latest={latest} />
         </div>
         {threadId === null ? null : (
