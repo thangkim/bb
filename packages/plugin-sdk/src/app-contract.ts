@@ -160,11 +160,10 @@ export interface ExperimentalQuestionFormHost {
  * the host adds room for its microphone controls when voice input is
  * available.
  */
-export interface ExperimentalVoiceInputTextareaProps
-  extends Omit<
-    ComponentPropsWithRef<"textarea">,
-    "value" | "defaultValue" | "onChange" | "children"
-  > {
+export interface ExperimentalVoiceInputTextareaProps extends Omit<
+  ComponentPropsWithRef<"textarea">,
+  "value" | "defaultValue" | "onChange" | "children"
+> {
   value: string;
   /**
    * Receives typed edits and finished transcripts, which the host appends to
@@ -1190,7 +1189,9 @@ export interface ExperimentalClipboardContent {
  */
 export type PluginBoundThreadsArea = Omit<
   BbSdkAreas["threads"],
-  "getPluginMetadata" | "updatePluginMetadata" | "experimental_listPluginMetadata"
+  | "getPluginMetadata"
+  | "updatePluginMetadata"
+  | "experimental_listPluginMetadata"
 > & {
   getPluginMetadata(
     args: Omit<ThreadPluginMetadataArgs, "pluginId"> & { pluginId?: string },
@@ -2280,6 +2281,18 @@ export interface PluginContentScriptContext {
   readonly experimental_setThreadRowStatus?: (
     threadId: string,
     status: PluginComposerThreadRowStatus | null,
+  ) => void;
+  /**
+   * Report the thread ids whose panes bb currently minimizes (see
+   * {@link PluginSdkApp.experimental_useSidebarMinimizedThreadIds}). The set
+   * replaces this frontend generation's previous report; an empty set clears
+   * it. The host clears the report when the frontend generation deactivates.
+   *
+   * Optional so bundles can feature-detect support while this experimental
+   * surface rolls out across 0.x clients.
+   */
+  readonly experimental_setMinimizedThreadIds?: (
+    threadIds: ReadonlySet<string>,
   ) => void;
 }
 
@@ -3698,6 +3711,14 @@ export interface PluginSdkApp {
     string,
     PluginSidebarThreadRowStatus
   >;
+  /**
+   * The ids of threads whose panes bb currently minimizes, as reported by
+   * content scripts through `experimental_setMinimizedThreadIds`. Rows for
+   * these threads should omit `data-sidebar-thread-shortcut-target`, so
+   * Cmd+1..9 cycles only through open threads instead of reopening a
+   * minimized one. One subscription for the whole list.
+   */
+  experimental_useSidebarMinimizedThreadIds(): ReadonlySet<string>;
   /**
    * The whole split layout (see {@link PluginSidebarSplitLayout}), or null
    * when nothing is split. One subscription for the whole list.

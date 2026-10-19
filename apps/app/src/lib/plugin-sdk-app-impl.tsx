@@ -44,6 +44,7 @@ import {
   experimental_useFixedTabTarget,
 } from "./plugin-sdk-hooks";
 import {
+  useSidebarMinimizedThreadIds,
   useSidebarThreadActions,
   useSidebarThreadDraft,
   useSidebarThreadDraftIds,
@@ -123,6 +124,7 @@ export const pluginSdkAppImplementation = {
   useSidebarThreadRowStatuses,
   useSidebarSplitLayout,
   useSidebarThreadShortcut,
+  experimental_useSidebarMinimizedThreadIds: useSidebarMinimizedThreadIds,
   ThreadTitle: PluginThreadTitle,
   experimental_ThreadStatusGlyph: ThreadStatusGlyph,
   useEnvironmentProviders,

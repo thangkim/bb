@@ -9,6 +9,9 @@ import type {
 } from "./types";
 
 export const MAX_PANES = 8;
+export const MAX_STORED_PANES = 32;
+
+const NO_MINIMIZED_THREAD_IDS: ReadonlySet<string> = new Set();
 
 const MIN_SIZE = 0.15;
 const MAX_SIZE = 0.85;
@@ -30,6 +33,17 @@ export function countPanes(root: LayoutNode): number {
     return 1;
   }
   return root.children.reduce((count, child) => count + countPanes(child), 0);
+}
+
+export function countActivePanes(
+  root: LayoutNode,
+  minimizedThreadIds: ReadonlySet<string>,
+): number {
+  return listPanes(root).filter(
+    (pane) =>
+      pane.content.kind !== "thread" ||
+      !minimizedThreadIds.has(pane.content.threadId),
+  ).length;
 }
 
 export function findPane(root: LayoutNode, paneId: string): PaneNode | null {
@@ -178,9 +192,11 @@ export function splitPane(
   targetPaneId: string,
   side: SplitSide,
   content: PaneContent,
+  minimizedThreadIds: ReadonlySet<string> = NO_MINIMIZED_THREAD_IDS,
 ): SplitLayout {
   if (
-    countPanes(layout.root) >= MAX_PANES ||
+    countActivePanes(layout.root, minimizedThreadIds) >= MAX_PANES ||
+    countPanes(layout.root) >= MAX_STORED_PANES ||
     findPane(layout.root, targetPaneId) === null
   ) {
     return layout;

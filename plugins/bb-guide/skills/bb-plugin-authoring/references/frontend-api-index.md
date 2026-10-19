@@ -70,6 +70,9 @@ Read the installed SDK declarations for the exact current signatures.
   shows, or null when nothing is split
 - `useSidebarThreadShortcut` — the jump shortcut assigned to a row while the
   app command modifier is held, or null
+- `experimental_useSidebarMinimizedThreadIds` — the thread ids whose panes are
+  minimized, as reported by content scripts, so rows can skip the numbered
+  shortcuts
 - `ThreadTitle` — a thread's display title with its `@project:`, `@section:`,
   and `@thread:` mentions rendered as bb's chips
 - `experimental_ThreadStatusGlyph` — bb's thread status glyph for an

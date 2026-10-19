@@ -13,13 +13,13 @@ import {
   getThreadRoutePath,
   getPluginDetailRoutePath,
 } from "@/lib/route-paths";
+import { getPluginMinimizedThreadIds } from "@/lib/plugin-minimized-threads";
 import { splitLayoutAtom } from "@/lib/split-layout/atoms";
 import { openPaneContentInSplit } from "@/lib/split-layout/openPaneContentInSplit";
 import {
-  countPanes,
   findPaneByContent,
+  isAtThreadPaneCap,
   listPanes,
-  MAX_PANES,
   replacePaneContent,
   setFocus,
   splitPane,
@@ -174,7 +174,7 @@ export function beginSidebarPaneContentSplitDrag({
       return decideThreadDrop({
         zone,
         threadAlreadyOpen: findPaneByContent(layout.root, content) !== null,
-        atMaxPanes: countPanes(layout.root) >= MAX_PANES,
+        atMaxPanes: isAtThreadPaneCap(layout.root),
       });
     },
     onDrop: (target) => {
@@ -186,7 +186,13 @@ export function beginSidebarPaneContentSplitDrag({
           ? setFocus(layout, existing.paneId)
           : target.zone === "center"
             ? replacePaneContent(layout, target.paneId, content)
-            : splitPane(layout, target.paneId, target.zone, content);
+            : splitPane(
+              layout,
+              target.paneId,
+              target.zone,
+              content,
+              getPluginMinimizedThreadIds(),
+            );
       if (next !== layout) store.set(splitLayoutAtom, next);
       onNavigate?.();
       void navigate(

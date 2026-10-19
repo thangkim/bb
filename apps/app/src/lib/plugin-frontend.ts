@@ -59,6 +59,12 @@ import {
   type PluginRegistrationSet,
 } from "./plugin-slots";
 import {
+  clearPluginMinimizedThreadIds,
+  clearPluginMinimizedThreadIdsByOwner,
+  normalizeMinimizedThreadIds,
+  setPluginMinimizedThreadIds,
+} from "./plugin-minimized-threads";
+import {
   clearPluginThreadRowStatuses,
   clearPluginThreadRowStatusesByOwner,
   setPluginThreadRowStatus,
@@ -459,6 +465,7 @@ async function disposeGeneration(
   activation.cssRelease?.();
   activation.cssRelease = null;
   clearPluginThreadRowStatusesByOwner(activation.statusOwner);
+  clearPluginMinimizedThreadIdsByOwner(activation.statusOwner);
   return failures;
 }
 
@@ -471,10 +478,12 @@ async function deactivateCommittedGeneration(
   const active = state.activeGenerations.get(pluginId);
   if (active === undefined) {
     clearPluginThreadRowStatuses(pluginId);
+    clearPluginMinimizedThreadIds(pluginId);
     return [];
   }
   const failures = await disposeGeneration(pluginId, active, deps);
   clearPluginThreadRowStatuses(pluginId);
+  clearPluginMinimizedThreadIds(pluginId);
   state.activeGenerations.delete(pluginId);
   state.appliedHashes.delete(pluginId);
   if (removePublishedUi) {
@@ -530,6 +539,17 @@ async function mountWithTimeout(
               normalizedStatus,
               statusOwner,
             );
+          },
+          experimental_setMinimizedThreadIds: (threadIds: unknown) => {
+            if (controller.signal.aborted) return;
+            const normalized = normalizeMinimizedThreadIds(threadIds);
+            if (normalized === null) {
+              deps.warn(
+                `bb plugin "${pluginId}": contentScript.experimental_setMinimizedThreadIds: "threadIds" must be a Set of non-empty strings`,
+              );
+              return;
+            }
+            setPluginMinimizedThreadIds(pluginId, statusOwner, normalized);
           },
         }),
       pluginId,
@@ -850,6 +870,7 @@ export async function disposePluginFrontends(
     const statusOwner = state.pendingStatusOwners.get(pluginId);
     if (statusOwner !== undefined) {
       clearPluginThreadRowStatusesByOwner(statusOwner);
+      clearPluginMinimizedThreadIdsByOwner(statusOwner);
     }
   }
   state.pendingControllers.clear();
@@ -865,6 +886,7 @@ export async function disposePluginFrontends(
       await disposeGeneration(pluginId, active, deps);
     }
     clearPluginThreadRowStatuses(pluginId);
+    clearPluginMinimizedThreadIds(pluginId);
     deps.removeRegistrations(pluginId);
     deps.applyCss(pluginId, null);
   }

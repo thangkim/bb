@@ -1,8 +1,8 @@
+import { getPluginMinimizedThreadIds } from "../plugin-minimized-threads";
 import { splitLayoutAtom } from "./atoms";
 import {
-  countPanes,
   findPaneByContent,
-  MAX_PANES,
+  isAtThreadPaneCap,
   replacePaneContent,
   setFocus,
   splitPane,
@@ -42,9 +42,15 @@ export function openPaneContentInSplit({
   const next =
     existing !== null
       ? setFocus(layout, existing.paneId)
-      : countPanes(layout.root) >= MAX_PANES
+      : isAtThreadPaneCap(layout.root)
         ? replacePaneContent(layout, layout.focusedPaneId, content)
-        : splitPane(layout, layout.focusedPaneId, "right", content);
+        : splitPane(
+            layout,
+            layout.focusedPaneId,
+            "right",
+            content,
+            getPluginMinimizedThreadIds(),
+          );
   if (next !== layout) store.set(splitLayoutAtom, next);
   void navigate(route, existing !== null ? { replace: true } : undefined);
 }

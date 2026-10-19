@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_PANES,
+  MAX_STORED_PANES,
+  countActivePanes,
   countPanes,
   findPane,
   findPaneByThread,
@@ -128,6 +130,50 @@ describe("split layout operations", () => {
     expect(findPaneByThread(two.root, "project-2", "thread-2")?.paneId).toBe(
       "pane-2",
     );
+  });
+
+  it("does not count minimized thread panes toward the pane cap", () => {
+    const eight = layoutAtPaneCount(MAX_PANES);
+    const minimized = new Set(["thread-2", "thread-3", "thread-4"]);
+
+    expect(countActivePanes(eight.root, minimized)).toBe(MAX_PANES - 3);
+    expect(splitPane(eight, "pane-1", "top", threadContent("thread-9"))).toBe(
+      eight,
+    );
+    const split = splitPane(
+      eight,
+      "pane-1",
+      "top",
+      threadContent("thread-9"),
+      minimized,
+    );
+    expect(countPanes(split.root)).toBe(MAX_PANES + 1);
+    expect(findPaneByThread(split.root, "project-1", "thread-9")).not.toBeNull();
+  });
+
+  it("stops splitting at the stored pane ceiling even when every pane is minimized", () => {
+    const minimized = new Set<string>(["thread-1"]);
+    let layout = singlePaneLayout();
+    for (let index = 2; index <= MAX_STORED_PANES; index += 1) {
+      minimized.add(`thread-${index}`);
+      layout = splitPane(
+        layout,
+        layout.focusedPaneId,
+        "right",
+        threadContent(`thread-${index}`),
+        minimized,
+      );
+    }
+    expect(countPanes(layout.root)).toBe(MAX_STORED_PANES);
+    expect(
+      splitPane(
+        layout,
+        layout.focusedPaneId,
+        "right",
+        threadContent("overflow"),
+        minimized,
+      ),
+    ).toBe(layout);
   });
 
   it("replaces and swaps content while applying the reference focus semantics", () => {

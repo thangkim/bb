@@ -49,6 +49,19 @@ export function withoutPane(collapsed: CollapsedPanes, paneId: string) {
   return next;
 }
 
+export function minimizedThreadIds(
+  layout: PluginSidebarSplitLayout | null,
+  collapsed: CollapsedPanes,
+): ReadonlySet<string> {
+  const threadIds = new Set<string>();
+  for (const pane of layout?.panes ?? []) {
+    if (collapsed.has(pane.paneId) && pane.threadId !== null) {
+      threadIds.add(pane.threadId);
+    }
+  }
+  return threadIds;
+}
+
 export function latestCollapsed(collapsed: CollapsedPanes): string | null {
   return [...collapsed].at(-1) ?? null;
 }

@@ -131,6 +131,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "PluginSidebarSplitLayout",
           "useSidebarThreadShortcut",
           "PluginSidebarThreadShortcut",
+          "experimental_useSidebarMinimizedThreadIds",
           "ThreadTitle",
           "PluginThreadTitleProps",
           "experimental_ThreadStatusGlyph",

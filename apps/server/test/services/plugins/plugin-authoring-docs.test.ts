@@ -314,6 +314,7 @@ const CONTENT_SCRIPT_CONTEXT_FIELDS = [
   "generation",
   "signal",
   "experimental_setThreadRowStatus",
+  "experimental_setMinimizedThreadIds",
 ] as const satisfies readonly (keyof PluginContentScriptContext)[];
 
 type MissingContentScriptContextField = Exclude<

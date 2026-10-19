@@ -5,12 +5,13 @@ import {
   findPane,
   findPaneByContent,
   findPaneByThread,
+  isAtThreadPaneCap,
   isSamePaneContent,
-  MAX_PANES,
   replacePaneContent,
   setFocus,
   splitPane,
 } from "@/lib/split-layout";
+import { getPluginMinimizedThreadIds } from "@/lib/plugin-minimized-threads";
 import { decideThreadDrop, type SplitZone } from "@/lib/split-drag";
 import type { PaneContent, SplitLayout } from "@/lib/split-layout";
 import { matchPath } from "react-router-dom";
@@ -179,7 +180,7 @@ export function applyThreadOpenToLayout(
   const decision = decideThreadDrop({
     zone: threadOpenSplitZone(split),
     threadAlreadyOpen: existing !== null,
-    atMaxPanes: countPanes(layout.root) >= MAX_PANES,
+    atMaxPanes: isAtThreadPaneCap(layout.root),
   });
   if (existing !== null) {
     return layout.focusedPaneId === existing.paneId
@@ -189,7 +190,13 @@ export function applyThreadOpenToLayout(
   const content = threadPaneContent(thread);
   return decision.zone === "center"
     ? replacePaneContent(layout, layout.focusedPaneId, content)
-    : splitPane(layout, layout.focusedPaneId, decision.zone, content);
+    : splitPane(
+        layout,
+        layout.focusedPaneId,
+        decision.zone,
+        content,
+        getPluginMinimizedThreadIds(),
+      );
 }
 
 interface ThreadPaneActionLayoutResult {

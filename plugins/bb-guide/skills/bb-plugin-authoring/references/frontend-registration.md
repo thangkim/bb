@@ -415,6 +415,11 @@ silently stop working:
 <a data-sidebar-thread-shortcut-target="" data-sidebar-thread-id={thread.id}>
 ```
 
+A row whose pane is minimized should omit `data-sidebar-thread-shortcut-target`
+(keep `data-sidebar-thread-id`). Check
+`experimental_useSidebarMinimizedThreadIds().has(thread.id)` for that. Otherwise
+Cmd+1..9 would reopen a minimized thread instead of cycling open ones.
+
 ### The provider directory
 
 `experimental_useProviders()` returns `{ status, providers }` — every

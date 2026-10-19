@@ -41,6 +41,7 @@ import {
   experimental_ThreadStatusGlyph as ThreadStatusGlyph,
   experimental_THREAD_ACTION_GROUPS,
   experimental_useThreadActions,
+  experimental_useSidebarMinimizedThreadIds,
   experimental_useSidebarThreadSplit,
   experimental_useProviders,
   experimental_ProviderIcon as ProviderIcon,
@@ -374,6 +375,9 @@ function ThreadRowComponent({
     ? providers.find((candidate) => candidate.id === thread.providerId)
     : undefined;
   const shortcut = useSidebarThreadShortcut(thread.id);
+  const isMinimized = experimental_useSidebarMinimizedThreadIds().has(
+    thread.id,
+  );
   const pluginThreadRowStatus = useSidebarThreadRowStatus(thread.id);
   const { hasUnsubmittedDraft: hasComposerDraft } = useSidebarThreadDraft(
     thread.id,
@@ -615,7 +619,7 @@ function ThreadRowComponent({
           ref={rowLinkRef}
           href={thread.href}
           draggable={false}
-          data-sidebar-thread-shortcut-target=""
+          data-sidebar-thread-shortcut-target={isMinimized ? undefined : ""}
           data-sidebar-thread-id={thread.id}
           data-sidebar-rename-anchor=""
           onClick={(event) => {

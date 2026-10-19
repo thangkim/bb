@@ -30,6 +30,7 @@ import {
   usePromptDraftHasInput,
   usePromptDraftInputThreadIds,
 } from "@/hooks/usePromptDraftStorage";
+import { usePluginMinimizedThreadIds } from "./plugin-minimized-threads";
 import {
   usePluginThreadRowStatus,
   usePluginThreadRowStatuses,
@@ -453,6 +454,10 @@ export function useSidebarThreadRowStatuses(): ReadonlyMap<
   PluginSidebarThreadRowStatus
 > {
   return usePluginThreadRowStatuses();
+}
+
+export function useSidebarMinimizedThreadIds(): ReadonlySet<string> {
+  return usePluginMinimizedThreadIds();
 }
 
 export function useSidebarThreadShortcut(

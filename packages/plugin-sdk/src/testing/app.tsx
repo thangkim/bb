@@ -291,6 +291,7 @@ interface SlotEnv {
   sidebarDraftThreadIds: ReadonlySet<string>;
   sidebarRowStatuses: ReadonlyMap<string, PluginSidebarThreadRowStatus>;
   sidebarShortcuts: ReadonlyMap<string, PluginSidebarThreadShortcut>;
+  sidebarMinimizedThreadIds: ReadonlySet<string>;
   sidebarSplitLayout: PluginSidebarSplitLayout | null;
   environmentProviders: PluginEnvironmentProvidersState;
   sdk: PluginBrowserBbSdk;
@@ -1171,7 +1172,9 @@ function TestDiff({
   );
 }
 
-type TestClipboard = (content: ExperimentalClipboardContent) => Promise<boolean>;
+type TestClipboard = (
+  content: ExperimentalClipboardContent,
+) => Promise<boolean>;
 
 let activeClipboard: TestClipboard | null = null;
 
@@ -1412,6 +1415,10 @@ const testPluginSdkApp = {
     PluginSidebarThreadRowStatus
   > {
     return useSlotEnv("useSidebarThreadRowStatuses").sidebarRowStatuses;
+  },
+  experimental_useSidebarMinimizedThreadIds(): ReadonlySet<string> {
+    return useSlotEnv("experimental_useSidebarMinimizedThreadIds")
+      .sidebarMinimizedThreadIds;
   },
   useSidebarSplitLayout(): PluginSidebarSplitLayout | null {
     return useSlotEnv("useSidebarSplitLayout").sidebarSplitLayout;
@@ -1790,6 +1797,11 @@ export interface RenderSlotOptions<
    * null.
    */
   sidebarShortcuts?: Record<string, PluginSidebarThreadShortcut>;
+  /**
+   * Thread ids `experimental_useSidebarMinimizedThreadIds()` reports as
+   * minimized. Omitted → none.
+   */
+  sidebarMinimizedThreadIds?: readonly string[];
   /** The split layout `useSidebarSplitLayout()` reports. Omitted → null. */
   sidebarSplitLayout?: PluginSidebarSplitLayout;
   /**
@@ -2073,6 +2085,9 @@ export function renderSlot<
   );
   const sidebarShortcuts = new Map(
     Object.entries(options.sidebarShortcuts ?? {}),
+  );
+  const sidebarMinimizedThreadIds: ReadonlySet<string> = new Set(
+    options.sidebarMinimizedThreadIds ?? [],
   );
   const sidebarThreads: PluginSidebarThreadsState = {
     experimental_archived:
@@ -2480,6 +2495,7 @@ export function renderSlot<
     sidebarDraftThreadIds,
     sidebarRowStatuses,
     sidebarShortcuts,
+    sidebarMinimizedThreadIds,
     sidebarSplitLayout: options.sidebarSplitLayout ?? null,
     environmentProviders,
     sdk,

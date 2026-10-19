@@ -34,6 +34,7 @@ definition.setup({
       commands.set(registration.id, registration);
     },
   },
+  contentScripts: { register: () => {} },
   slots: {
     experimental_appOverlay: () => {},
     experimental_threadAction: () => {},

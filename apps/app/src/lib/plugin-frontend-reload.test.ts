@@ -34,6 +34,10 @@ import {
   getPluginThreadRowStatus,
   resetPluginThreadRowStatusesForTest,
 } from "./plugin-thread-row-status";
+import {
+  getPluginMinimizedThreadIds,
+  resetPluginMinimizedThreadIdsForTest,
+} from "./plugin-minimized-threads";
 import { PluginSlotMount } from "@/components/plugin/PluginSlotMount";
 import { PLUGIN_PANEL_ROUTE_PATH } from "./route-paths";
 import { applyAppThemeCss } from "./themes";
@@ -82,6 +86,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   resetPluginThreadRowStatusesForTest();
+  resetPluginMinimizedThreadIdsForTest();
   resetPluginSlotStoreForTest();
   resetPluginCssForTest();
   uninstallForeignDomMutationGuardForTest();
@@ -615,6 +620,32 @@ describe("reconcilePluginFrontends", () => {
       "v2:abort",
       "v2:dispose",
     ]);
+  });
+
+  it("publishes minimized thread ids from a content script and clears them on deactivation", async () => {
+    const state = createPluginFrontendReconcileState();
+    const deps = makeDeps([candidate("pane-collapse", "v1")]);
+    deps.importModule.mockResolvedValue(
+      contentScriptModule((app) => {
+        app.contentScripts.register({
+          id: "minimized-threads",
+          mount({ experimental_setMinimizedThreadIds }) {
+            experimental_setMinimizedThreadIds?.(new Set(["thr_min"]));
+            experimental_setMinimizedThreadIds?.(new Set(["  "]));
+          },
+        });
+      }),
+    );
+
+    await reconcilePluginFrontends(state, deps);
+    expect([...getPluginMinimizedThreadIds()]).toEqual(["thr_min"]);
+    expect(deps.warn).toHaveBeenCalledWith(
+      expect.stringContaining("experimental_setMinimizedThreadIds"),
+    );
+
+    deps.fetchCandidates.mockResolvedValue([]);
+    await reconcilePluginFrontends(state, deps);
+    expect([...getPluginMinimizedThreadIds()]).toEqual([]);
   });
 
   it("keeps content-script thread statuses across routes and clears them on deactivation", async () => {

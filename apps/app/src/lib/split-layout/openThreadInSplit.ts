@@ -1,10 +1,10 @@
 import { getThreadRoutePath } from "@/lib/route-paths";
 import { decideThreadDrop } from "@/lib/split-drag";
+import { getPluginMinimizedThreadIds } from "../plugin-minimized-threads";
 import { splitLayoutAtom } from "./atoms";
 import {
-  countPanes,
   findPaneByThread,
-  MAX_PANES,
+  isAtThreadPaneCap,
   replacePaneContent,
   setFocus,
   splitPane,
@@ -58,13 +58,19 @@ export function openThreadInSplit({
   const decision = decideThreadDrop({
     zone: "right",
     threadAlreadyOpen: false,
-    atMaxPanes: countPanes(layout.root) >= MAX_PANES,
+    atMaxPanes: isAtThreadPaneCap(layout.root),
   });
   const content: PaneContent = { kind: "thread", projectId, threadId };
   const next =
     decision.zone === "center"
       ? replacePaneContent(layout, layout.focusedPaneId, content)
-      : splitPane(layout, layout.focusedPaneId, "right", content);
+      : splitPane(
+          layout,
+          layout.focusedPaneId,
+          "right",
+          content,
+          getPluginMinimizedThreadIds(),
+        );
   if (next !== layout) {
     store.set(splitLayoutAtom, next);
   }

@@ -1827,6 +1827,37 @@ Before stabilization, audit:
   candidate rename. Nothing under `plugins/*` sets a status today, so the
   rename is free until the prefix drops.
 
+## `PluginContentScriptContext.experimental_setMinimizedThreadIds` and `experimental_useSidebarMinimizedThreadIds`
+
+**Experimental (2026-10-19).** Lets a content script report which threads'
+panes bb currently minimizes, and lets a sidebar plugin read that set. The
+report is a full replacement per frontend generation: each call supersedes the
+previous set, and an empty set clears it. The host clears a generation's report
+when that generation deactivates, and the reader subscribes to the union across
+all plugins. `experimental_useSidebarMinimizedThreadIds()` returns that union as
+a `ReadonlySet<string>`.
+
+Its only consumer is `pane-collapse`, which reports the thread of each minimized
+pane, and `thread-list`, whose rows omit `data-sidebar-thread-shortcut-target`
+for those threads. bb assigns Cmd+1..9 in DOM order over rows carrying that
+attribute, so the shortcuts cycle open threads only and never reopen a minimized
+one. Minimized rows keep their `data-sidebar-thread-id`, so the windowed list and
+the visibility checks are unchanged.
+
+Before stabilization, audit:
+
+- whether the report belongs on the content-script context or a dedicated
+  split-layout controller, and whether the reader should be a split-layout field
+  instead of a separate hook;
+- ownership when one plugin registers several content scripts. Reports are keyed
+  by the frontend generation, so two scripts in one plugin overwrite each other;
+- the validation rules at the boundary. Non-`Set` values, non-string members, and
+  empty ids are rejected with a warning and leave the previous report in place;
+- whether a thread should be exempt from shortcuts when it is also visible in an
+  open pane, and whether `thread.previous` and `thread.next` should skip minimized
+  threads too. Today they still reach them;
+- the reader's re-render cost, since every row subscribes to the set.
+
 ## `bb.providers.register` (`experimental_bridgeOptions`, `experimental_visibility`, and the `experimental_providerBridge` artifact export)
 
 **Kept experimental (2026-08-22).** `bb.providers.register` and the declaration's target-state fields are stable. `experimental_bridgeOptions` and `experimental_visibility` have one consumer (the ACP plugin); docs/provider-plugin-api.md §1 lists both under "Still experimental on the declaration" — decide whether static options survive beside `deriveProviderOptions` before naming them. The `experimental_providerBridge` export name is an artifact contract read by the daemon bootstrap from every installed plugin; renaming it needs a dual-name acceptance window plus a protocol bump, so it stabilizes with the bridge kit once that deprecation policy exists.

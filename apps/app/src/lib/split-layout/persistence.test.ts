@@ -4,6 +4,7 @@ import {
   serializeSplitLayout,
   SPLIT_LAYOUT_SCHEMA_VERSION,
 } from "./persistence";
+import { MAX_STORED_PANES } from "./ops";
 import type { SplitLayout } from "./types";
 
 function layoutWithPaneCount(count: number): SplitLayout {
@@ -129,7 +130,7 @@ describe("split layout persistence", () => {
       ),
     ).toBeNull();
     expect(
-      deserializeSplitLayout(serializeSplitLayout(layoutWithPaneCount(9))),
+      deserializeSplitLayout(serializeSplitLayout(layoutWithPaneCount(MAX_STORED_PANES + 1))),
     ).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MAX_PANES, countPanes, listPanes } from "./ops";
+import { MAX_STORED_PANES, countPanes, listPanes } from "./ops";
 import type { LayoutNode, PaneNode, SplitLayout, SplitNode } from "./types";
 
 export const SPLIT_LAYOUT_SCHEMA_VERSION = 1;
@@ -76,10 +76,10 @@ const splitLayoutSchema: z.ZodType<SplitLayout> = z
   .strict()
   .superRefine((layout, context) => {
     const panes = listPanes(layout.root);
-    if (countPanes(layout.root) > MAX_PANES) {
+    if (countPanes(layout.root) > MAX_STORED_PANES) {
       context.addIssue({
         code: "custom",
-        message: `A split layout supports at most ${MAX_PANES} panes`,
+        message: `A split layout supports at most ${MAX_STORED_PANES} panes`,
         path: ["root"],
       });
     }

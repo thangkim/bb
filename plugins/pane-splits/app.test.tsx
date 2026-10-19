@@ -65,6 +65,7 @@ function mountController(
     threadId?: string;
     projectId?: string;
     environmentId?: string | null;
+    minimizedThreadIds?: readonly string[];
     open?: () => Promise<{ delivered: number }>;
   } = {},
 ) {
@@ -76,6 +77,9 @@ function mountController(
       ...(host.sidebarSplitLayout === undefined
         ? {}
         : { sidebarSplitLayout: host.sidebarSplitLayout }),
+      ...(host.minimizedThreadIds === undefined
+        ? {}
+        : { sidebarMinimizedThreadIds: host.minimizedThreadIds }),
       context: {
         threadId: host.threadId ?? null,
         projectId: host.projectId ?? null,
@@ -335,6 +339,26 @@ describe("reopen-closed", () => {
         args: [{ threadId: "bottom-thread", split: "down", file: null }],
       },
     ]);
+  });
+
+  it("does not count minimized panes toward the pane cap", async () => {
+    closeRightPaneOf("left-thread", "right-thread");
+    mountController({ threadId: "left-thread" });
+    cleanup();
+    const view = mountController({
+      sidebarSplitLayout: {
+        panes: Array.from({ length: 8 }, (_, index) =>
+          pane(`full-${index}`, `open-${index}`, index / 8, 1 / 8, index === 0),
+        ),
+      },
+      minimizedThreadIds: ["open-5", "open-6", "open-7"],
+      threadId: "open-0",
+    });
+
+    await command("reopen-closed").run(context);
+
+    expect(toast).not.toHaveBeenCalled();
+    expect(opens(view)).toHaveLength(1);
   });
 
   it("keeps the closed thread for later when the layout is at the pane cap", async () => {

@@ -12,14 +12,18 @@ compatible ESM bundle.
 
 The host mounts scripts in registration order after the bundle loads and
 `definePluginApp` setup validates. `mount` receives
-`{ pluginId, generation, signal, experimental_setThreadRowStatus? }`:
+`{ pluginId, generation, signal, experimental_setThreadRowStatus?,
+experimental_setMinimizedThreadIds? }`:
 `generation` is a monotonic per-window mount attempt number, and `signal`
 aborts before cleanup starts. The optional experimental setter targets an
 explicit thread row with `{ icon, label, tone? }` or clears it with `null`.
 Use `tone: "running"` for the host's animated running treatment. The host
 scopes statuses to the calling plugin and automatically clears them when that
 frontend generation deactivates; feature-detect the setter for compatibility
-with older bb clients.
+with older bb clients. The optional `experimental_setMinimizedThreadIds(set)`
+replaces this script's report of the thread ids whose panes are minimized; an
+empty set clears it, and the host clears it on deactivation. Read the union
+across plugins with `experimental_useSidebarMinimizedThreadIds()`.
 
 A script may return nothing, a disposer, or a promise of either; async mount
 setup is time-boxed to 10 seconds. Keep long-running work outside the returned

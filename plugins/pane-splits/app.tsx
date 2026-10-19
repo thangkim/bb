@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   definePluginApp,
+  experimental_useSidebarMinimizedThreadIds,
   useBbContext,
   useBbNavigate,
   useSdk,
@@ -45,6 +46,7 @@ interface Controller {
   sdk: PluginBrowserBbSdk;
   navigate: BbNavigate;
   layout: PluginSidebarSplitLayout | null;
+  minimizedThreadIds: ReadonlySet<string>;
   projectId: string | null;
   threadId: string | null;
   sourceThreadId: string | null;
@@ -59,6 +61,7 @@ export function PaneSplitsController() {
   const sdk = useSdk();
   const navigate = useBbNavigate();
   const layout = useSidebarSplitLayout();
+  const minimizedThreadIds = experimental_useSidebarMinimizedThreadIds();
   const { projectId, threadId } = useBbContext();
   const sourceThreadId =
     layout?.panes.find((pane) => pane.isFocused)?.threadId ?? threadId;
@@ -97,6 +100,7 @@ export function PaneSplitsController() {
       sdk,
       navigate,
       layout,
+      minimizedThreadIds,
       projectId,
       threadId,
       sourceThreadId,
@@ -108,6 +112,7 @@ export function PaneSplitsController() {
     };
   }, [
     layout,
+    minimizedThreadIds,
     navigate,
     projectId,
     sdk,
@@ -166,9 +171,20 @@ function newThreadOnRight(): void {
   );
 }
 
+export function countActivePanes(
+  layout: PluginSidebarSplitLayout | null,
+  minimizedThreadIds: ReadonlySet<string>,
+): number {
+  return (
+    layout?.panes.filter(
+      (pane) => pane.threadId === null || !minimizedThreadIds.has(pane.threadId),
+    ).length ?? 0
+  );
+}
+
 async function reopenClosedThread(): Promise<void> {
   if (controller === null) return;
-  const { sdk, layout, threadId } = controller;
+  const { sdk, layout, minimizedThreadIds, threadId } = controller;
   const openThreadIds = new Set(
     layout?.panes.flatMap((pane) =>
       pane.threadId === null ? [] : [pane.threadId],
@@ -181,7 +197,7 @@ async function reopenClosedThread(): Promise<void> {
     toast(NOTHING_TO_REOPEN_MESSAGE);
     return;
   }
-  if ((layout?.panes.length ?? 0) >= MAX_PANES) {
+  if (countActivePanes(layout, minimizedThreadIds) >= MAX_PANES) {
     toast(PANE_CAP_MESSAGE);
     return;
   }

@@ -4,6 +4,7 @@ import {
   canCollapse,
   collapsedLayoutCss,
   focusTargetAfterCollapse,
+  minimizedThreadIds,
   newlyFocusedCollapsedPane,
   pruneCollapsed,
   withPane,
@@ -190,5 +191,24 @@ describe("collapsedLayoutCss", () => {
       `${ROOT.repeat(3)} > :nth-child(1):not(:has([data-maximized])) { display: none !important; }`,
     );
     expect(css).not.toContain("36px");
+  });
+});
+
+describe("minimizedThreadIds", () => {
+  it("lists the threads of minimized panes that still have one", () => {
+    const panes = layout([
+      ["a", "t-a", 0],
+      ["b", null, 1 / 3],
+      ["c", "t-c", 2 / 3],
+    ]);
+
+    expect([...minimizedThreadIds(panes, new Set(["a", "b"]))]).toEqual([
+      "t-a",
+    ]);
+  });
+
+  it("is empty without a layout or minimized panes", () => {
+    expect(minimizedThreadIds(null, new Set(["a"])).size).toBe(0);
+    expect(minimizedThreadIds(three, new Set()).size).toBe(0);
   });
 });

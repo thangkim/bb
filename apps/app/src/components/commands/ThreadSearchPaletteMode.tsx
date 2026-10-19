@@ -53,7 +53,7 @@ import {
 import { getThreadRoutePath } from "@/lib/route-paths";
 import { openThreadInSplit } from "@/lib/split-layout/openThreadInSplit";
 import { splitLayoutAtom } from "@/lib/split-layout/atoms";
-import { countPanes, findPaneByContent, MAX_PANES } from "@/lib/split-layout";
+import { findPaneByContent, isAtThreadPaneCap } from "@/lib/split-layout";
 import {
   buildPaletteThreadSearchRows,
   type PaletteThreadSearchRow,
@@ -267,7 +267,7 @@ export function ThreadSearchPaletteMode({
   const splitAvailable =
     !isCompact &&
     splitLayout !== null &&
-    countPanes(splitLayout.root) < MAX_PANES;
+    !isAtThreadPaneCap(splitLayout.root);
   const canSplit =
     activeRow != null &&
     splitAvailable &&

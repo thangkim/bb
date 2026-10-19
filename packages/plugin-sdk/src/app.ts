@@ -210,6 +210,9 @@ export const useSidebarThreadRowStatus = runtimeFunction(
 export const useSidebarThreadRowStatuses = runtimeFunction(
   "useSidebarThreadRowStatuses",
 );
+export const experimental_useSidebarMinimizedThreadIds = runtimeFunction(
+  "experimental_useSidebarMinimizedThreadIds",
+);
 export const useSidebarSplitLayout = runtimeFunction("useSidebarSplitLayout");
 export const useSidebarThreadShortcut = runtimeFunction(
   "useSidebarThreadShortcut",

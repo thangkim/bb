@@ -29,6 +29,7 @@ import {
   createCollapsedPaneStore,
   focusTargetAfterCollapse,
   latestCollapsed,
+  minimizedThreadIds,
   newlyFocusedCollapsedPane,
   pruneCollapsed,
   withPane,
@@ -42,6 +43,7 @@ import { installBridgedDividerDrag } from "./bridged-divider";
 import { readSplitDom, stampGridRoots } from "./split-dom";
 
 export const collapsedPanes = createCollapsedPaneStore();
+const minimizedThreadStore = createCollapsedPaneStore();
 
 let latestLayout: PluginSidebarSplitLayout | null = null;
 let latestNavigate: BbNavigate | null = null;
@@ -289,6 +291,10 @@ export function CollapsedPaneOverlay() {
   }, [layout, navigate]);
 
   useEffect(() => {
+    minimizedThreadStore.set(minimizedThreadIds(layout, collapsed));
+  }, [layout, collapsed]);
+
+  useEffect(() => {
     const next = newlyFocusedCollapsedPane(
       focusedPaneId.current,
       layout,
@@ -414,6 +420,18 @@ export default definePluginApp((app) => {
   app.slots.experimental_appOverlay({
     id: "collapsed-strips",
     component: CollapsedPaneOverlay,
+  });
+  app.contentScripts.register({
+    id: "minimized-threads",
+    mount: (context) => {
+      const publish = () => {
+        context.experimental_setMinimizedThreadIds?.(
+          minimizedThreadStore.get(),
+        );
+      };
+      publish();
+      return minimizedThreadStore.subscribe(publish);
+    },
   });
 
   app.commands.register({
