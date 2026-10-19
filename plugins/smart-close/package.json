@@ -1,0 +1,37 @@
+{
+  "name": "bb-plugin-smart-close",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cmd+W closes the right panel's active tab when the panel is active, and the focused thread pane otherwise.",
+  "engines": {
+    "bb": ">=0.0",
+    "bbPluginSdk": ">=0.4.3"
+  },
+  "bb": {
+    "name": "Smart close",
+    "description": "Cmd+W closes the active right-panel tab while you work in the right panel, and closes the focused thread pane everywhere else.",
+    "branding": {
+      "icon": "X"
+    },
+    "server": "./server.ts",
+    "app": "./app.ts"
+  },
+  "keywords": [
+    "bb-plugin"
+  ],
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint --ignore-pattern node_modules --ignore-pattern dist .",
+    "prepare:bundled": "bb-plugin-build prepare-bundled"
+  },
+  "devDependencies": {
+    "@bb/plugin-build": "workspace:*",
+    "@get-bb/plugin-sdk": "workspace:*",
+    "@types/node": "^22.0.0",
+    "jsdom": "^29.0.1",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "vitest": "^4.1.1"
+  }
+}
