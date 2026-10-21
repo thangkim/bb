@@ -4,8 +4,11 @@ Turn a plan into tracked tasks, hand each task to an agent, and see the worker's
 
 - A **Tomato** panel listing projects grouped by status, with a List/Board toggle, filters, a project page, and a detail page for each task. Collapsed status sections, expanded projects, and collapsed sidebar folders are remembered across reloads.
 - Projects with status, priority, due date, a description you can paste or drop images into, file attachments, and a progress bar; tasks inside them are a checklist (done or not done) with labels, due dates, and file attachments.
+- **Markdown attachments open in the Preview tab** of the page's right panel, so you can read them beside your threads and copy parts into a chat. Other files download.
+- **Cmd/Ctrl+F searches the Tomato page only** while Tomato is the focused pane: matches are highlighted, Enter / Shift+Enter (or Cmd/Ctrl+G) step through them, Esc closes.
 - **New thread** and **Attach thread** on every task; clicking a thread opens it in a split pane.
 - **New thread** on a project or a task opens an empty composer beside the list. The thread you send from it is attached to that project or task.
+- **Mentions attach the thread**: a Tomato task or project you `@`-mention in a new thread's first prompt attaches that thread to it, so there is no need to link it by hand. A project's **Default local folder** (its linked bb project, which decides where new threads start) is editable from the project page at any width.
 - **Splits keep links**: a thread created in a split pane opened from an attached thread joins the same tasks and projects.
 - **Side chats nest under their thread**: side chats you replied in are listed under the project or task thread they branch from.
 - **New threads become tasks**: a thread started without a task gets a concise task in the project it fits, with the thread attached. Turn it off with **Track new threads as tasks**.

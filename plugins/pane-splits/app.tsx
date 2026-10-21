@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import * as pluginApp from "@get-bb/plugin-sdk/app";
 import {
   definePluginApp,
-  experimental_useSidebarMinimizedThreadIds,
   useBbContext,
   useBbNavigate,
   useSdk,
@@ -42,6 +42,13 @@ export const REOPEN_SPLIT = {
   bottom: "down",
 } as const satisfies Record<Side, ThreadOpenSplit>;
 
+const NO_MINIMIZED_THREAD_IDS: ReadonlySet<string> = new Set();
+
+const useMinimizedThreadIds: () => ReadonlySet<string> =
+  "experimental_useSidebarMinimizedThreadIds" in pluginApp
+    ? pluginApp.experimental_useSidebarMinimizedThreadIds
+    : () => NO_MINIMIZED_THREAD_IDS;
+
 interface Controller {
   sdk: PluginBrowserBbSdk;
   navigate: BbNavigate;
@@ -61,7 +68,7 @@ export function PaneSplitsController() {
   const sdk = useSdk();
   const navigate = useBbNavigate();
   const layout = useSidebarSplitLayout();
-  const minimizedThreadIds = experimental_useSidebarMinimizedThreadIds();
+  const minimizedThreadIds = useMinimizedThreadIds();
   const { projectId, threadId } = useBbContext();
   const sourceThreadId =
     layout?.panes.find((pane) => pane.isFocused)?.threadId ?? threadId;

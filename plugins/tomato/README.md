@@ -148,7 +148,15 @@ Turn on **Show completed tasks** in Settings → Plugins → Tomato, or run
 `bb plugin config tomato set showCompletedTasks true`, to always show them
 there too.
 
-New threads are tracked automatically. When a thread starts without a task or
+A task or project you `@`-mention in a new thread's first prompt attaches the
+thread to it as the message is sent: a mentioned task attaches the thread to the
+task (its project follows from the task), a mentioned project attaches it at the
+project level, and a `backlog` or `todo` project moves to `in_progress`. Only
+top-level threads you start yourself qualify. Threads that are already attached,
+side chats, forks, and agent-started threads are left alone, and so are later
+messages in the thread.
+
+New threads that mention nothing are tracked automatically. When a thread starts without a task or
 project attached, its agent picks the best-fitting open project (one linked to
 the thread's bb project, or one with no bb link), files a 2-5 word task modeled
 on your recent task titles, and attaches the thread to it. Side chats, forks,

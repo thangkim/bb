@@ -268,6 +268,12 @@ function ProjectDetail({
                 triggerClassName={CHIP_CLASS}
                 onUpdate={(update) => void updateProject(update)}
               />
+              <DispatchTargetMenu
+                project={project}
+                bbProjects={bbProjects.data ?? []}
+                onError={push}
+                triggerClassName={cn(CHIP_CLASS, "max-w-48")}
+              />
             </div>
             <span className="flex items-center gap-2 text-xs text-subtle-foreground">
               <ProgressBar done={done} total={total} active={working} />

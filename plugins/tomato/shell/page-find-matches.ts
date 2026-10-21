@@ -1,0 +1,140 @@
+export const PAGE_FIND_MATCH_HIGHLIGHT = "tomato-find-match";
+export const PAGE_FIND_ACTIVE_HIGHLIGHT = "tomato-find-active";
+
+interface TextSegment {
+  node: Text;
+  start: number;
+}
+
+function foldCase(value: string): string {
+  const folded = value.toLowerCase();
+  return folded.length === value.length ? folded : value;
+}
+
+function isRendered(element: Element, cache: Map<Element, boolean>): boolean {
+  const cached = cache.get(element);
+  if (cached !== undefined) return cached;
+  const rendered =
+    typeof element.checkVisibility === "function"
+      ? element.checkVisibility()
+      : element.closest("[hidden]") === null;
+  cache.set(element, rendered);
+  return rendered;
+}
+
+function collectTextSegments(
+  root: Element,
+  isExcluded: (element: Element) => boolean,
+): { segments: TextSegment[]; text: string } {
+  const segments: TextSegment[] = [];
+  const parts: string[] = [];
+  const visibility = new Map<Element, boolean>();
+  let length = 0;
+  const walker = root.ownerDocument.createTreeWalker(
+    root,
+    NodeFilter.SHOW_TEXT,
+  );
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    if (!(node instanceof Text) || node.data.length === 0) continue;
+    const parent = node.parentElement;
+    if (parent === null || isExcluded(parent)) continue;
+    if (parent.closest("script, style, noscript") !== null) continue;
+    if (!isRendered(parent, visibility)) continue;
+    segments.push({ node, start: length });
+    parts.push(node.data);
+    length += node.data.length;
+  }
+  return { segments, text: parts.join("") };
+}
+
+function locateOffset(
+  segments: readonly TextSegment[],
+  offset: number,
+  preferEnd: boolean,
+): { node: Text; offset: number } | null {
+  let low = 0;
+  let high = segments.length - 1;
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    const segment = segments[middle];
+    if (segment === undefined) return null;
+    const end = segment.start + segment.node.data.length;
+    const inside = preferEnd
+      ? offset > segment.start && offset <= end
+      : offset >= segment.start && offset < end;
+    if (inside) return { node: segment.node, offset: offset - segment.start };
+    if (offset < segment.start || (preferEnd && offset === segment.start)) {
+      high = middle - 1;
+    } else {
+      low = middle + 1;
+    }
+  }
+  return null;
+}
+
+export function findTextOffsets(text: string, query: string): number[] {
+  if (query.length === 0) return [];
+  const haystack = foldCase(text);
+  const needle = foldCase(query);
+  const offsets: number[] = [];
+  for (
+    let index = haystack.indexOf(needle);
+    index !== -1;
+    index = haystack.indexOf(needle, index + needle.length)
+  ) {
+    offsets.push(index);
+  }
+  return offsets;
+}
+
+export function findTextMatches(
+  root: Element,
+  query: string,
+  isExcluded: (element: Element) => boolean = () => false,
+): Range[] {
+  if (query.length === 0) return [];
+  const { segments, text } = collectTextSegments(root, isExcluded);
+  const needleLength = foldCase(query).length;
+  const ranges: Range[] = [];
+  for (const index of findTextOffsets(text, query)) {
+    const start = locateOffset(segments, index, false);
+    const end = locateOffset(segments, index + needleLength, true);
+    if (start === null || end === null) continue;
+    const range = root.ownerDocument.createRange();
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+    ranges.push(range);
+  }
+  return ranges;
+}
+
+function highlightRegistry(): HighlightRegistry | null {
+  if (typeof CSS === "undefined" || !("highlights" in CSS)) return null;
+  if (typeof Highlight === "undefined") return null;
+  return CSS.highlights;
+}
+
+export function paintPageFindHighlights(
+  ranges: readonly Range[],
+  active: Range | undefined,
+): void {
+  const registry = highlightRegistry();
+  if (registry === null) return;
+  registry.set(
+    PAGE_FIND_MATCH_HIGHLIGHT,
+    new Highlight(...ranges.filter((range) => range !== active)),
+  );
+  if (active === undefined) registry.delete(PAGE_FIND_ACTIVE_HIGHLIGHT);
+  else registry.set(PAGE_FIND_ACTIVE_HIGHLIGHT, new Highlight(active));
+}
+
+export function clearPageFindHighlights(): void {
+  const registry = highlightRegistry();
+  registry?.delete(PAGE_FIND_MATCH_HIGHLIGHT);
+  registry?.delete(PAGE_FIND_ACTIVE_HIGHLIGHT);
+}
+
+export function revealMatch(range: Range): void {
+  const target = range.startContainer.parentElement;
+  target?.scrollIntoView({ block: "center", inline: "nearest" });
+}

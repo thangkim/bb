@@ -5,6 +5,8 @@ import {
 import { TasksAppShell } from "./shell/app-shell.js";
 import { TasksSidebarAccessory } from "./shell/sidebar-accessory.js";
 import { TasksNavigationPanel } from "./shell/navigation-panel.js";
+import { ATTACHMENT_PREVIEW_TAB } from "./shared/preview-tab.js";
+import { AttachmentPreviewTab } from "./views/detail/attachments.js";
 import { TaskDirectiveCard, TaskEmbedPanel } from "./views/embed/index.js";
 import { ThreadLinksOverlay } from "./thread-links/dialog.js";
 import { openThreadLinks } from "./thread-links/store.js";
@@ -31,6 +33,13 @@ export default definePluginApp((app) => {
         component: TasksNavigationPanel,
         layout: "flush",
       },
+      {
+        ...ATTACHMENT_PREVIEW_TAB,
+        title: "Preview",
+        icon: "File",
+        component: AttachmentPreviewTab,
+        layout: "flush",
+      },
     ],
   });
   app.slots.threadPanelAction({
@@ -44,7 +53,10 @@ export default definePluginApp((app) => {
     title: "Tomato work",
     component: ThreadLinkedWork,
   });
-  app.slots.messageDirective({ id: "tomato-task", component: TaskDirectiveCard });
+  app.slots.messageDirective({
+    id: "tomato-task",
+    component: TaskDirectiveCard,
+  });
   app.slots.messageDirective({ id: "my-task", component: TaskDirectiveCard });
   app.slots.experimental_appOverlay({
     id: "thread-links",

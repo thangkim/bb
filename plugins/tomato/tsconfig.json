@@ -7,6 +7,7 @@
     "jsx": "react-jsx",
     "lib": ["ES2022", "DOM"],
     "noEmit": true,
+    "allowArbitraryExtensions": true,
     "skipLibCheck": true,
     "types": ["node"],
     "paths": {

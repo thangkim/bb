@@ -1,13 +1,28 @@
-import { useEffect, useState } from "react";
-import { Markdown } from "@get-bb/plugin-sdk/app";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  experimental_useAppPanel,
+  experimental_useFixedTabTarget,
+  Markdown,
+} from "@get-bb/plugin-sdk/app";
 import {
   attachmentDownloadUrl,
   isMarkdownAttachment,
 } from "../../shared/attachments.js";
+import {
+  ATTACHMENT_PREVIEW_TAB,
+  type AttachmentPreviewTarget,
+} from "../../shared/preview-tab.js";
 import type { Attachment } from "../../shared/contract.js";
 import { errorMessage } from "../../shared/errors.js";
 import { formatFileSize } from "../activity/time.js";
 import { ConfirmDialog } from "../../components/confirm-dialog.js";
+import { EmptyState } from "../../components/empty-state.js";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Icon } from "@/components/ui/icon";
 
 let tokenPromise: Promise<string> | null = null;
@@ -110,20 +125,69 @@ type MarkdownSource =
   | { kind: "ready"; content: string }
   | { kind: "error"; message: string };
 
-function MarkdownViewer({
-  attachment,
-  onClose,
+const PREVIEW_ICON_BUTTON_CLASS =
+  "flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-state-hover hover:text-foreground";
+
+function previewTarget(attachment: Attachment): AttachmentPreviewTarget {
+  return {
+    attachmentId: attachment.id,
+    fileName: attachment.fileName,
+    sizeBytes: attachment.sizeBytes,
+  };
+}
+
+export function useOpenAttachmentInPanel(): (
+  attachment: Attachment,
+) => boolean {
+  const appPanel = experimental_useAppPanel();
+  return (attachment) =>
+    isMarkdownAttachment(attachment) &&
+    appPanel.openFixedTab({
+      surface: { kind: "current" },
+      tab: ATTACHMENT_PREVIEW_TAB,
+      target: previewTarget(attachment),
+    });
+}
+
+function MarkdownPreviewHeader({
+  target,
+  title,
+  close,
 }: {
-  attachment: Attachment;
-  onClose: () => void;
+  target: AttachmentPreviewTarget;
+  title: ReactNode;
+  close: ReactNode;
 }) {
-  useEscapeToClose(onClose);
+  return (
+    <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2.5">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-sm bg-secondary text-muted-foreground">
+        <Icon name="File" className="size-3.5" />
+      </span>
+      {title}
+      <span className="shrink-0 text-xs text-muted-foreground">
+        {formatFileSize(target.sizeBytes)}
+      </span>
+      <a
+        href={attachmentDownloadUrl(target.attachmentId)}
+        download={target.fileName}
+        aria-label={`Download ${target.fileName}`}
+        title="Download"
+        className={PREVIEW_ICON_BUTTON_CLASS}
+      >
+        <Icon name="Download" className="size-4" />
+      </a>
+      {close}
+    </div>
+  );
+}
+
+function MarkdownPreviewBody({ attachmentId }: { attachmentId: string }) {
   const [source, setSource] = useState<MarkdownSource>({ kind: "loading" });
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
       try {
-        const response = await fetch(attachmentDownloadUrl(attachment.id), {
+        const response = await fetch(attachmentDownloadUrl(attachmentId), {
           signal: controller.signal,
         });
         if (!response.ok) {
@@ -137,60 +201,103 @@ function MarkdownViewer({
       }
     })();
     return () => controller.abort();
-  }, [attachment.id]);
+  }, [attachmentId]);
 
   return (
-    <div
-      role="dialog"
-      aria-label={attachment.fileName}
-      className="fixed inset-0 z-50 flex items-center justify-center p-8"
-      style={{ background: "color-mix(in oklab, var(--ink) 60%, transparent)" }}
-      onClick={onClose}
+    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+      {source.kind === "ready" ? (
+        <Markdown content={source.content} />
+      ) : source.kind === "error" ? (
+        <p role="alert" className="text-sm text-destructive">
+          {source.message}
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      )}
+    </div>
+  );
+}
+
+function MarkdownViewer({
+  attachment,
+  onClose,
+}: {
+  attachment: Attachment;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
-      <div
-        className="flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-border bg-background text-foreground shadow-md"
-        onClick={(event) => event.stopPropagation()}
+      <DialogContent
+        hideCloseButton
+        aria-describedby={undefined}
+        className="flex max-h-[85vh] max-w-3xl flex-col gap-0 overflow-hidden p-0"
       >
-        <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2.5">
-          <span className="flex size-6 shrink-0 items-center justify-center rounded-sm bg-secondary text-muted-foreground">
-            <Icon name="File" className="size-3.5" />
-          </span>
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">
-            {attachment.fileName}
-          </span>
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {formatFileSize(attachment.sizeBytes)}
-          </span>
-          <a
-            href={attachmentDownloadUrl(attachment.id)}
-            download={attachment.fileName}
-            aria-label={`Download ${attachment.fileName}`}
-            title="Download"
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-state-hover hover:text-foreground"
+        <MarkdownPreviewHeader
+          target={previewTarget(attachment)}
+          title={
+            <DialogTitle className="min-w-0 flex-1 truncate text-sm font-medium">
+              {attachment.fileName}
+            </DialogTitle>
+          }
+          close={
+            <DialogClose
+              aria-label="Close"
+              className={PREVIEW_ICON_BUTTON_CLASS}
+            >
+              <Icon name="X" className="size-4" />
+            </DialogClose>
+          }
+        />
+        <MarkdownPreviewBody attachmentId={attachment.id} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function AttachmentPreviewTab() {
+  const state = experimental_useFixedTabTarget(ATTACHMENT_PREVIEW_TAB);
+  if (!state) {
+    return (
+      <EmptyState
+        icon="File"
+        title="No file open"
+        description="Click a Markdown attachment on a task or project to read it here."
+      />
+    );
+  }
+  const { target } = state;
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <MarkdownPreviewHeader
+        target={target}
+        title={
+          <span
+            title={target.fileName}
+            className="min-w-0 flex-1 truncate text-sm font-medium"
           >
-            <Icon name="Download" className="size-4" />
-          </a>
+            {target.fileName}
+          </span>
+        }
+        close={
           <button
             type="button"
-            aria-label="Close"
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-state-hover hover:text-foreground"
-            onClick={onClose}
+            aria-label="Close file"
+            className={PREVIEW_ICON_BUTTON_CLASS}
+            onClick={state.clear}
           >
             <Icon name="X" className="size-4" />
           </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-          {source.kind === "ready" ? (
-            <Markdown content={source.content} />
-          ) : source.kind === "error" ? (
-            <p role="alert" className="text-sm text-destructive">
-              {source.message}
-            </p>
-          ) : (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          )}
-        </div>
-      </div>
+        }
+      />
+      <MarkdownPreviewBody
+        key={`${state.sequence}:${target.attachmentId}`}
+        attachmentId={target.attachmentId}
+      />
     </div>
   );
 }
@@ -255,6 +362,7 @@ export function AttachmentsGrid({
   onError: (message: string) => void;
 }) {
   const [preview, setPreview] = useState<Attachment | null>(null);
+  const openInPanel = useOpenAttachmentInPanel();
   const [confirm, setConfirm] = useState<Attachment | null>(null);
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
 
@@ -330,7 +438,9 @@ export function AttachmentsGrid({
             type="button"
             aria-label={`Open ${attachment.fileName}`}
             className="flex min-w-0 items-center gap-2 rounded-sm text-left hover:bg-state-hover"
-            onClick={() => setPreview(attachment)}
+            onClick={() => {
+              if (!openInPanel(attachment)) setPreview(attachment);
+            }}
           >
             {fileCardLabel(attachment)}
           </button>

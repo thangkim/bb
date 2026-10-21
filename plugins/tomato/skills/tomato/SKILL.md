@@ -161,6 +161,9 @@ each renders its own card.
   tasks), and
   `bb plugin config tomato set showCollapsedProjectThreads true` lists
   project threads on collapsed project rows. Both default to false.
+- Mentioning a Tomato task or project with `@` in a thread's first prompt
+  attaches that thread to it automatically, so `tomato_track_thread` and
+  `bb tomato attach` are unnecessary for it.
 - `autoTrackThreads` (default true) gives a new thread with no task or project
   attached the `tomato_track_thread` tool and instructions to file a 2-5 word
   task in the best-fitting project. Call it once, before other work; it does

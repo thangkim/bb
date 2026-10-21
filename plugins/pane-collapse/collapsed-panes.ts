@@ -13,20 +13,71 @@ export const GRID_DIVIDER_ATTRIBUTE = "data-split-resize-grid-boundary";
 
 export type CollapsedPaneDisplay = "strip" | "hidden";
 
+export interface CollapsedPanesStorage {
+  load(): CollapsedPanes;
+  save(collapsed: CollapsedPanes): void;
+}
+
 export interface CollapsedPaneStore {
   get(): CollapsedPanes;
   set(next: CollapsedPanes): void;
   subscribe(listener: () => void): () => void;
 }
 
-export function createCollapsedPaneStore(): CollapsedPaneStore {
-  let state: CollapsedPanes = new Set();
+export const COLLAPSED_PANES_STORAGE_KEY = "bb.pane-collapse.collapsedPanes";
+
+export function parseCollapsedPanes(raw: string | null): CollapsedPanes {
+  if (raw === null) return new Set();
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(
+      parsed.filter(
+        (paneId): paneId is string =>
+          typeof paneId === "string" && paneId.length > 0,
+      ),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+export function createBrowserCollapsedPanesStorage(): CollapsedPanesStorage {
+  return {
+    load() {
+      try {
+        return parseCollapsedPanes(
+          sessionStorage.getItem(COLLAPSED_PANES_STORAGE_KEY) ??
+            localStorage.getItem(COLLAPSED_PANES_STORAGE_KEY),
+        );
+      } catch {
+        return new Set();
+      }
+    },
+    save(collapsed) {
+      const serialized = JSON.stringify([...collapsed]);
+      for (const storage of [sessionStorage, localStorage]) {
+        try {
+          storage.setItem(COLLAPSED_PANES_STORAGE_KEY, serialized);
+        } catch {
+          continue;
+        }
+      }
+    },
+  };
+}
+
+export function createCollapsedPaneStore(
+  storage?: CollapsedPanesStorage,
+): CollapsedPaneStore {
+  let state: CollapsedPanes = storage?.load() ?? new Set();
   const listeners = new Set<() => void>();
   return {
     get: () => state,
     set(next) {
       if (next === state) return;
       state = next;
+      storage?.save(next);
       for (const listener of listeners) listener();
     },
     subscribe(listener) {

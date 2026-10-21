@@ -197,43 +197,30 @@ export function TasksTopbar({
             className="flex min-w-0 items-center gap-1.5"
           >
             {allProjectsCrumb}
-            {crumbSeparator}
-            <span aria-current="page" className="truncate font-semibold">
-              {project?.name ?? "Project"}
-            </span>
           </nav>
         );
       case "task":
         return (
-          <span className="flex min-w-0 items-center gap-1.5">
-            <nav
-              aria-label="Breadcrumb"
-              className="flex min-w-0 items-center gap-1.5"
-            >
-              {allProjectsCrumb}
-              {crumbSeparator}
-              {project ? (
-                <>
-                  <button
-                    type="button"
-                    className="flex min-w-0 cursor-pointer items-center text-muted-foreground hover:text-foreground"
-                    onClick={() =>
-                      onNavigate({ kind: "project", projectId: project.id })
-                    }
-                  >
-                    <span className="truncate font-medium">{project.name}</span>
-                  </button>
-                  {crumbSeparator}
-                </>
-              ) : null}
-              <span
-                aria-current="page"
-                className="shrink-0 text-xs font-medium text-muted-foreground"
-              >
-                {route.taskKey}
-              </span>
-            </nav>
-          </span>
+          <nav
+            aria-label="Breadcrumb"
+            className="flex min-w-0 items-center gap-1.5"
+          >
+            {allProjectsCrumb}
+            {project ? (
+              <>
+                {crumbSeparator}
+                <button
+                  type="button"
+                  className="flex min-w-0 cursor-pointer items-center text-muted-foreground hover:text-foreground"
+                  onClick={() =>
+                    onNavigate({ kind: "project", projectId: project.id })
+                  }
+                >
+                  <span className="truncate font-medium">{project.name}</span>
+                </button>
+              </>
+            ) : null}
+          </nav>
         );
     }
   })();

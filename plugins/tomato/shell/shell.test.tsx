@@ -243,12 +243,19 @@ describe("task pager", () => {
 });
 
 describe("tasks app shell", () => {
-  it("registers navigation as a BB-owned fixed panel tab", () => {
+  it("registers navigation and the attachment preview as BB-owned fixed panel tabs", () => {
     expect(tasksRegistration.fixedTabs).toMatchObject([
       {
         id: "navigation",
         title: "Navigation",
         icon: "ListView",
+        layout: "flush",
+      },
+      {
+        panelId: "tasks",
+        id: "preview",
+        title: "Preview",
+        icon: "File",
         layout: "flush",
       },
     ]);
@@ -767,7 +774,7 @@ describe("tasks app shell", () => {
     }
   });
 
-  it("links the project page and task page back through a breadcrumb", async () => {
+  it("links the project and task pages back through a breadcrumb without repeating the page title", async () => {
     const projectSlot = renderSlot(
       app.navPanels[0]!,
       { subPath: PROJECT_ID },
@@ -776,7 +783,8 @@ describe("tasks app shell", () => {
     const projectCrumbs = await projectSlot.findByRole("navigation", {
       name: "Breadcrumb",
     });
-    await within(projectCrumbs).findByText("Tasks Plugin");
+    await projectSlot.findByText("Tasks Plugin");
+    expect(within(projectCrumbs).queryByText("Tasks Plugin")).toBeNull();
     fireEvent.click(within(projectCrumbs).getByRole("button", { name: "All" }));
     expect(projectSlot.navigateCalls).toContainEqual({
       method: "toPluginPanel",
@@ -796,6 +804,7 @@ describe("tasks app shell", () => {
     fireEvent.click(
       await within(taskCrumbs).findByRole("button", { name: "Tasks Plugin" }),
     );
+    expect(within(taskCrumbs).queryByText("TSK-4")).toBeNull();
     expect(taskSlot.navigateCalls).toContainEqual({
       method: "toPluginPanel",
       path: "tasks",

@@ -26,6 +26,7 @@ import {
   STRIP_ATTRIBUTE,
   canCollapse,
   collapsedLayoutCss,
+  createBrowserCollapsedPanesStorage,
   createCollapsedPaneStore,
   focusTargetAfterCollapse,
   latestCollapsed,
@@ -42,7 +43,9 @@ import { AttentionDot, MinimizedChip, paneLabel } from "./chip";
 import { installBridgedDividerDrag } from "./bridged-divider";
 import { readSplitDom, stampGridRoots } from "./split-dom";
 
-export const collapsedPanes = createCollapsedPaneStore();
+export const collapsedPanes = createCollapsedPaneStore(
+  createBrowserCollapsedPanesStorage(),
+);
 const minimizedThreadStore = createCollapsedPaneStore();
 
 let latestLayout: PluginSidebarSplitLayout | null = null;

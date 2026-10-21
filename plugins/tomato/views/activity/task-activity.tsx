@@ -23,6 +23,7 @@ import {
 import {
   AttachmentPreview,
   canPreviewAttachment,
+  useOpenAttachmentInPanel,
 } from "../detail/attachments.js";
 import {
   AttachmentChip,
@@ -267,6 +268,7 @@ function CommentCard({ entry, nowMs }: { entry: FeedEntry; nowMs: number }) {
   const agent = comment.kind === "agent";
   const navigate = useBbNavigate();
   const [preview, setPreview] = useState<Attachment | null>(null);
+  const openInPanel = useOpenAttachmentInPanel();
   return (
     <div className="relative mb-3.5 flex gap-2.5">
       {agent ? (
@@ -294,7 +296,12 @@ function CommentCard({ entry, nowMs }: { entry: FeedEntry; nowMs: number }) {
           onOpenThread={(threadId) => navigate.toThread(threadId)}
         />
         {attachments.length > 0 ? (
-          <AttachmentTracks attachments={attachments} onOpen={setPreview} />
+          <AttachmentTracks
+            attachments={attachments}
+            onOpen={(attachment) => {
+              if (!openInPanel(attachment)) setPreview(attachment);
+            }}
+          />
         ) : null}
         {preview ? (
           <AttachmentPreview

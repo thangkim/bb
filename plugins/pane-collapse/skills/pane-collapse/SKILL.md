@@ -11,7 +11,7 @@ Hover a chip to open a popover with the thread's latest agent message and a repl
 
 When bb shows no window title bar (the sidebar is not framed, or on a compact screen), a minimized pane shrinks to a 36px strip instead: a narrow column in a side-by-side split, a short bar in a stacked one, with the same icon, dot, title and linked task or project. Click the strip to restore it.
 
-Minimizing is temporary: the thread keeps running and its pane stays in the layout. Minimized panes are remembered only while the app window stays open, and a pane that is closed or leaves the split is forgotten. A maximized pane shows normally even if it was minimized.
+Minimizing is temporary: the thread keeps running and its pane stays in the layout. Minimized panes stay minimized when you refresh or reload the app window, and a pane that is closed or leaves the split is forgotten. A maximized pane shows normally even if it was minimized.
 
 The plugin also adds three commands to the quick palette (Mod+Shift+P) and to Settings → Keyboard, where you can rebind them.
 

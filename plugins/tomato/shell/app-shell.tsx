@@ -14,6 +14,7 @@ import {
 } from "./routes.js";
 import { loadViewMode, storeViewMode } from "./view-preference.js";
 import { TasksTopbar } from "./topbar.js";
+import { PageFind } from "./page-find.js";
 import { ListView } from "../views/list/index.js";
 import { BoardView } from "../views/board/index.js";
 import { DetailView } from "../views/detail/index.js";
@@ -106,6 +107,7 @@ function TasksAppShellContent({ subPath }: PluginNavPanelProps) {
   };
 
   const mainRef = useRef<HTMLElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   usePersistentPaneWidth(mainRef, useSidebarSplitLayout());
   const [boardUsable, setBoardUsable] = useState(true);
   useEffect(() => {
@@ -170,7 +172,7 @@ function TasksAppShellContent({ subPath }: PluginNavPanelProps) {
           onNavigate={navigation.go}
           onNew={openNew}
         />
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div ref={scrollerRef} className="min-h-0 flex-1 overflow-auto">
           {noProjects && route.kind !== "task" && route.kind !== "manage" ? (
             <EmptyState
               icon="ListTodo"
@@ -190,6 +192,7 @@ function TasksAppShellContent({ subPath }: PluginNavPanelProps) {
           )}
         </div>
       </main>
+      <PageFind rootRef={mainRef} anchorRef={scrollerRef} />
       <NewTaskDialog
         open={newTaskOpen}
         onOpenChange={setNewTaskOpen}

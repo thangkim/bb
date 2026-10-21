@@ -91,14 +91,14 @@ export function isComposedThread(thread: ThreadResponse): boolean {
   );
 }
 
-function composedTitle(thread: ThreadResponse, fallback: string): string {
+export function composedTitle(thread: ThreadResponse, fallback: string): string {
   return truncateToWidth(
     thread.title?.trim() || thread.titleFallback?.trim() || fallback,
     COMPOSED_THREAD_TITLE_WIDTH,
   );
 }
 
-function startProject(store: TasksApiStore, project: Project): void {
+export function startProject(store: TasksApiStore, project: Project): void {
   if (project.status === "backlog" || project.status === "todo") {
     store.tasks.updateProject(project.id, { status: "in_progress" });
   }

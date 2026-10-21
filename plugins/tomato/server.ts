@@ -9,6 +9,7 @@ import { registerProjectBrief } from "./brief";
 import { registerTasksCli } from "./cli";
 import { registerDelegation } from "./delegate";
 import { registerLifecycle } from "./lifecycle";
+import { registerMentionAttach } from "./mention-attach";
 import { registerMentions } from "./mentions";
 import { registerProjectMentions } from "./mentions/project-mentions";
 import {
@@ -69,6 +70,7 @@ export default async function plugin(bb: BbPluginApi) {
   registerDelegation(bb, store);
   registerMentions(bb, store);
   registerProjectMentions(bb, store);
+  registerMentionAttach(bb, store);
   registerProjectBrief(bb, store);
   registerAutoTrack(bb, store);
   registerAgentConfiguration(bb, store, () => autoTrackEnabled);

@@ -3,6 +3,9 @@ import type { PluginSidebarSplitLayout } from "@get-bb/plugin-sdk/app";
 import {
   canCollapse,
   collapsedLayoutCss,
+  createCollapsedPaneStore,
+  parseCollapsedPanes,
+  type CollapsedPanes,
   focusTargetAfterCollapse,
   minimizedThreadIds,
   newlyFocusedCollapsedPane,
@@ -210,5 +213,27 @@ describe("minimizedThreadIds", () => {
   it("is empty without a layout or minimized panes", () => {
     expect(minimizedThreadIds(null, new Set(["a"])).size).toBe(0);
     expect(minimizedThreadIds(three, new Set()).size).toBe(0);
+  });
+});
+
+describe("collapsed pane persistence", () => {
+  it("restores the saved set in order and saves every change", () => {
+    const saved: CollapsedPanes[] = [];
+    const store = createCollapsedPaneStore({
+      load: () => new Set(["b", "a"]),
+      save: (collapsed) => saved.push(collapsed),
+    });
+    expect([...store.get()]).toEqual(["b", "a"]);
+    const next = withPane(store.get(), "c");
+    store.set(next);
+    store.set(next);
+    expect(saved).toEqual([next]);
+  });
+
+  it("ignores stored values that are not a list of pane ids", () => {
+    expect([...parseCollapsedPanes('["a",3,"","b"]')]).toEqual(["a", "b"]);
+    expect(parseCollapsedPanes("{").size).toBe(0);
+    expect(parseCollapsedPanes('{"a":1}').size).toBe(0);
+    expect(parseCollapsedPanes(null).size).toBe(0);
   });
 });
