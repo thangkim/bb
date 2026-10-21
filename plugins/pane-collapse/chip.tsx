@@ -2,7 +2,12 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Markdown, useSdk } from "@get-bb/plugin-sdk/app";
 import { Button } from "@bb/shared-ui/button";
 import { Icon } from "@bb/shared-ui/icon";
-import { Popover, PopoverAnchor, PopoverContent } from "@bb/shared-ui/popover";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
+} from "@bb/shared-ui/popover";
 import { Textarea } from "@bb/shared-ui/textarea";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { usePaneLinkedWork, type PaneLinkedWork } from "./linked-work";
@@ -54,56 +59,255 @@ export function LinkedWorkLabel({
   );
 }
 
-type LatestMessage =
-  | { state: "loading" }
-  | { state: "loaded"; text: string | null }
-  | { state: "failed" };
+interface ContextUsage {
+  usedTokens: number;
+  modelContextWindow: number;
+  estimated: boolean;
+  cost?: { amount: number; currency: string };
+}
 
-function useLatestMessage(
+type ThreadPreview =
+  | { state: "loading" }
+  | { state: "failed" }
+  | {
+      state: "loaded";
+      assistant: string | null;
+      user: string | null;
+      usage: ContextUsage | null;
+    };
+
+function useThreadPreview(
   threadId: string | null,
   enabled: boolean,
   version: number,
-): LatestMessage {
+): ThreadPreview {
   const sdk = useSdk();
-  const [latest, setLatest] = useState<LatestMessage>({ state: "loading" });
+  const [preview, setPreview] = useState<ThreadPreview>({ state: "loading" });
   useEffect(() => {
     if (!enabled || threadId === null) return;
     const controller = new AbortController();
-    sdk.threads
-      .output({ threadId, signal: controller.signal })
-      .then(({ output }) => setLatest({ state: "loaded", text: output }))
-      .catch(() => {
-        if (!controller.signal.aborted) setLatest({ state: "failed" });
+    const { signal } = controller;
+    void Promise.allSettled([
+      (async () => sdk.threads.output({ threadId, signal }))(),
+      (async () =>
+        sdk.threads.conversationOutline({ threadId, role: "user", signal }))(),
+      (async () => sdk.threads.context({ threadId, signal }))(),
+    ]).then(([output, outline, context]) => {
+      if (signal.aborted) return;
+      if (output.status === "rejected") {
+        setPreview({ state: "failed" });
+        return;
+      }
+      setPreview({
+        state: "loaded",
+        assistant: output.value.output,
+        user:
+          outline.status === "fulfilled"
+            ? (outline.value.items.at(-1)?.preview ?? null)
+            : null,
+        usage: context.status === "fulfilled" ? context.value.usage : null,
       });
+    });
     return () => controller.abort();
   }, [enabled, sdk, threadId, version]);
-  return latest;
+  return preview;
 }
 
-function LatestMessageBody({ latest }: { latest: LatestMessage }) {
-  if (latest.state === "loading") {
+function PreviewBody({ preview }: { preview: ThreadPreview }) {
+  if (preview.state === "loading") {
     return <p className="text-xs text-muted-foreground">Loading…</p>;
   }
-  if (latest.state === "failed") {
+  if (preview.state === "failed") {
     return (
       <p className="text-xs text-muted-foreground">
-        Couldn't load the latest message.
+        Couldn't load the latest messages.
       </p>
     );
   }
-  if (latest.text === null || latest.text.trim() === "") {
+  const user = preview.user?.trim() ?? "";
+  const assistant = preview.assistant?.trim() ?? "";
+  if (user === "" && assistant === "") {
     return <p className="text-xs text-muted-foreground">No messages yet.</p>;
   }
-  return <Markdown content={latest.text} className="text-xs leading-5" />;
+  return (
+    <div className="flex flex-col gap-2">
+      {user === "" ? null : (
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-medium text-muted-foreground">You</span>
+          <p className="line-clamp-4 whitespace-pre-wrap break-words text-xs leading-5">
+            {user}
+          </p>
+        </div>
+      )}
+      {assistant === "" ? null : (
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-medium text-muted-foreground">
+            Assistant
+          </span>
+          <Markdown content={assistant} className="text-xs leading-5" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+const COMPACT_TOKEN_FORMAT = new Intl.NumberFormat("en-US", {
+  notation: "compact",
+  maximumFractionDigits: 0,
+});
+
+function formatTokens(value: number): string {
+  return COMPACT_TOKEN_FORMAT.format(
+    Math.max(0, Math.round(value)),
+  ).toLowerCase();
+}
+
+function usagePercent(usage: ContextUsage): number {
+  if (usage.modelContextWindow <= 0) return 0;
+  const ratio = usage.usedTokens / usage.modelContextWindow;
+  return Math.round(Math.min(Math.max(ratio, 0), 1) * 100);
+}
+
+function toneClassFor(percent: number): string {
+  return percent >= 90
+    ? "text-destructive"
+    : percent >= 75
+      ? "text-warning-text"
+      : "text-muted-foreground";
+}
+
+function formatCost(cost: { amount: number; currency: string }): string {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: cost.currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: cost.amount < 1 ? 4 : 2,
+    }).format(cost.amount);
+  } catch {
+    return `${cost.amount} ${cost.currency}`;
+  }
+}
+
+const RING_RADIUS = 6.5;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+const RING_CLOSE_DELAY_MS = 60;
+
+function ContextWindowRing({ usage }: { usage: ContextUsage }) {
+  const [open, setOpen] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current !== null) clearTimeout(timer.current);
+    },
+    [],
+  );
+  const hoverIn = () => {
+    if (timer.current !== null) clearTimeout(timer.current);
+    setOpen(true);
+  };
+  const hoverOut = () => {
+    if (timer.current !== null) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setOpen(false), RING_CLOSE_DELAY_MS);
+  };
+  const percent = usagePercent(usage);
+  const toneClass = toneClassFor(percent);
+  const title = usage.estimated ? "Estimated context" : "Context window";
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Context window ${percent}% used`}
+          onPointerEnter={hoverIn}
+          onPointerLeave={hoverOut}
+          className="inline-flex size-8 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <svg
+            viewBox="0 0 16 16"
+            className={cn("size-4", toneClass)}
+            aria-hidden="true"
+          >
+            <circle
+              cx="8"
+              cy="8"
+              r={RING_RADIUS}
+              fill="none"
+              strokeWidth="3"
+              className="stroke-border-hairline"
+            />
+            <circle
+              cx="8"
+              cy="8"
+              r={RING_RADIUS}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeDasharray={RING_CIRCUMFERENCE}
+              strokeDashoffset={RING_CIRCUMFERENCE * (1 - percent / 100)}
+              transform="rotate(-90 8 8)"
+            />
+          </svg>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="end"
+        sideOffset={8}
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onPointerEnter={hoverIn}
+        onPointerLeave={hoverOut}
+        className="w-56 p-2"
+      >
+        <div className="flex flex-col gap-2">
+          <div className="flex items-baseline justify-between gap-2 text-xs">
+            <span className="text-muted-foreground">{title}</span>
+            <span className={cn("font-medium tabular-nums", toneClass)}>
+              {percent}% used
+            </span>
+          </div>
+          <div
+            role="progressbar"
+            aria-label="Context window used"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={percent}
+            className="relative h-1.5 w-full overflow-hidden rounded-full bg-border"
+          >
+            <div
+              className={cn("h-full rounded-full bg-current", toneClass)}
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+          <div className="flex items-baseline justify-between gap-2 text-xs tabular-nums text-muted-foreground">
+            <span>
+              {formatTokens(usage.usedTokens)} /{" "}
+              {formatTokens(usage.modelContextWindow)} tokens
+            </span>
+            <span>{100 - percent}% left</span>
+          </div>
+          {usage.cost === undefined ? null : (
+            <div className="flex items-baseline justify-between gap-2 text-xs tabular-nums text-muted-foreground">
+              <span>Session cost</span>
+              <span>{formatCost(usage.cost)}</span>
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 type SendState = "idle" | "sending" | "sent" | "failed";
 
 function QuickReply({
   threadId,
+  usage,
   onFocusChange,
 }: {
   threadId: string;
+  usage: ContextUsage | null;
   onFocusChange: (focused: boolean) => void;
 }) {
   const sdk = useSdk();
@@ -145,7 +349,7 @@ function QuickReply({
     <div className="flex flex-col gap-1.5">
       <Textarea
         aria-label="Reply"
-        placeholder="Reply…"
+        placeholder="Reply… Enter to send, Shift+Enter for a new line"
         rows={2}
         value={draft}
         onChange={(event) => updateDraft(event.target.value)}
@@ -155,21 +359,24 @@ function QuickReply({
         className="max-h-32 min-h-14 resize-none text-xs"
       />
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground" aria-live="polite">
-          {sendState === "sent"
-            ? "Sent"
-            : sendState === "failed"
-              ? "Couldn't send. Try again."
-              : "Enter to send, Shift+Enter for a new line"}
-        </span>
-        <Button
-          type="button"
-          size="sm"
-          disabled={draft.trim() === "" || sendState === "sending"}
-          onClick={() => void send()}
-        >
-          Send
-        </Button>
+        {sendState === "sent" || sendState === "failed" ? (
+          <span className="text-xs text-muted-foreground" aria-live="polite">
+            {sendState === "sent" ? "Sent" : "Couldn't send. Try again."}
+          </span>
+        ) : (
+          <span />
+        )}
+        <div className="flex shrink-0 items-center gap-1">
+          {usage === null ? null : <ContextWindowRing usage={usage} />}
+          <Button
+            type="button"
+            size="sm"
+            disabled={draft.trim() === "" || sendState === "sending"}
+            onClick={() => void send()}
+          >
+            Send
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -199,7 +406,7 @@ export function MinimizedChip({
   const [open, setOpen] = useState(false);
   const replyFocused = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latest = useLatestMessage(threadId, open, updatedAt);
+  const preview = useThreadPreview(threadId, open, updatedAt);
 
   useEffect(
     () => () => {
@@ -292,11 +499,12 @@ export function MinimizedChip({
           </p>
         ) : null}
         <div className="min-h-0 overflow-y-auto rounded-md bg-muted/40 p-2">
-          <LatestMessageBody latest={latest} />
+          <PreviewBody preview={preview} />
         </div>
         {threadId === null ? null : (
           <QuickReply
             threadId={threadId}
+            usage={preview.state === "loaded" ? preview.usage : null}
             onFocusChange={(focused) => {
               replyFocused.current = focused;
             }}

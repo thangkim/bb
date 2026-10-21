@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PopoverContent } from "@/components/ui/popover";
 import { errorMessage } from "../../shared/errors.js";
-import { useTasksQuery, useTasksRpc } from "../../shell/data.js";
+import { useProjects, useTasksQuery, useTasksRpc } from "../../shell/data.js";
 import { BbProjectLinkPicker } from "../manage/bb-project-link.js";
 
 export function LinkBeforeStartContent({
   projectId,
+  mode = "start",
   onLinked,
   onError,
 }: {
   projectId: string;
+  mode?: "start" | "change";
   onLinked: () => void;
   onError: (message: string) => void;
 }) {
@@ -19,8 +21,16 @@ export function LinkBeforeStartContent({
     async (query) => (await query.call("listBbProjects")).bbProjects,
     [],
   );
+  const projects = useProjects();
+  const currentLink =
+    projects.data?.find((project) => project.id === projectId)
+      ?.linkedBbProjectId ?? null;
   const [selection, setSelection] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (mode === "change") setSelection(currentLink);
+  }, [mode, currentLink]);
 
   const save = async () => {
     if (selection === null || saving) return;
@@ -45,7 +55,9 @@ export function LinkBeforeStartContent({
       data-link-before-start={projectId}
     >
       <p className="mb-2 text-xs text-muted-foreground">
-        Pick the bb project new threads should run in.
+        {mode === "change"
+          ? "Pick the bb project folder new threads for this project run in."
+          : "Pick the bb project new threads should run in."}
       </p>
       <BbProjectLinkPicker
         value={selection}
@@ -59,10 +71,14 @@ export function LinkBeforeStartContent({
         <Button
           size="sm"
           className="h-7"
-          disabled={selection === null || saving}
+          disabled={
+            selection === null ||
+            saving ||
+            (mode === "change" && selection === currentLink)
+          }
           onClick={() => void save()}
         >
-          Link and start
+          {mode === "change" ? "Save" : "Link and start"}
         </Button>
       </div>
     </PopoverContent>

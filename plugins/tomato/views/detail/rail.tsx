@@ -394,17 +394,17 @@ export function DispatchTargetMenu({
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label="Edit dispatch target"
+          aria-label="Edit default local folder"
           className={triggerClassName}
         >
-          <Icon name="ArrowUpRight" className="size-3.5 shrink-0" />
+          <Icon name="Folder" className="size-3.5 shrink-0" />
           {linkedBbProjectId !== null ? (
             <span className="truncate" title={linkedBbProjectId}>
               {linkedName ?? linkedBbProjectId}
             </span>
           ) : (
             <span className="truncate text-muted-foreground">
-              Link a bb project…
+              Set default folder…
             </span>
           )}
         </button>
@@ -522,7 +522,7 @@ export function PropertiesRail({
       </div>
 
       <div className="mb-1 mt-3 text-2xs font-semibold text-muted-foreground">
-        Dispatch target
+        Default local folder
       </div>
       {project !== undefined ? (
         <DispatchTargetMenu

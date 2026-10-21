@@ -353,7 +353,7 @@ function ProjectDetail({
             onUpdate={(update) => void updateProject(update)}
           />
           <div className="mb-1 mt-3 text-2xs font-semibold text-muted-foreground">
-            Dispatch target
+            Default local folder
           </div>
           <DispatchTargetMenu
             project={project}

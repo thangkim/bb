@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { ComponentProps } from "react";
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -29,6 +30,15 @@ installTestPluginRuntime();
 const { AttachThreadPicker, NewThreadButton } =
   await import("./thread-actions.js");
 const { ComposeAnchor } = await import("./composer-beside.js");
+const { TasksRefreshProvider } = await import("../../shell/refresh.js");
+
+function NewThreadWithRefresh(props: ComponentProps<typeof NewThreadButton>) {
+  return (
+    <TasksRefreshProvider>
+      <NewThreadButton {...props} />
+    </TasksRefreshProvider>
+  );
+}
 
 afterEach(cleanup);
 
@@ -64,7 +74,7 @@ describe("new thread button", () => {
     if (options.anchor !== false) renderSlot({ component: ComposeAnchor }, {});
     const errors: string[] = [];
     const slot = renderSlot(
-      { component: NewThreadButton },
+      { component: NewThreadWithRefresh },
       {
         target: options.target ?? { kind: "project", projectId: PROJECT_ID },
         projectId: PROJECT_ID,
@@ -78,6 +88,8 @@ describe("new thread button", () => {
             options.compose ?? (() => ({ bbProjectId: "proj_linked" })),
           taskThreadsCompose:
             options.compose ?? (() => ({ bbProjectId: "proj_linked" })),
+          listProjects: () => ({ projects: [] }),
+          listBbProjects: () => ({ bbProjects: [] }),
         },
       },
     );
@@ -100,6 +112,21 @@ describe("new thread button", () => {
       slot.rpcCalls.map((call) => [call.method, rpcInput(call.input)]),
     ).toEqual([["projectThreadsCompose", { projectId: PROJECT_ID }]]);
     expect(errors).toEqual([]);
+  });
+
+  it("opens the folder picker on right-click without composing", async () => {
+    const { slot } = render({});
+    fireEvent.contextMenu(slot.getByRole("button", { name: "New thread" }));
+    await waitFor(() =>
+      expect(document.body.textContent).toContain(
+        "Pick the bb project folder new threads for this project run in.",
+      ),
+    );
+    expect(document.body.textContent).toContain("Save");
+    expect(slot.navigateCalls).toEqual([]);
+    expect(slot.rpcCalls.map((call) => call.method)).not.toContain(
+      "projectThreadsCompose",
+    );
   });
 
   it("claims the composer for a task target", async () => {

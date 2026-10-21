@@ -122,7 +122,12 @@ than traversing an inconsistent snapshot.
 
 ## Agents, delegation, and presets
 
-Linking a Tasks project to a bb project enables delegation. Open a task, choose
+Linking a Tasks project to a bb project enables delegation. The link is the
+project's **Default local folder**: the bb project (folder) where its new threads and
+delegated workers start. Set it from the project page's properties; in a narrow
+panel it sits in the chip row beside status, priority, and due date. You can also
+right-click any **New thread** button to change the project's folder in place; every
+later thread and task under that project uses the new folder. Open a task, choose
 **Delegate**, select a preset, and optionally add instructions. A preset
 defines the provider, model, reasoning level, optional service tier, permission
 mode, and reusable instructions. Presets are user-defined, so create the worker profiles your team

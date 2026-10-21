@@ -84,7 +84,7 @@ export function NewThreadButton({
   const rpc = useRpc<DelegationRpcContract>();
   const navigate = useBbNavigate();
   const [opening, setOpening] = useState(false);
-  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkMode, setLinkMode] = useState<"start" | "change" | null>(null);
 
   const compose = async () => {
     setOpening(true);
@@ -105,24 +105,38 @@ export function NewThreadButton({
 
   const start = () => {
     if (linked) void compose();
-    else setLinkOpen(true);
+    else setLinkMode("start");
   };
 
-  const linkPopover = linkOpen ? (
-    <LinkBeforeStartContent
-      projectId={projectId}
-      onError={onError}
-      onLinked={() => {
-        setLinkOpen(false);
-        void compose();
-      }}
-    />
-  ) : null;
+  const changeFolder = (event: React.MouseEvent) => {
+    event.preventDefault();
+    setLinkMode("change");
+  };
+
+  const linkPopover =
+    linkMode !== null ? (
+      <LinkBeforeStartContent
+        projectId={projectId}
+        mode={linkMode}
+        onError={onError}
+        onLinked={() => {
+          const starting = linkMode === "start";
+          setLinkMode(null);
+          if (starting) void compose();
+        }}
+      />
+    ) : null;
+  const popoverProps = {
+    open: linkMode !== null,
+    onOpenChange: (next: boolean) => {
+      if (!next) setLinkMode(null);
+    },
+  };
 
   if (compact) {
     return (
-      <Popover open={linkOpen} onOpenChange={setLinkOpen}>
-        <ActionTooltip label="New thread">
+      <Popover {...popoverProps}>
+        <ActionTooltip label="New thread · right-click to change folder">
           <PopoverAnchor asChild>
             <button
               type="button"
@@ -131,6 +145,7 @@ export function NewThreadButton({
               className={cn(ICON_ACTION_CLASS, className)}
               disabled={opening}
               onClick={start}
+              onContextMenu={changeFolder}
             >
               <HugeiconsIcon
                 icon={BubbleChatAddIcon}
@@ -145,13 +160,15 @@ export function NewThreadButton({
   }
 
   return (
-    <Popover open={linkOpen} onOpenChange={setLinkOpen}>
+    <Popover {...popoverProps}>
       <PopoverAnchor asChild>
         <button
           type="button"
           className={cn(ACTION_CLASS, className)}
           disabled={opening}
+          title="Right-click to change folder"
           onClick={start}
+          onContextMenu={changeFolder}
         >
           <Icon name="Plus" className="size-3 shrink-0" />
           New thread

@@ -87,7 +87,7 @@ describe("task completion rail control", () => {
   });
 });
 
-describe("dispatch target rail control", () => {
+describe("default local folder rail control", () => {
   it("links a discovered bb project", async () => {
     const updateCalls: Array<Record<string, unknown>> = [];
     const slot = renderSlot({ component: RailHarness }, railProps(null), {
@@ -106,7 +106,9 @@ describe("dispatch target rail control", () => {
         },
       },
     });
-    fireEvent.click(slot.getByRole("button", { name: "Edit dispatch target" }));
+    fireEvent.click(
+      slot.getByRole("button", { name: "Edit default local folder" }),
+    );
     fireEvent.click(await slot.findByLabelText("Linked bb project"));
     fireEvent.click(await slot.findByRole("option", { name: "bb monorepo" }));
     fireEvent.click(slot.getByRole("button", { name: "Save" }));
@@ -140,7 +142,7 @@ describe("dispatch target rail control", () => {
       },
     );
     const trigger = slot.getByRole("button", {
-      name: "Edit dispatch target",
+      name: "Edit default local folder",
     });
     await slot.findByText("bb monorepo");
 

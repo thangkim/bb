@@ -132,6 +132,30 @@ function mountOverlay(focused: PaneId) {
       sdk: {
         threads: {
           output: async () => ({ output: "Plan drafted. Want me to start?" }),
+          conversationOutline: async () => ({
+            items: [
+              {
+                id: "m1",
+                role: "user",
+                preview: "Older ask",
+                attachmentSummary: null,
+              },
+              {
+                id: "m2",
+                role: "user",
+                preview: "Draft a plan",
+                attachmentSummary: null,
+              },
+            ],
+            maxSeq: 2,
+          }),
+          context: async () => ({
+            usage: {
+              usedTokens: 50_000,
+              modelContextWindow: 200_000,
+              estimated: false,
+            },
+          }),
           send: async (args) => {
             sentMessages.push(args);
             return { ok: true, delivery: "sent" };
@@ -376,6 +400,21 @@ describe("minimized thread chip", () => {
     expect(
       await screen.findByText("Plan drafted. Want me to start?"),
     ).toBeDefined();
+    expect(screen.getByText("Draft a plan")).toBeDefined();
+    expect(screen.queryByText("Older ask")).toBeNull();
+    const ring = await screen.findByRole("button", {
+      name: "Context window 25% used",
+    });
+    expect(screen.queryByText("75% left")).toBeNull();
+    fireEvent.pointerEnter(ring);
+    expect(await screen.findByText("25% used")).toBeDefined();
+    expect(screen.getByText("75% left")).toBeDefined();
+    expect(screen.getByText(/50k \/\s*200k tokens/)).toBeDefined();
+    expect(
+      screen
+        .getByRole("progressbar", { name: "Context window used" })
+        .getAttribute("aria-valuenow"),
+    ).toBe("25");
     expect(
       screen.getByText(/Waiting for your approval or answer/),
     ).toBeDefined();
