@@ -59,6 +59,43 @@ export function LinkedWorkLabel({
   );
 }
 
+export const UPRIGHT_VERTICAL_TEXT_CLASS =
+  "[writing-mode:vertical-rl] [text-orientation:upright]";
+
+export function StripLinkedWork({
+  work,
+  vertical,
+}: {
+  work: PaneLinkedWork;
+  vertical: boolean;
+}) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex min-h-0 min-w-0 items-center gap-1.5 text-xs",
+        vertical && "mt-2 flex-col",
+      )}
+    >
+      {work.kind === "project" && work.color !== null ? (
+        <span
+          className="size-2 shrink-0 rounded-full"
+          style={{ backgroundColor: work.color }}
+        />
+      ) : null}
+      <span
+        className={cn(
+          "min-h-0 min-w-0 truncate",
+          work.kind === "task" && "text-timeline-accent",
+          vertical && UPRIGHT_VERTICAL_TEXT_CLASS,
+        )}
+      >
+        {work.label}
+      </span>
+    </span>
+  );
+}
+
 interface ContextUsage {
   usedTokens: number;
   modelContextWindow: number;
@@ -389,6 +426,7 @@ export interface MinimizedChipProps {
   needsInput: boolean;
   finishedUnread: boolean;
   updatedAt: number;
+  vertical: boolean;
   onRestore: () => void;
 }
 
@@ -399,6 +437,7 @@ export function MinimizedChip({
   needsInput,
   finishedUnread,
   updatedAt,
+  vertical,
   onRestore,
 }: MinimizedChipProps) {
   const work = usePaneLinkedWork(pane);
@@ -443,20 +482,34 @@ export function MinimizedChip({
           onClick={onRestore}
           onPointerEnter={hoverIn}
           onPointerLeave={hoverOut}
-          className="relative z-50 flex h-6 min-w-12 max-w-80 shrink cursor-pointer items-center gap-1.5 rounded-md border border-border px-2 text-xs text-muted-foreground [-webkit-app-region:no-drag] [app-region:no-drag] hover:bg-state-hover hover:text-foreground"
+          className={cn(
+            "flex cursor-pointer items-center text-xs text-muted-foreground hover:bg-state-hover hover:text-foreground",
+            vertical
+              ? "h-full w-9 shrink-0 flex-col gap-2 overflow-hidden border-r border-border-seam bg-background py-3"
+              : "relative z-50 h-6 min-w-12 max-w-80 shrink gap-1.5 rounded-md border border-border px-2 [-webkit-app-region:no-drag] [app-region:no-drag]",
+          )}
         >
           <span className="relative flex shrink-0">
             <Icon
               name="MessageSquare"
               className={cn(
-                "size-3.5",
+                vertical ? "size-4" : "size-3.5",
                 finishedUnread && "text-timeline-accent",
               )}
             />
             {needsInput ? <AttentionDot /> : null}
           </span>
-          <span className="min-w-0 truncate">{title}</span>
-          {work === null ? null : (
+          <span
+            className={cn(
+              "min-w-0 truncate",
+              vertical && cn("min-h-0", UPRIGHT_VERTICAL_TEXT_CLASS),
+            )}
+          >
+            {title}
+          </span>
+          {work === null ? null : vertical ? (
+            <StripLinkedWork work={work} vertical />
+          ) : (
             <LinkedWorkLabel
               work={work}
               className="max-w-[50%] shrink-0 border-l border-border pl-1.5"
@@ -465,6 +518,7 @@ export function MinimizedChip({
         </button>
       </PopoverAnchor>
       <PopoverContent
+        side={vertical ? "right" : "bottom"}
         align="start"
         sideOffset={6}
         onOpenAutoFocus={(event) => event.preventDefault()}

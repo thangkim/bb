@@ -94,6 +94,17 @@ describe("bridgedPair", () => {
     });
   });
 
+  it("steps over the minimized-thread rail so the divider before it still resizes the cells around it", () => {
+    const { root, cells, dividers } = buildRow([400, 400], []);
+    const rail = document.createElement("div");
+    rail.setAttribute("data-pane-collapse-rail", "");
+    root.insertBefore(rail, cells[1]!);
+    expect(bridgedPair(dividers[0]!)).toEqual({
+      previous: cells[0],
+      next: cells[1],
+    });
+  });
+
   it("ignores a divider with no visible cell on one side", () => {
     const { dividers } = buildRow([400, 0], [1]);
     expect(bridgedPair(dividers[0]!)).toBeNull();

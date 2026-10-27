@@ -8,6 +8,9 @@ export const COLLAPSED_PANE_SIZE_PX = 36;
 export const PANE_SELECTOR = "[data-split-pane-id]";
 export const STRIP_ATTRIBUTE = "data-pane-collapse-strip";
 export const ROOT_ATTRIBUTE = "data-pane-collapse-root";
+export const RAIL_ATTRIBUTE = "data-pane-collapse-rail";
+export const BAR_ATTRIBUTE = "data-pane-collapse-bar";
+export const BAR_HOST_ATTRIBUTE = "data-pane-collapse-bar-host";
 export const GRID_ROOT_SELECTOR = "[data-split-resize-grid-root]";
 export const GRID_DIVIDER_ATTRIBUTE = "data-split-resize-grid-boundary";
 
@@ -204,6 +207,14 @@ function redundantDividers(grid: SplitGrid): number[] {
     );
     return before === undefined || before.collapsed || !visibleAfter;
   });
+}
+
+export function barHostCss(): string {
+  const host = `[${BAR_HOST_ATTRIBUTE}]`.repeat(2);
+  return [
+    `${host} { flex-direction: column !important; }`,
+    `${host} > ${GRID_ROOT_SELECTOR} { flex: 1 1 0% !important; height: auto !important; width: 100% !important; min-height: 0 !important; }`,
+  ].join("\n");
 }
 
 export function collapsedLayoutCss(

@@ -13,6 +13,7 @@ import {
   experimental_usePluginId,
   experimental_useSidebarThreads,
   useBbNavigate,
+  useSettings,
   useSidebarSplitLayout,
   type BbNavigate,
   type PluginSidebarSplitLayout,
@@ -23,8 +24,12 @@ import { Icon } from "@bb/shared-ui/icon";
 import { cn } from "@bb/shared-ui/lib/utils";
 import {
   PANE_SELECTOR,
+  BAR_ATTRIBUTE,
+  BAR_HOST_ATTRIBUTE,
+  RAIL_ATTRIBUTE,
   STRIP_ATTRIBUTE,
   canCollapse,
+  barHostCss,
   collapsedLayoutCss,
   createBrowserCollapsedPanesStorage,
   createCollapsedPaneStore,
@@ -39,9 +44,22 @@ import {
   type CollapsedPanes,
 } from "./collapsed-panes";
 import { usePaneLinkedWork } from "./linked-work";
-import { AttentionDot, MinimizedChip, paneLabel } from "./chip";
+import {
+  AttentionDot,
+  MinimizedChip,
+  StripLinkedWork,
+  UPRIGHT_VERTICAL_TEXT_CLASS,
+  paneLabel,
+} from "./chip";
 import { installBridgedDividerDrag } from "./bridged-divider";
-import { readSplitDom, stampGridRoots } from "./split-dom";
+import { installChromeInsets } from "./chrome-insets";
+import { parseDisplayMode } from "./display-mode";
+import {
+  ancestorGridRoots,
+  railSlot,
+  readSplitDom,
+  stampGridRoots,
+} from "./split-dom";
 
 export const collapsedPanes = createCollapsedPaneStore(
   createBrowserCollapsedPanesStorage(),
@@ -161,6 +179,89 @@ function useTitleBarTray(
   return tray;
 }
 
+function useLeftRail(
+  active: boolean,
+  pluginId: string,
+  layout: PluginSidebarSplitLayout | null,
+): HTMLElement | null {
+  const [rail, setRail] = useState<HTMLElement | null>(null);
+  const layoutRef = useRef(layout);
+  useLayoutEffect(() => {
+    layoutRef.current = layout;
+  });
+  const paneKey =
+    layout?.panes
+      .map((pane) => `${pane.paneId}:${pane.threadId === null}`)
+      .join("\n") ?? "";
+  useLayoutEffect(() => {
+    const pane = active
+      ? document.querySelector<HTMLElement>(PANE_SELECTOR)
+      : null;
+    const outermost =
+      pane === null ? undefined : ancestorGridRoots(pane).at(-1);
+    const slot =
+      outermost === undefined || layoutRef.current === null
+        ? null
+        : railSlot(outermost, layoutRef.current);
+    if (slot === null) {
+      setRail(null);
+      return;
+    }
+    const element = document.createElement("div");
+    element.dataset.bbPlugin = pluginId;
+    element.setAttribute(RAIL_ATTRIBUTE, "");
+    element.setAttribute("role", "group");
+    element.setAttribute("aria-label", "Minimized threads");
+    element.className = "flex h-full min-h-0 shrink-0 flex-row";
+    slot.parent.insertBefore(element, slot.before);
+    setRail(element);
+    return () => element.remove();
+  }, [active, pluginId, paneKey]);
+  return rail;
+}
+
+function useTopBar(
+  active: boolean,
+  pluginId: string,
+  paneKey: string,
+): HTMLElement | null {
+  const [bar, setBar] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    const pane = active
+      ? document.querySelector<HTMLElement>(PANE_SELECTOR)
+      : null;
+    const outermost =
+      pane === null ? undefined : ancestorGridRoots(pane).at(-1);
+    const host = outermost?.parentElement;
+    if (outermost === undefined || host === null || host === undefined) {
+      setBar(null);
+      return;
+    }
+    const style = document.createElement("style");
+    style.dataset.bbPlugin = pluginId;
+    style.textContent = barHostCss();
+    document.head.append(style);
+    const element = document.createElement("div");
+    element.dataset.bbPlugin = pluginId;
+    element.setAttribute(BAR_ATTRIBUTE, "");
+    element.setAttribute("role", "group");
+    element.setAttribute("aria-label", "Minimized threads");
+    element.className =
+      "flex h-9 w-full shrink-0 items-center gap-1 overflow-hidden border-b border-border-seam px-2";
+    host.setAttribute(BAR_HOST_ATTRIBUTE, "");
+    host.insertBefore(element, outermost);
+    const uninstallInsets = installChromeInsets(element);
+    setBar(element);
+    return () => {
+      uninstallInsets();
+      element.remove();
+      host.removeAttribute(BAR_HOST_ATTRIBUTE);
+      style.remove();
+    };
+  }, [active, pluginId, paneKey]);
+  return bar;
+}
+
 interface StripHost {
   paneId: string;
   threadId: string | null;
@@ -200,9 +301,6 @@ interface CollapsedStripProps {
   finishedUnread: boolean;
   onRestore: () => void;
 }
-
-const UPRIGHT_VERTICAL_TEXT_CLASS =
-  "[writing-mode:vertical-rl] [text-orientation:upright]";
 
 function CollapsedStrip({
   pluginId,
@@ -247,29 +345,7 @@ function CollapsedStrip({
           {title}
         </span>
         {work === null ? null : (
-          <span
-            aria-hidden
-            className={cn(
-              "flex min-h-0 min-w-0 items-center gap-1.5 text-xs",
-              vertical && "mt-2 flex-col",
-            )}
-          >
-            {work.kind === "project" && work.color !== null ? (
-              <span
-                className="size-2 shrink-0 rounded-full"
-                style={{ backgroundColor: work.color }}
-              />
-            ) : null}
-            <span
-              className={cn(
-                "min-h-0 min-w-0 truncate",
-                work.kind === "task" && "text-timeline-accent",
-                vertical && UPRIGHT_VERTICAL_TEXT_CLASS,
-              )}
-            >
-              {work.label}
-            </span>
-          </span>
+          <StripLinkedWork work={work} vertical={vertical} />
         )}
       </button>
     </div>
@@ -284,9 +360,22 @@ export function CollapsedPaneOverlay() {
   const { threads } = experimental_useSidebarThreads();
   const focusedPaneId = useRef<string | null>(null);
   const [hosts, setHosts] = useState<StripHost[]>([]);
-  const titleBar = useTitleBar(collapsed.size > 0);
+  const { values } = useSettings();
+  const mode = parseDisplayMode(values?.display);
+  const titleBar = useTitleBar(collapsed.size > 0 && mode === "chips");
   const tray = useTitleBarTray(titleBar, pluginId);
-  const display: CollapsedPaneDisplay = tray === null ? "strip" : "hidden";
+  const rail = useLeftRail(
+    collapsed.size > 0 && mode === "rail",
+    pluginId,
+    layout,
+  );
+  const bar = useTopBar(
+    collapsed.size > 0 && mode === "bar",
+    pluginId,
+    layout?.panes.map((pane) => pane.paneId).join("\n") ?? "",
+  );
+  const display: CollapsedPaneDisplay =
+    tray === null && rail === null && bar === null ? "strip" : "hidden";
 
   useEffect(() => {
     latestLayout = layout;
@@ -357,7 +446,8 @@ export function CollapsedPaneOverlay() {
     };
   });
 
-  if (tray !== null) {
+  const container = tray ?? rail ?? bar;
+  if (container !== null) {
     return createPortal(
       [...panes]
         .reverse()
@@ -378,11 +468,12 @@ export function CollapsedPaneOverlay() {
               updatedAt={updatedAt}
               title={title}
               needsInput={needsInput}
+              vertical={rail !== null}
               onRestore={onRestore}
             />
           ),
         ),
-      tray,
+      container,
     );
   }
 

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
   cleanup,
@@ -121,11 +121,15 @@ const threadA = {
 
 const sentMessages: unknown[] = [];
 
-function mountOverlay(focused: PaneId) {
+function mountOverlay(
+  focused: PaneId,
+  settings?: Record<string, string | number | boolean>,
+) {
   return renderSlot(
     app.appOverlays[0]!,
     {},
     {
+      settings,
       sidebarSplitLayout: splitLayout(focused),
       sidebarThreads: { threads: [threadA] },
       pluginId: "pane-collapse",
@@ -278,6 +282,323 @@ describe("collapsed pane strips", () => {
 
     act(() => void command("expand-all").run(context));
     expect(collapsedPanes.get().size).toBe(0);
+  });
+});
+
+describe("minimized threads on the left rail", () => {
+  const railSettings = { display: "Vertical strips on the left" };
+  const threadB = {
+    id: "t-b",
+    displayTitle: "Beta thread",
+    hasPendingInteraction: false,
+  } as PluginSidebarThread;
+
+  it("gathers collapsed panes in a rail at the start of the split row, most recent leftmost", async () => {
+    const panes = mountSplitDom();
+    const root = panes.pa.cell.parentElement!;
+    renderSlot(
+      app.appOverlays[0]!,
+      {},
+      {
+        settings: railSettings,
+        sidebarSplitLayout: splitLayout("pc"),
+        sidebarThreads: { threads: [threadA, threadB] },
+        pluginId: "pane-collapse",
+      },
+    );
+    act(() => collapsedPanes.set(new Set(["pa", "pb"])));
+
+    const rail = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>(
+        "[data-pane-collapse-rail]",
+      );
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    expect(root.firstElementChild).toBe(rail);
+    expect(rail.nextElementSibling).toBe(panes.pa.cell);
+    expect(
+      [...rail.querySelectorAll("button")].map((button) => button.title),
+    ).toEqual(["Beta thread", "Alpha thread"]);
+    expect(rail.contains(panes.pa.pane)).toBe(false);
+    expect(document.querySelector("[data-pane-collapse-tray]")).toBeNull();
+    const hidden = (nthChild: number) =>
+      `${'[data-pane-collapse-root="0"]'.repeat(3)} > :nth-child(${nthChild}):not(:has([data-maximized])) { display: none !important; }`;
+    expect(styleText()).toContain(hidden(2));
+    expect(styleText()).toContain(hidden(4));
+    expect(styleText()).not.toContain(hidden(1));
+  });
+
+  it("places the rail right after a leading non-thread pane such as Tomato", async () => {
+    const panes = mountSplitDom();
+    const root = panes.pa.cell.parentElement!;
+    const tomatoPane = document.createElement("div");
+    tomatoPane.dataset.splitPaneId = "tomato";
+    const tomatoCell = document.createElement("div");
+    tomatoCell.style.flex = "0 0 300px";
+    tomatoCell.append(tomatoPane);
+    const tomatoDivider = document.createElement("div");
+    tomatoDivider.dataset.splitResizeGridBoundary = "0";
+    root.prepend(tomatoCell, tomatoDivider);
+    const layout = splitLayout("pc");
+    renderSlot(
+      app.appOverlays[0]!,
+      {},
+      {
+        settings: railSettings,
+        sidebarSplitLayout: {
+          panes: [
+            {
+              paneId: "tomato",
+              threadId: null,
+              rect: { x: 0, y: 0, width: 0.2, height: 1 },
+              isFocused: false,
+            },
+            ...layout.panes,
+          ],
+        },
+        sidebarThreads: { threads: [threadA, threadB] },
+        pluginId: "pane-collapse",
+      },
+    );
+    act(() => collapsedPanes.set(new Set(["pa", "pb"])));
+
+    const rail = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>(
+        "[data-pane-collapse-rail]",
+      );
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    expect(rail.previousElementSibling).toBe(tomatoDivider);
+    expect(rail.nextElementSibling).toBe(panes.pa.cell);
+    expect(tomatoCell.nextElementSibling).toBe(tomatoDivider);
+    const hidden = (nthChild: number) =>
+      `${'[data-pane-collapse-root="0"]'.repeat(3)} > :nth-child(${nthChild}):not(:has([data-maximized])) { display: none !important; }`;
+    expect(styleText()).toContain(hidden(4));
+    expect(styleText()).toContain(hidden(6));
+    expect(styleText()).not.toContain(hidden(1));
+  });
+
+  it("previews the thread and sends a quick reply when hovering a rail strip", async () => {
+    mountSplitDom();
+    mountOverlay("pb", railSettings);
+    act(() => collapsedPanes.set(new Set(["pa"])));
+    const strip = await screen.findByRole("button", {
+      name: "Restore Alpha thread",
+    });
+
+    fireEvent.pointerEnter(strip);
+    expect(
+      await screen.findByText("Plan drafted. Want me to start?"),
+    ).toBeDefined();
+    expect(screen.getByText("Draft a plan")).toBeDefined();
+    expect(
+      await screen.findByRole("button", { name: "Context window 25% used" }),
+    ).toBeDefined();
+    expect(
+      screen.getByText(/Waiting for your approval or answer/),
+    ).toBeDefined();
+
+    const reply = screen.getByRole("textbox", { name: "Reply" });
+    fireEvent.change(reply, { target: { value: "Go ahead" } });
+    fireEvent.keyDown(reply, { key: "Enter" });
+
+    await screen.findByText("Sent");
+    expect(sentMessages).toEqual([
+      {
+        threadId: "t-a",
+        input: [{ type: "text", text: "Go ahead", mentions: [] }],
+        mode: "queue-if-active",
+      },
+    ]);
+    expect(collapsedPanes.get().has("pa")).toBe(true);
+  });
+
+  it("restores a pane from its rail strip and removes the rail when none are left", async () => {
+    mountSplitDom();
+    mountOverlay("pb", railSettings);
+    act(() => collapsedPanes.set(new Set(["pa"])));
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Restore Alpha thread" }),
+    );
+
+    expect(collapsedPanes.get().size).toBe(0);
+    await waitFor(() =>
+      expect(document.querySelector("[data-pane-collapse-rail]")).toBeNull(),
+    );
+  });
+
+  it("keeps the title bar chips when the setting is the default", async () => {
+    mountTitleBar();
+    mountSplitDom();
+    mountOverlay("pb", { display: "Chips in the title bar" });
+    act(() => collapsedPanes.set(new Set(["pa"])));
+
+    await waitFor(() =>
+      expect(
+        document.querySelector("[data-pane-collapse-tray]"),
+      ).not.toBeNull(),
+    );
+    expect(document.querySelector("[data-pane-collapse-rail]")).toBeNull();
+  });
+});
+
+describe("minimized threads in the top bar", () => {
+  const barSettings = { display: "Horizontal strips on top" };
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("pads the bar clear of window controls that float over it", async () => {
+    const panes = mountSplitDom();
+    const root = panes.pa.cell.parentElement!;
+    const controls = document.createElement("div");
+    controls.dataset.testid = "app-desktop-sidebar-trigger";
+    document.body.append(controls);
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const box = (
+          left: number,
+          top: number,
+          right: number,
+          bottom: number,
+        ) =>
+          ({
+            left,
+            top,
+            right,
+            bottom,
+            width: right - left,
+            height: bottom - top,
+          }) as DOMRect;
+        if (this === controls) return box(84, 8, 170, 32);
+        if (this.hasAttribute("data-pane-collapse-bar")) {
+          return box(50, 0, 1000, 36);
+        }
+        return box(0, 0, 0, 0);
+      },
+    );
+    renderSlot(
+      app.appOverlays[0]!,
+      {},
+      {
+        settings: barSettings,
+        sidebarSplitLayout: splitLayout("pc"),
+        sidebarThreads: { threads: [threadA] },
+        pluginId: "pane-collapse",
+      },
+    );
+    act(() => collapsedPanes.set(new Set(["pa"])));
+    const bar = await waitFor(() => {
+      const found = root.parentElement?.querySelector<HTMLElement>(
+        "[data-pane-collapse-bar]",
+      );
+      expect(found).toBeTruthy();
+      return found!;
+    });
+    expect(bar.style.paddingLeft).toBe(`${170 + 8 - 50}px`);
+    expect(bar.style.paddingRight).toBe("8px");
+    expect(bar.style.height).toBe("40px");
+    controls.remove();
+  });
+
+  it("puts a full-width bar above the split and lists the most recent first", async () => {
+    const panes = mountSplitDom();
+    const root = panes.pa.cell.parentElement!;
+    renderSlot(
+      app.appOverlays[0]!,
+      {},
+      {
+        settings: barSettings,
+        sidebarSplitLayout: splitLayout("pc"),
+        sidebarThreads: {
+          threads: [
+            threadA,
+            {
+              id: "t-b",
+              displayTitle: "Beta thread",
+              hasPendingInteraction: false,
+            } as PluginSidebarThread,
+          ],
+        },
+        pluginId: "pane-collapse",
+      },
+    );
+    act(() => collapsedPanes.set(new Set(["pa", "pb"])));
+
+    const bar = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>(
+        "[data-pane-collapse-bar]",
+      );
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    expect(bar.nextElementSibling).toBe(root);
+    expect(bar.parentElement?.hasAttribute("data-pane-collapse-bar-host")).toBe(
+      true,
+    );
+    expect(
+      [...bar.querySelectorAll("button")].map((button) => button.title),
+    ).toEqual(["Beta thread", "Alpha thread"]);
+    expect(document.querySelector("[data-pane-collapse-tray]")).toBeNull();
+    expect(document.querySelector("[data-pane-collapse-rail]")).toBeNull();
+    expect(styleText()).toContain("flex-direction: column !important");
+    expect(styleText()).toContain(
+      `${'[data-pane-collapse-root="0"]'.repeat(3)} > :nth-child(1):not(:has([data-maximized])) { display: none !important; }`,
+    );
+  });
+
+  it("previews the thread and sends a quick reply when hovering a bar strip", async () => {
+    mountSplitDom();
+    mountOverlay("pb", barSettings);
+    act(() => collapsedPanes.set(new Set(["pa"])));
+    const strip = await screen.findByRole("button", {
+      name: "Restore Alpha thread",
+    });
+
+    fireEvent.pointerEnter(strip);
+    expect(
+      await screen.findByText("Plan drafted. Want me to start?"),
+    ).toBeDefined();
+
+    const reply = screen.getByRole("textbox", { name: "Reply" });
+    fireEvent.change(reply, { target: { value: "Go ahead" } });
+    fireEvent.keyDown(reply, { key: "Enter" });
+
+    await screen.findByText("Sent");
+    expect(collapsedPanes.get().has("pa")).toBe(true);
+  });
+
+  it("restores a pane from the bar and removes the bar and its styling when none are left", async () => {
+    mountSplitDom();
+    mountOverlay("pb", barSettings);
+    act(() => collapsedPanes.set(new Set(["pa"])));
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Restore Alpha thread" }),
+    );
+
+    expect(collapsedPanes.get().size).toBe(0);
+    await waitFor(() =>
+      expect(document.querySelector("[data-pane-collapse-bar]")).toBeNull(),
+    );
+    expect(document.querySelector("[data-pane-collapse-bar-host]")).toBeNull();
+    expect(styleText()).not.toContain("flex-direction: column !important");
   });
 });
 

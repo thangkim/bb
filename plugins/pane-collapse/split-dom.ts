@@ -1,7 +1,9 @@
+import type { PluginSidebarSplitLayout } from "@get-bb/plugin-sdk/app";
 import {
   GRID_DIVIDER_ATTRIBUTE,
   GRID_ROOT_SELECTOR,
   PANE_SELECTOR,
+  RAIL_ATTRIBUTE,
   ROOT_ATTRIBUTE,
   type CollapsedPanes,
   type SplitGrid,
@@ -21,7 +23,7 @@ export function collapsedPaneElements(
   );
 }
 
-function ancestorGridRoots(pane: HTMLElement): HTMLElement[] {
+export function ancestorGridRoots(pane: HTMLElement): HTMLElement[] {
   const roots: HTMLElement[] = [];
   let node: HTMLElement = pane;
   for (;;) {
@@ -30,6 +32,53 @@ function ancestorGridRoots(pane: HTMLElement): HTMLElement[] {
     roots.push(root);
     node = root;
   }
+}
+
+export interface RailSlot {
+  parent: HTMLElement;
+  before: Node | null;
+}
+
+function isGridCell(child: Element): child is HTMLElement {
+  return (
+    child instanceof HTMLElement &&
+    !child.hasAttribute(GRID_DIVIDER_ATTRIBUTE) &&
+    !child.hasAttribute(RAIL_ATTRIBUTE)
+  );
+}
+
+function holdsOnlyNonThreadPanes(
+  cell: HTMLElement,
+  layout: PluginSidebarSplitLayout,
+): boolean {
+  const panes = [...cell.querySelectorAll<HTMLElement>(PANE_SELECTOR)];
+  return (
+    panes.length > 0 &&
+    panes.every(
+      (pane) =>
+        layout.panes.find(
+          (candidate) => candidate.paneId === pane.dataset.splitPaneId,
+        )?.threadId === null,
+    )
+  );
+}
+
+export function railSlot(
+  outermost: HTMLElement,
+  layout: PluginSidebarSplitLayout,
+): RailSlot | null {
+  if (getComputedStyle(outermost).flexDirection.startsWith("column")) {
+    return outermost.parentElement === null
+      ? null
+      : { parent: outermost.parentElement, before: outermost };
+  }
+  const first = [...outermost.children].find(isGridCell);
+  if (first === undefined || !holdsOnlyNonThreadPanes(first, layout)) {
+    return { parent: outermost, before: first ?? null };
+  }
+  const divider = first.nextElementSibling;
+  const after = divider?.hasAttribute(GRID_DIVIDER_ATTRIBUTE) ? divider : first;
+  return { parent: outermost, before: after.nextElementSibling };
 }
 
 function parseGrow(value: string): number | null {
@@ -63,11 +112,7 @@ export function readSplitDom(collapsed: CollapsedPanes): SplitDom {
   ];
   const cells: HTMLElement[] = [];
   const grids = roots.map((root, index) => {
-    const children = [...root.children].filter(
-      (child): child is HTMLElement =>
-        child instanceof HTMLElement &&
-        !child.hasAttribute(GRID_DIVIDER_ATTRIBUTE),
-    );
+    const children = [...root.children].filter(isGridCell);
     cells.push(...children);
     const nth = (child: Element) => [...root.children].indexOf(child) + 1;
     return {

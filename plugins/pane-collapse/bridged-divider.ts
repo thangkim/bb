@@ -1,4 +1,8 @@
-import { GRID_DIVIDER_ATTRIBUTE, GRID_ROOT_SELECTOR } from "./collapsed-panes";
+import {
+  GRID_DIVIDER_ATTRIBUTE,
+  GRID_ROOT_SELECTOR,
+  RAIL_ATTRIBUTE,
+} from "./collapsed-panes";
 
 const HIT_TARGET_SELECTOR = "[data-split-divider-hit-target]";
 const MIN_PAIR_FRACTION = 0.15;
@@ -21,7 +25,7 @@ function nearestVisibleCell(
   for (let node = step(divider); node !== null; node = step(node)) {
     if (!(node instanceof HTMLElement)) continue;
     if (node.hasAttribute(GRID_DIVIDER_ATTRIBUTE)) continue;
-    if (isHidden(node)) {
+    if (node.hasAttribute(RAIL_ATTRIBUTE) || isHidden(node)) {
       bridged = true;
       continue;
     }
