@@ -329,7 +329,9 @@ function TaskChecklistRow({
             )}
           >
             <Icon name="MessageSquare" className="size-3" />
-            {threads.length > 0 ? threads.length : null}
+            <span className="min-w-4 text-left">
+              {threads.length > 0 ? threads.length : null}
+            </span>
             <Icon
               name={threadsOpen ? "ChevronUp" : "ChevronDown"}
               className="size-3"
