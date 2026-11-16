@@ -14,10 +14,44 @@ import { usePaneLinkedWork, type PaneLinkedWork } from "./linked-work";
 export const HOVER_OPEN_DELAY_MS = 300;
 export const HOVER_CLOSE_DELAY_MS = 250;
 
+export const CLOSE_PANE_SELECTOR = 'button[aria-label="Close pane"]';
+
+export function paneCloseButton(pane: HTMLElement): HTMLButtonElement | null {
+  return pane.querySelector<HTMLButtonElement>(CLOSE_PANE_SELECTOR);
+}
+
 export function paneLabel(title: string, work: PaneLinkedWork | null): string {
   return work === null
     ? title
     : `${title} — ${work.kind === "task" ? "Task" : "Project"} ${work.label}`;
+}
+
+export function isThreadRunning(status: string | undefined): boolean {
+  return status === "starting" || status === "active" || status === "stopping";
+}
+
+export function ThreadStateIcon({
+  running,
+  finishedUnread,
+  className,
+}: {
+  running: boolean;
+  finishedUnread: boolean;
+  className: string;
+}) {
+  return running ? (
+    <span data-thread-running="" className="flex shrink-0">
+      <Icon
+        name="RotateCcw"
+        className={cn(className, "animate-spin text-timeline-accent")}
+      />
+    </span>
+  ) : (
+    <Icon
+      name="MessageSquare"
+      className={cn(className, finishedUnread && "text-timeline-accent")}
+    />
+  );
 }
 
 export function AttentionDot() {
@@ -99,6 +133,7 @@ export interface MinimizedChipProps {
   title: string;
   needsInput: boolean;
   finishedUnread: boolean;
+  running: boolean;
   vertical: boolean;
   onRestore: () => void;
 }
@@ -109,6 +144,7 @@ export function MinimizedChip({
   title,
   needsInput,
   finishedUnread,
+  running,
   vertical,
   onRestore,
 }: MinimizedChipProps) {
@@ -147,7 +183,7 @@ export function MinimizedChip({
       <PopoverAnchor asChild>
         <button
           type="button"
-          aria-label={`Restore ${label}${finishedUnread ? ", new reply" : ""}`}
+          aria-label={`Restore ${label}${running ? ", running" : ""}${finishedUnread ? ", new reply" : ""}`}
           aria-expanded={open}
           title={open ? undefined : label}
           onClick={onRestore}
@@ -161,12 +197,10 @@ export function MinimizedChip({
           )}
         >
           <span className="relative flex shrink-0">
-            <Icon
-              name="MessageSquare"
-              className={cn(
-                vertical ? "size-4" : "size-3.5",
-                finishedUnread && "text-timeline-accent",
-              )}
+            <ThreadStateIcon
+              running={running}
+              finishedUnread={finishedUnread}
+              className={vertical ? "size-4" : "size-3.5"}
             />
             {needsInput ? <AttentionDot /> : null}
           </span>
@@ -195,12 +229,28 @@ export function MinimizedChip({
         onOpenAutoFocus={(event) => event.preventDefault()}
         onPointerEnter={hoverIn}
         onPointerLeave={hoverOut}
-        className="flex h-[min(640px,var(--radix-popover-content-available-height))] w-[30rem] flex-col gap-2 p-3"
+        className="flex h-[min(720px,var(--radix-popover-content-available-height))] w-[30rem] flex-col gap-2 p-3"
       >
         <div className="flex min-w-0 items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-sm font-medium">
             {title}
           </span>
+          {paneCloseButton(pane) === null ? null : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 shrink-0 px-2 text-xs"
+              onClick={() => {
+                const closeButton = paneCloseButton(pane);
+                replyFocused.current = false;
+                setOpen(false);
+                closeButton?.click();
+              }}
+            >
+              Close
+            </Button>
+          )}
           <Button
             type="button"
             variant="ghost"

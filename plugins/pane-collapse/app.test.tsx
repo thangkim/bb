@@ -25,9 +25,8 @@ const {
   collapsedPanes,
   minimizePaneAction,
 } = await import("./app");
-const { DISPLAY_MODE_STORAGE_KEY, resetDisplayModeMemory } = await import(
-  "./display-mode"
-);
+const { DISPLAY_MODE_STORAGE_KEY, resetDisplayModeMemory } =
+  await import("./display-mode");
 type MinimizeActionData = import("./app").MinimizeActionData;
 
 const commands = new Map<string, PluginCommandRegistration>();
@@ -650,6 +649,32 @@ describe("minimized thread chip", () => {
     expect(chip.textContent).toBe("Alpha threadInstall anfra");
   });
 
+  it("spins the icon on a collapsed pane while its thread is running", async () => {
+    mountTitleBar();
+    mountSplitDom();
+    const threads = [
+      { ...threadA, hasPendingInteraction: false, status: "active" },
+      { id: "t-c", displayTitle: "Gamma", status: "idle", indicator: "none" },
+    ] as PluginSidebarThread[];
+    renderSlot(
+      app.appOverlays[0]!,
+      {},
+      {
+        sidebarSplitLayout: splitLayout("pb"),
+        sidebarThreads: { threads },
+        pluginId: "pane-collapse",
+      },
+    );
+    act(() => collapsedPanes.set(new Set(["pa", "pc"])));
+
+    const running = await screen.findByRole("button", {
+      name: "Restore Alpha thread, running",
+    });
+    const idle = screen.getByRole("button", { name: "Restore Gamma" });
+    expect(running.querySelector("[data-thread-running]")).not.toBeNull();
+    expect(idle.querySelector("[data-thread-running]")).toBeNull();
+  });
+
   it("turns the chat icon blue while a finished reply is unread", async () => {
     mountTitleBar();
     mountSplitDom();
@@ -698,6 +723,40 @@ describe("minimized thread chip", () => {
       screen.getByText(/Waiting for your approval or answer/),
     ).toBeDefined();
     expect(collapsedPanes.get().has("pa")).toBe(true);
+  });
+
+  it("closes the minimized pane through its own Close pane button from the hover popover", async () => {
+    mountTitleBar();
+    const panes = mountSplitDom();
+    const closePane = document.createElement("button");
+    closePane.setAttribute("aria-label", "Close pane");
+    const onClose = vi.fn();
+    closePane.addEventListener("click", onClose);
+    panes.pa.pane.append(closePane);
+    mountOverlay("pb");
+    act(() => collapsedPanes.set(new Set(["pa"])));
+    const chip = await screen.findByRole("button", {
+      name: "Restore Alpha thread",
+    });
+
+    fireEvent.pointerEnter(chip);
+    fireEvent.click(await screen.findByRole("button", { name: "Close" }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides Close when the pane has no Close pane button", async () => {
+    mountTitleBar();
+    mountSplitDom();
+    mountOverlay("pb");
+    act(() => collapsedPanes.set(new Set(["pa"])));
+    const chip = await screen.findByRole("button", {
+      name: "Restore Alpha thread",
+    });
+
+    fireEvent.pointerEnter(chip);
+    await screen.findByText("ThreadChat stub (t-a)");
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
   });
 });
 

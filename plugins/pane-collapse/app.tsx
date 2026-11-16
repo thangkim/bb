@@ -20,7 +20,6 @@ import {
   type PluginThreadActionItemInput,
   type PluginThreadAction,
 } from "@get-bb/plugin-sdk/app";
-import { Icon } from "@bb/shared-ui/icon";
 import { cn } from "@bb/shared-ui/lib/utils";
 import {
   PANE_SELECTOR,
@@ -48,7 +47,9 @@ import {
   AttentionDot,
   MinimizedChip,
   StripLinkedWork,
+  ThreadStateIcon,
   UPRIGHT_VERTICAL_TEXT_CLASS,
+  isThreadRunning,
   paneLabel,
 } from "./chip";
 import { installBridgedDividerDrag } from "./bridged-divider";
@@ -319,6 +320,7 @@ interface CollapsedStripProps {
   vertical: boolean;
   needsInput: boolean;
   finishedUnread: boolean;
+  running: boolean;
   onRestore: () => void;
 }
 
@@ -329,6 +331,7 @@ function CollapsedStrip({
   vertical,
   needsInput,
   finishedUnread,
+  running,
   onRestore,
 }: CollapsedStripProps) {
   const work = usePaneLinkedWork(pane);
@@ -341,7 +344,7 @@ function CollapsedStrip({
     >
       <button
         type="button"
-        aria-label={`Restore ${label}${finishedUnread ? ", new reply" : ""}`}
+        aria-label={`Restore ${label}${running ? ", running" : ""}${finishedUnread ? ", new reply" : ""}`}
         title={label}
         onClick={onRestore}
         className={cn(
@@ -350,9 +353,10 @@ function CollapsedStrip({
         )}
       >
         <span className="relative flex shrink-0">
-          <Icon
-            name="MessageSquare"
-            className={cn("size-4", finishedUnread && "text-timeline-accent")}
+          <ThreadStateIcon
+            running={running}
+            finishedUnread={finishedUnread}
+            className="size-4"
           />
           {needsInput ? <AttentionDot /> : null}
         </span>
@@ -461,6 +465,7 @@ export function CollapsedPaneOverlay() {
       title: thread?.displayTitle ?? "Thread",
       needsInput: thread?.hasPendingInteraction ?? false,
       finishedUnread: thread?.indicator === "unread-success",
+      running: isThreadRunning(thread?.status),
       onRestore: () => restorePane(host.paneId, host.threadId, navigate),
     };
   });
@@ -471,18 +476,13 @@ export function CollapsedPaneOverlay() {
       [...panes]
         .reverse()
         .map(
-          ({
-            host,
-            title,
-            needsInput,
-            finishedUnread,
-            onRestore,
-          }) => (
+          ({ host, title, needsInput, finishedUnread, running, onRestore }) => (
             <MinimizedChip
               key={host.paneId}
               pane={host.element}
               threadId={host.threadId}
               finishedUnread={finishedUnread}
+              running={running}
               title={title}
               needsInput={needsInput}
               vertical={rail !== null}
@@ -496,20 +496,22 @@ export function CollapsedPaneOverlay() {
 
   return (
     <>
-      {panes.map(({ host, title, needsInput, finishedUnread, onRestore }) =>
-        createPortal(
-          <CollapsedStrip
-            pluginId={pluginId}
-            pane={host.element}
-            title={title}
-            vertical={host.vertical}
-            needsInput={needsInput}
-            finishedUnread={finishedUnread}
-            onRestore={onRestore}
-          />,
-          host.element,
-          host.paneId,
-        ),
+      {panes.map(
+        ({ host, title, needsInput, finishedUnread, running, onRestore }) =>
+          createPortal(
+            <CollapsedStrip
+              pluginId={pluginId}
+              pane={host.element}
+              title={title}
+              vertical={host.vertical}
+              needsInput={needsInput}
+              finishedUnread={finishedUnread}
+              running={running}
+              onRestore={onRestore}
+            />,
+            host.element,
+            host.paneId,
+          ),
       )}
     </>
   );
