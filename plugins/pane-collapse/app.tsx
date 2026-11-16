@@ -53,7 +53,7 @@ import {
 } from "./chip";
 import { installBridgedDividerDrag } from "./bridged-divider";
 import { installChromeInsets } from "./chrome-insets";
-import { parseDisplayMode } from "./display-mode";
+import { resolveDisplayMode } from "./display-mode";
 import {
   ancestorGridRoots,
   railSlot,
@@ -179,6 +179,24 @@ function useTitleBarTray(
   return tray;
 }
 
+function useDomRetry(active: boolean, placed: boolean): number {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!active || placed) return;
+    let frame = 0;
+    const observer = new MutationObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setTick((value) => value + 1));
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [active, placed, tick]);
+  return tick;
+}
+
 function useLeftRail(
   active: boolean,
   pluginId: string,
@@ -193,6 +211,7 @@ function useLeftRail(
     layout?.panes
       .map((pane) => `${pane.paneId}:${pane.threadId === null}`)
       .join("\n") ?? "";
+  const retry = useDomRetry(active, rail !== null);
   useLayoutEffect(() => {
     const pane = active
       ? document.querySelector<HTMLElement>(PANE_SELECTOR)
@@ -216,7 +235,7 @@ function useLeftRail(
     slot.parent.insertBefore(element, slot.before);
     setRail(element);
     return () => element.remove();
-  }, [active, pluginId, paneKey]);
+  }, [active, pluginId, paneKey, retry]);
   return rail;
 }
 
@@ -226,6 +245,7 @@ function useTopBar(
   paneKey: string,
 ): HTMLElement | null {
   const [bar, setBar] = useState<HTMLElement | null>(null);
+  const retry = useDomRetry(active, bar !== null);
   useLayoutEffect(() => {
     const pane = active
       ? document.querySelector<HTMLElement>(PANE_SELECTOR)
@@ -258,7 +278,7 @@ function useTopBar(
       host.removeAttribute(BAR_HOST_ATTRIBUTE);
       style.remove();
     };
-  }, [active, pluginId, paneKey]);
+  }, [active, pluginId, paneKey, retry]);
   return bar;
 }
 
@@ -361,7 +381,7 @@ export function CollapsedPaneOverlay() {
   const focusedPaneId = useRef<string | null>(null);
   const [hosts, setHosts] = useState<StripHost[]>([]);
   const { values } = useSettings();
-  const mode = parseDisplayMode(values?.display);
+  const mode = resolveDisplayMode(values?.display);
   const titleBar = useTitleBar(collapsed.size > 0 && mode === "chips");
   const tray = useTitleBarTray(titleBar, pluginId);
   const rail = useLeftRail(
@@ -441,7 +461,6 @@ export function CollapsedPaneOverlay() {
       title: thread?.displayTitle ?? "Thread",
       needsInput: thread?.hasPendingInteraction ?? false,
       finishedUnread: thread?.indicator === "unread-success",
-      updatedAt: thread?.updatedAt ?? 0,
       onRestore: () => restorePane(host.paneId, host.threadId, navigate),
     };
   });
@@ -457,7 +476,6 @@ export function CollapsedPaneOverlay() {
             title,
             needsInput,
             finishedUnread,
-            updatedAt,
             onRestore,
           }) => (
             <MinimizedChip
@@ -465,7 +483,6 @@ export function CollapsedPaneOverlay() {
               pane={host.element}
               threadId={host.threadId}
               finishedUnread={finishedUnread}
-              updatedAt={updatedAt}
               title={title}
               needsInput={needsInput}
               vertical={rail !== null}

@@ -25,6 +25,9 @@ const {
   collapsedPanes,
   minimizePaneAction,
 } = await import("./app");
+const { DISPLAY_MODE_STORAGE_KEY, resetDisplayModeMemory } = await import(
+  "./display-mode"
+);
 type MinimizeActionData = import("./app").MinimizeActionData;
 
 const commands = new Map<string, PluginCommandRegistration>();
@@ -119,8 +122,6 @@ const threadA = {
   hasPendingInteraction: true,
 } as PluginSidebarThread;
 
-const sentMessages: unknown[] = [];
-
 function mountOverlay(
   focused: PaneId,
   settings?: Record<string, string | number | boolean>,
@@ -133,46 +134,26 @@ function mountOverlay(
       sidebarSplitLayout: splitLayout(focused),
       sidebarThreads: { threads: [threadA] },
       pluginId: "pane-collapse",
-      sdk: {
-        threads: {
-          output: async () => ({ output: "Plan drafted. Want me to start?" }),
-          conversationOutline: async () => ({
-            items: [
-              {
-                id: "m1",
-                role: "user",
-                preview: "Older ask",
-                attachmentSummary: null,
-              },
-              {
-                id: "m2",
-                role: "user",
-                preview: "Draft a plan",
-                attachmentSummary: null,
-              },
-            ],
-            maxSeq: 2,
-          }),
-          context: async () => ({
-            usage: {
-              usedTokens: 50_000,
-              modelContextWindow: 200_000,
-              estimated: false,
-            },
-          }),
-          send: async (args) => {
-            sentMessages.push(args);
-            return { ok: true, delivery: "sent" };
-          },
-        },
-      },
     },
   );
 }
 
+const storageEntries = new Map<string, string>();
+const memoryStorage = {
+  getItem: (key: string) => storageEntries.get(key) ?? null,
+  setItem: (key: string, value: string) => void storageEntries.set(key, value),
+  removeItem: (key: string) => void storageEntries.delete(key),
+  clear: () => storageEntries.clear(),
+};
+
+beforeEach(() => {
+  vi.stubGlobal("localStorage", memoryStorage);
+});
+
 afterEach(() => {
+  resetDisplayModeMemory();
+  storageEntries.delete(DISPLAY_MODE_STORAGE_KEY);
   cleanup();
-  sentMessages.length = 0;
   collapsedPanes.set(new Set());
   document.body.replaceChildren();
 });
@@ -380,7 +361,7 @@ describe("minimized threads on the left rail", () => {
     expect(styleText()).not.toContain(hidden(1));
   });
 
-  it("previews the thread and sends a quick reply when hovering a rail strip", async () => {
+  it("embeds the thread chat when hovering a rail strip", async () => {
     mountSplitDom();
     mountOverlay("pb", railSettings);
     act(() => collapsedPanes.set(new Set(["pa"])));
@@ -389,29 +370,10 @@ describe("minimized threads on the left rail", () => {
     });
 
     fireEvent.pointerEnter(strip);
-    expect(
-      await screen.findByText("Plan drafted. Want me to start?"),
-    ).toBeDefined();
-    expect(screen.getByText("Draft a plan")).toBeDefined();
-    expect(
-      await screen.findByRole("button", { name: "Context window 25% used" }),
-    ).toBeDefined();
+    expect(await screen.findByText("ThreadChat stub (t-a)")).toBeDefined();
     expect(
       screen.getByText(/Waiting for your approval or answer/),
     ).toBeDefined();
-
-    const reply = screen.getByRole("textbox", { name: "Reply" });
-    fireEvent.change(reply, { target: { value: "Go ahead" } });
-    fireEvent.keyDown(reply, { key: "Enter" });
-
-    await screen.findByText("Sent");
-    expect(sentMessages).toEqual([
-      {
-        threadId: "t-a",
-        input: [{ type: "text", text: "Go ahead", mentions: [] }],
-        mode: "queue-if-active",
-      },
-    ]);
     expect(collapsedPanes.get().has("pa")).toBe(true);
   });
 
@@ -563,7 +525,25 @@ describe("minimized threads in the top bar", () => {
     );
   });
 
-  it("previews the thread and sends a quick reply when hovering a bar strip", async () => {
+  it("places the bar once the split mounts after the minimized panes are restored", async () => {
+    mountOverlay("pb", barSettings);
+    act(() => collapsedPanes.set(new Set(["pa"])));
+    expect(document.querySelector("[data-pane-collapse-bar]")).toBeNull();
+
+    const panes = mountSplitDom();
+    const root = panes.pa.cell.parentElement!;
+    const bar = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>(
+        "[data-pane-collapse-bar]",
+      );
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    expect(bar.nextElementSibling).toBe(root);
+    expect(document.querySelector("[data-pane-collapse-strip]")).toBeNull();
+  });
+
+  it("embeds the thread chat when hovering a bar strip", async () => {
     mountSplitDom();
     mountOverlay("pb", barSettings);
     act(() => collapsedPanes.set(new Set(["pa"])));
@@ -572,15 +552,7 @@ describe("minimized threads in the top bar", () => {
     });
 
     fireEvent.pointerEnter(strip);
-    expect(
-      await screen.findByText("Plan drafted. Want me to start?"),
-    ).toBeDefined();
-
-    const reply = screen.getByRole("textbox", { name: "Reply" });
-    fireEvent.change(reply, { target: { value: "Go ahead" } });
-    fireEvent.keyDown(reply, { key: "Enter" });
-
-    await screen.findByText("Sent");
+    expect(await screen.findByText("ThreadChat stub (t-a)")).toBeDefined();
     expect(collapsedPanes.get().has("pa")).toBe(true);
   });
 
@@ -708,7 +680,7 @@ describe("minimized thread chip", () => {
     );
   });
 
-  it("opens on hover with the latest message and sends a quick reply", async () => {
+  it("opens on hover with the thread chat and keeps the pane minimized", async () => {
     mountTitleBar();
     mountSplitDom();
     mountOverlay("pb");
@@ -718,56 +690,14 @@ describe("minimized thread chip", () => {
     });
 
     fireEvent.pointerEnter(chip);
-    expect(
-      await screen.findByText("Plan drafted. Want me to start?"),
-    ).toBeDefined();
-    expect(screen.getByText("Draft a plan")).toBeDefined();
-    expect(screen.queryByText("Older ask")).toBeNull();
-    const ring = await screen.findByRole("button", {
-      name: "Context window 25% used",
-    });
-    expect(screen.queryByText("75% left")).toBeNull();
-    fireEvent.pointerEnter(ring);
-    expect(await screen.findByText("25% used")).toBeDefined();
-    expect(screen.getByText("75% left")).toBeDefined();
-    expect(screen.getByText(/50k \/\s*200k tokens/)).toBeDefined();
-    expect(
-      screen
-        .getByRole("progressbar", { name: "Context window used" })
-        .getAttribute("aria-valuenow"),
-    ).toBe("25");
+    expect(await screen.findByText("ThreadChat stub (t-a)")).toBeDefined();
+    const chat = screen.getByTestId("bb-thread-chat");
+    expect(chat.dataset.threadId).toBe("t-a");
+    expect(chat.dataset.variant).toBe("compact");
     expect(
       screen.getByText(/Waiting for your approval or answer/),
     ).toBeDefined();
-
-    const reply = screen.getByRole("textbox", { name: "Reply" });
-    fireEvent.change(reply, { target: { value: "  Yes, go ahead  " } });
-    fireEvent.keyDown(reply, { key: "Enter" });
-
-    await screen.findByText("Sent");
-    expect(sentMessages).toEqual([
-      {
-        threadId: "t-a",
-        input: [{ type: "text", text: "Yes, go ahead", mentions: [] }],
-        mode: "queue-if-active",
-      },
-    ]);
-    expect((reply as HTMLTextAreaElement).value).toBe("");
     expect(collapsedPanes.get().has("pa")).toBe(true);
-  });
-
-  it("keeps Shift+Enter as a new line", async () => {
-    mountTitleBar();
-    mountSplitDom();
-    mountOverlay("pb");
-    act(() => collapsedPanes.set(new Set(["pa"])));
-    fireEvent.pointerEnter(
-      await screen.findByRole("button", { name: "Restore Alpha thread" }),
-    );
-    const reply = await screen.findByRole("textbox", { name: "Reply" });
-    fireEvent.change(reply, { target: { value: "line one" } });
-    fireEvent.keyDown(reply, { key: "Enter", shiftKey: true });
-    expect(sentMessages).toEqual([]);
   });
 });
 
