@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
+import { priorityTextClassName } from "../views/list/icons.js";
 import { makeProject, makeTask } from "../test-fixtures.js";
 import {
   closeThreadLinks,
@@ -60,13 +61,16 @@ function renderHeader(
       ...(options.openThreadPanel
         ? { openThreadPanel: options.openThreadPanel }
         : {}),
-      rpc: { listThreadLinks: () => links },
+      rpc: {
+        listThreadLinks: () => links,
+        listProjects: () => ({ projects: [project, otherProject] }),
+      },
     },
   );
 }
 
 describe("thread header linked work", () => {
-  it("shows the attached task over the project and opens the picker to change it", async () => {
+  it("shows the attached task's project name in its priority colour and opens the picker to change it", async () => {
     const openThreadPanel = vi.fn(() => true);
     const slot = renderHeader(
       { tasks: [task, otherTask], projects: [otherProject] },
@@ -76,13 +80,16 @@ describe("thread header linked work", () => {
     const button = await slot.findByRole("button", {
       name: "Task LCH-1: Write the launch post (1 more)",
     });
-    expect(button.textContent).toBe("Write the launch post+1");
+    expect(button.textContent).toBe("Launch+1");
     expect(button.querySelector("[data-icon]")).toBeNull();
     expect(button.dataset).toMatchObject({
       linkedWorkKind: "task",
-      linkedWorkLabel: "Write the launch post",
+      linkedWorkLabel: "Launch",
+      linkedWorkColor: project.color,
     });
-    expect(button.dataset.linkedWorkColor).toBeUndefined();
+    expect(button.querySelector("span.truncate")?.className).toContain(
+      priorityTextClassName(project.priority),
+    );
     expect(slot.queryByText("Research")).toBeNull();
 
     fireEvent.click(button);
@@ -164,7 +171,12 @@ describe("thread header linked work", () => {
         projectId: "proj_bb",
         isCompactViewport: false,
       },
-      { rpc: { listThreadLinks: () => links } },
+      {
+        rpc: {
+          listThreadLinks: () => links,
+          listProjects: () => ({ projects: [project] }),
+        },
+      },
     );
     await waitFor(() => expect(slot.inspection.rpcCalls).toHaveLength(1));
     expect(slot.queryByRole("button")).toBeNull();
@@ -199,6 +211,7 @@ describe("thread header linked work", () => {
       { threadId: "thr_first", projectId: "proj_bb", isCompactViewport: false },
       {
         rpc: {
+          listProjects: () => ({ projects: [project] }),
           listThreadLinks: (input: unknown) =>
             JSON.stringify(input) === JSON.stringify({ threadId: "thr_first" })
               ? { tasks: [task], projects: [] }

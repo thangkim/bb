@@ -976,3 +976,29 @@ describe("tasks app shell", () => {
     expect(projectCalls).toBe(settled);
   });
 });
+
+describe("tasks sidebar list", () => {
+  const listProps = {
+    activeThreadId: null,
+    activeProjectId: null,
+    isCompactViewport: false,
+    onNavigate: () => {},
+    searchQuery: "",
+  };
+
+  it("opens projects inside the sidebar instead of navigating the app route", async () => {
+    const slot = renderSlot(app.threadLists[0]!, listProps, {
+      rpc: seededRpc({
+        listProjectThreads: () => ({ projectThreads: [] }),
+        listAttachments: () => ({ attachments: [] }),
+      }),
+    });
+    fireEvent.click(
+      await slot.findByRole("button", { name: "Open Tasks Plugin details" }),
+    );
+    await waitFor(() =>
+      expect(slot.container.querySelector("[data-status-section]")).toBeNull(),
+    );
+    expect(slot.navigateCalls).toEqual([]);
+  });
+});

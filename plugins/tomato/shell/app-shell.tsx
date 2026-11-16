@@ -48,7 +48,7 @@ function hasOpenOverlay(): boolean {
   );
 }
 
-function RouteOutlet({
+export function RouteOutlet({
   route,
   boardUsable,
 }: {

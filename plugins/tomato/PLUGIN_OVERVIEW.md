@@ -3,6 +3,7 @@ Turn a plan into tracked tasks, hand each task to an agent, and see the worker's
 ## What you get
 
 - A **Tomato** panel listing projects grouped by status, with a List/Board toggle, filters, a project page, and a detail page for each task. Collapsed status sections, expanded projects, and collapsed sidebar folders are remembered across reloads.
+- **Sidebar replacement**: choose Tomato as the sidebar's thread list (Settings → Appearance, or `bb settings ui set sidebar.threadListProvider tomato/tomato-list`) to show the Tomato task list (the same list as the Tomato page) in place of the thread list. While it is chosen, the sidebar header slot (the New thread button) is hidden. Task and project details open inside the sidebar itself (the breadcrumb navigates back) rather than opening the Tomato page in a main pane.
 - Projects with status, priority, due date, a description you can paste or drop images into, file attachments, and a progress bar; tasks inside them are a checklist (done or not done) with labels, due dates, and file attachments.
 - **Markdown attachments open in the Preview tab** of the page's right panel, so you can read them beside your threads and copy parts into a chat. Other files download.
 - **Cmd/Ctrl+F searches the Tomato page only** while Tomato is the focused pane: matches are highlighted, Enter / Shift+Enter (or Cmd/Ctrl+G) step through them, Esc closes.

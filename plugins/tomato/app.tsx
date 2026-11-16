@@ -4,6 +4,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { TasksAppShell } from "./shell/app-shell.js";
 import { TasksSidebarAccessory } from "./shell/sidebar-accessory.js";
+import { TasksSidebarList } from "./shell/sidebar-list.js";
 import { TasksNavigationPanel } from "./shell/navigation-panel.js";
 import { ATTACHMENT_PREVIEW_TAB } from "./shared/preview-tab.js";
 import { AttachmentPreviewTab } from "./views/detail/attachments.js";
@@ -41,6 +42,12 @@ export default definePluginApp((app) => {
         layout: "flush",
       },
     ],
+  });
+  app.slots.experimental_threadList({
+    id: "tomato-list",
+    title: "Tomato",
+    description: "The Tomato task list instead of the thread list.",
+    component: TasksSidebarList,
   });
   app.slots.threadPanelAction({
     id: "task",

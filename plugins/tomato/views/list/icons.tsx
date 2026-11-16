@@ -159,6 +159,10 @@ const PRIORITY_TAG_META: Record<
   none: null,
 };
 
+export function priorityTextClassName(priority: Priority): string {
+  return PRIORITY_TAG_META[priority]?.textClassName ?? "text-muted-foreground";
+}
+
 export function PriorityTag({
   priority,
   className,

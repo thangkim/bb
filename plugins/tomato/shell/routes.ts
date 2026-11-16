@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { createContext, useContext, useMemo } from "react";
 import { useBbNavigate } from "@get-bb/plugin-sdk/app";
 
 export const PANEL_PATH = "tasks";
@@ -73,9 +73,14 @@ export interface TasksNavigation {
   go: (route: TasksRoute, options?: { replace?: boolean }) => void;
 }
 
+const TasksNavigationContext = createContext<TasksNavigation | null>(null);
+
+export const TasksNavigationProvider = TasksNavigationContext.Provider;
+
 export function useTasksNavigation(): TasksNavigation {
   const navigate = useBbNavigate();
-  return useMemo(
+  const override = useContext(TasksNavigationContext);
+  const panelNavigation = useMemo<TasksNavigation>(
     () => ({
       go: (route, options) => {
         navigate.toPluginPanel(PANEL_PATH, {
@@ -86,4 +91,5 @@ export function useTasksNavigation(): TasksNavigation {
     }),
     [navigate],
   );
+  return override ?? panelNavigation;
 }
